@@ -1,21 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { createClient } from "@supabase/supabase-js";
 import { env } from "../config.js";
+import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { requireInternalSecret } from "../middleware/internalAuth.js";
 
 const r = Router();
 r.use(requireInternalSecret);
 
-function supabase() {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) return null;
-  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-}
-
 /** Ping simples para confirmar credenciais e conectividade. */
 r.get("/supabase/ping", async (_req, res) => {
-  const db = supabase();
+  const db = getSupabaseAdmin();
   if (!db) {
     res.status(503).json({ error: "Supabase não configurado" });
     return;
@@ -39,7 +34,7 @@ r.post("/brand-context", async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const db = supabase();
+  const db = getSupabaseAdmin();
   if (!db) {
     res.status(503).json({ error: "Supabase não configurado" });
     return;
@@ -70,7 +65,7 @@ r.post("/brand-context/upsert", async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const db = supabase();
+  const db = getSupabaseAdmin();
   if (!db) {
     res.status(503).json({ error: "Supabase não configurado" });
     return;
