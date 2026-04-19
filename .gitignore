@@ -16,6 +16,9 @@ out/
 secrets/
 credentials/
 
+# Demo front temporário (não versionar; o front oficial fica em outro lugar)
+backend/demo/
+
 dist/
 build/
 npm-debug.log*
