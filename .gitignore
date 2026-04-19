@@ -16,8 +16,7 @@ out/
 secrets/
 credentials/
 
-# Demo front temporário (não versionar; o front oficial fica em outro lugar)
-backend/demo/
+# Demo: neste ramo `demo` a pasta backend/demo/ é versionada. No main ela está listada em .gitignore.
 
 dist/
 build/

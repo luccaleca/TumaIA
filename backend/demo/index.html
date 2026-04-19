@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TumaIA — demo</title>
+  <link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">TumaIA</div>
+    <nav class="topnav">
+      <button type="button" id="navLogin" class="is-active">Entrar</button>
+      <button type="button" id="navCadastro">Cadastro</button>
+      <button type="button" id="navLogout" class="secondary" hidden>Sair</button>
+    </nav>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar">
+      <button type="button" id="navConfig" disabled>
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+        Conta
+      </button>
+      <button type="button" id="navContextos" disabled>
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" />
+          <path d="M2 17l10 5 10-5" />
+          <path d="M2 12l10 5 10-5" />
+        </svg>
+        Contextos
+      </button>
+      <button type="button" id="navMidias" disabled>
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="M21 15l-5-5L5 21" />
+        </svg>
+        Mídias
+      </button>
+    </aside>
+
+    <main class="content">
+      <section id="view-login" class="view is-active">
+        <div class="card">
+          <h2>Login</h2>
+          <label for="loginEmail">E-mail</label>
+          <input
+            type="email"
+            id="loginEmail"
+            name="tuma_demo_login_email"
+            autocomplete="off"
+            autocapitalize="off"
+            autocorrect="off"
+            spellcheck="false"
+            data-lpignore="true"
+            data-1p-ignore
+            data-bwignore
+          />
+          <label for="loginSenha">Senha</label>
+          <input
+            type="password"
+            id="loginSenha"
+            name="tuma_demo_login_senha"
+            autocomplete="off"
+            data-lpignore="true"
+            data-1p-ignore
+            data-bwignore
+          />
+          <button type="button" class="action" id="btnLogin">Entrar</button>
+          <pre id="outLogin" hidden></pre>
+        </div>
+      </section>
+
+      <section id="view-cadastro" class="view">
+        <div class="card">
+          <h2>Cadastro</h2>
+          <label for="regNome">Nome</label>
+          <input type="text" id="regNome" autocomplete="name" />
+          <label for="regEmail">E-mail</label>
+          <input type="email" id="regEmail" autocomplete="email" />
+          <label for="regSenha">Senha (mín. 8)</label>
+          <input type="password" id="regSenha" autocomplete="new-password" />
+          <label for="regTel">Telefone (opcional)</label>
+          <input type="text" id="regTel" placeholder="11999999999" />
+          <button type="button" class="action" id="btnRegister">Cadastrar</button>
+          <pre id="outRegister" hidden></pre>
+        </div>
+      </section>
+
+      <section id="view-config" class="view">
+        <div class="card">
+          <div class="account-card-head">
+            <h2>Seus dados</h2>
+            <button type="button" class="chip-btn" id="btnContaEditar" disabled>Editar</button>
+          </div>
+          <div id="contaRead">
+            <div class="account-row">
+              <span class="account-label">Nome</span>
+              <span class="account-value" id="displayNome">—</span>
+            </div>
+            <div class="account-row">
+              <span class="account-label">E-mail</span>
+              <span class="account-value" id="displayEmail">—</span>
+            </div>
+            <div class="account-row">
+              <span class="account-label">Telefone</span>
+              <span class="account-value" id="displayTel">—</span>
+            </div>
+          </div>
+          <div id="contaEdit" hidden>
+            <label for="patchNome">Nome</label>
+            <input type="text" id="patchNome" autocomplete="name" />
+            <label for="patchEmail">E-mail</label>
+            <input type="email" id="patchEmail" autocomplete="email" />
+            <label for="patchTel">Telefone</label>
+            <input type="text" id="patchTel" inputmode="tel" autocomplete="tel" placeholder="Opcional" />
+            <div class="row">
+              <input type="checkbox" id="patchTelClear" />
+              <label for="patchTelClear" style="margin:0">Remover telefone</label>
+            </div>
+            <div class="conta-actions">
+              <button type="button" class="action" id="btnContaSalvar" disabled>Salvar</button>
+              <button type="button" class="action secondary" id="btnContaCancelar">Cancelar</button>
+            </div>
+          </div>
+          <p id="contaMsg" class="conta-msg" hidden></p>
+        </div>
+      </section>
+
+      <section id="view-contextos" class="view">
+        <div class="card">
+          <h2>Contextos</h2>
+          <label for="ctxTexto">Descrição (opcional)</label>
+          <textarea id="ctxTexto" class="ctx-field" placeholder="" rows="4"></textarea>
+          <button type="button" class="action" id="btnCtxAdd">Adicionar contextos</button>
+          <div id="ctxPicker" class="ctx-picker" aria-live="polite">
+            <div id="ctxPickerChoose">
+              <p>Escolha o tipo de contexto:</p>
+              <div class="ctx-options">
+                <p class="ctx-options-group-label">Modelos guiados</p>
+                <button type="button" class="ctx-opt" data-tipo="promocao">Promoção</button>
+                <button type="button" class="ctx-opt" data-tipo="lancamento">Lançamento</button>
+                <button type="button" class="ctx-opt" data-tipo="data_comemorativa">Data comemorativa</button>
+                <div class="ctx-options-sep" aria-hidden="true"></div>
+                <button type="button" class="ctx-opt ctx-opt--personalizado" data-tipo="personalizado">
+                  <span class="ctx-opt-label">Personalizado</span>
+                  <span class="ctx-opt-sub">Campos livres — você escolhe o nome e o conteúdo</span>
+                </button>
+              </div>
+            </div>
+            <div id="ctxFormLancamento" hidden>
+              <div class="ctx-panel-head">
+                <span class="ctx-panel-eyebrow">Contexto</span>
+                <h3 class="ctx-panel-title"><span class="ctx-panel-accent">Lançamento</span></h3>
+              </div>
+              <p class="ctx-type-explain">
+                Use quando o post for sobre <strong>novidade</strong>: produto novo, versão, funcionalidade ou estreia. Os campos abaixo evitam que o texto misture lançamento com promoção ou datas genéricas.
+              </p>
+              <p class="ctx-form-hint">
+                Preencha o que fizer sentido; campos em branco serão ignorados na hora de gerar o texto.
+              </p>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancNome">Nome</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Como você chama essa novidade ou campanha de lançamento (nome interno ou comercial)."
+                    aria-label="Ajuda: Nome. Como você chama essa novidade ou campanha de lançamento."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancNome" autocomplete="off" placeholder="Ex.: Lançamento App 3.0, Coleção Verão" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancOQue">O que está sendo lançado</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Em uma frase: produto, serviço, versão ou feature que entra no ar."
+                    aria-label="Ajuda: O que está sendo lançado. Produto, serviço, versão ou feature."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancOQue" autocomplete="off" placeholder="Ex.: app mobile, linha skincare, plano Enterprise" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancProblema">Problema que resolve</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Qual dor ou necessidade essa novidade atende — ajuda a IA a explicar o porquê."
+                    aria-label="Ajuda: Problema que resolve. Dor ou necessidade que a novidade atende."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancProblema" autocomplete="off" placeholder="Ex.: falta de tempo para organizar finanças" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancNovidades">O que há de novo</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Lista o que mudou: pode ser em tópicos curtos ou frases (recursos, melhorias)."
+                    aria-label="Ajuda: O que há de novo. O que mudou: recursos, melhorias."
+                  >
+                    ?
+                  </button>
+                </div>
+                <textarea id="lancNovidades" class="ctx-field" style="min-height: 4.5rem; margin-bottom: 0" rows="3" placeholder="Ex.: novo dashboard · integração com Pix · modo offline"></textarea>
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancDiferencial">Diferencial</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Por que não é só mais do mesmo — uma frase que destaque a novidade."
+                    aria-label="Ajuda: Diferencial. Por que não é só mais do mesmo."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancDiferencial" autocomplete="off" placeholder="Ex.: único com IA em português no Brasil" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancPublico">Público</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Para quem é: perfil, momento ou tipo de cliente (B2B, creator, famílias)."
+                    aria-label="Ajuda: Público. Para quem é a novidade."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancPublico" autocomplete="off" placeholder="Ex.: pequenos negócios, assinantes atuais" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancDisponibilidade">Disponibilidade</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Já está à venda, pré-venda, lista de espera, só em certos canais."
+                    aria-label="Ajuda: Disponibilidade. À venda, pré-venda, lista de espera, canais."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancDisponibilidade" autocomplete="off" placeholder="Ex.: pré-venda no site · nas lojas a partir de segunda" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancDataMomento">Data / momento</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Quando entra ou fica disponível — data ou frase (evita a IA inventar prazo)."
+                    aria-label="Ajuda: Data ou momento. Quando entra ou fica disponível."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancDataMomento" autocomplete="off" placeholder="Ex.: 20/05 · a partir de amanhã · ainda em maio" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancTom">Tom</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Como deve soar o texto: institucional, empolgado, minimalista, técnico."
+                    aria-label="Ajuda: Tom. Como deve soar o texto."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancTom" autocomplete="off" placeholder="Ex.: direto e empolgado, institucional" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancCta">CTA</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O que você quer que a pessoa faça: conhecer, testar, cadastrar, baixar."
+                    aria-label="Ajuda: CTA. O que você quer que a pessoa faça."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="lancCta" autocomplete="off" placeholder="Ex.: baixar o app, entrar na lista de espera" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="lancRestricoes">Restrições</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O que não pode aparecer: preço se ainda não divulgado, claims, concorrentes, regras legais."
+                    aria-label="Ajuda: Restrições. O que não pode aparecer no texto."
+                  >
+                    ?
+                  </button>
+                </div>
+                <textarea id="lancRestricoes" class="ctx-field" style="min-height: 4.5rem; margin-bottom: 0" rows="3" placeholder="Ex.: não citar preço até o dia X · não comparar com marca Y"></textarea>
+              </div>
+              <div class="ctx-form-actions">
+                <button type="button" class="chip-btn" id="btnCtxLancamentoVoltar">Voltar</button>
+                <button type="button" class="action" id="btnCtxLancamentoAdd">Incluir lançamento</button>
+              </div>
+            </div>
+            <div id="ctxFormDataComemorativa" hidden>
+              <div class="ctx-panel-head">
+                <span class="ctx-panel-eyebrow">Contexto</span>
+                <h3 class="ctx-panel-title"><span class="ctx-panel-accent">Data comemorativa</span></h3>
+              </div>
+              <p class="ctx-type-explain">
+                Use quando o post for ligado a uma <strong>data ou época</strong>: Natal, Dia das Mães, Black Friday, aniversário da marca. Os campos ajudam a IA a acertar vocabulário, tom e referências — sem misturar com oferta ou lançamento.
+              </p>
+              <p class="ctx-form-hint">
+                Preencha o que fizer sentido; campos em branco serão ignorados na hora de gerar o texto.
+              </p>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcNome">Nome / tema</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Como você chama essa ação ou campanha ligada à data (nome interno ou comercial)."
+                    aria-label="Ajuda: Nome ou tema. Como você chama essa ação ligada à data."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="dcNome" autocomplete="off" placeholder="Ex.: Natal 2026 — família em primeiro lugar" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcOcasiao">Ocasião</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Qual data ou festividade: Natal, Dia das Mães, Black Friday, Carnaval, volta às aulas."
+                    aria-label="Ajuda: Ocasião. Qual data ou festividade."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="dcOcasiao" autocomplete="off" placeholder="Ex.: Dia das Mães, Black Friday" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcPeriodo">Data / período</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Dia exato, semana, mês ou frase (evita a IA inventar prazo)."
+                    aria-label="Ajuda: Data ou período. Dia exato, semana ou mês."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="dcPeriodo" autocomplete="off" placeholder="Ex.: 11/05 · semana 10–16/11 · todo dezembro" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcMensagem">Mensagem central</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O que o post deve transmitir além da data: gratidão, celebração, presente, recomeço."
+                    aria-label="Ajuda: Mensagem central. O que transmitir além da data."
+                  >
+                    ?
+                  </button>
+                </div>
+                <textarea id="dcMensagem" class="ctx-field" style="min-height: 4.5rem; margin-bottom: 0" rows="3" placeholder="Ex.: agradecer quem cuida da gente · celebrar em família"></textarea>
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcTom">Tom</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Como deve soar: festivo, emocional, leve, institucional, humor."
+                    aria-label="Ajuda: Tom. Como o texto deve soar."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="dcTom" autocomplete="off" placeholder="Ex.: emocional e acolhedor, festivo mas elegante" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcPublico">Público</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Com quem fala: famílias, jovens, quem compra presente, B2B."
+                    aria-label="Ajuda: Público. Com quem o post conversa."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="dcPublico" autocomplete="off" placeholder="Ex.: quem busca presente · casais · empresas" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcConexao">Conexão com a marca</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Como sua marca entra na data: produto como presente, mensagem institucional, conteúdo."
+                    aria-label="Ajuda: Conexão com a marca. Como a marca entra na data."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="dcConexao" autocomplete="off" placeholder="Ex.: kits para presentear · mensagem institucional" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcCta">CTA</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O que você quer que a pessoa faça: comprar, presentear, agendar, só comentar."
+                    aria-label="Ajuda: CTA. Ação desejada."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="dcCta" autocomplete="off" placeholder="Ex.: escolher o presente no site · enviar um cartão" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="dcRestricoes">Restrições</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O que não pode: temas sensíveis, religião, política, prometer oferta que não existe."
+                    aria-label="Ajuda: Restrições. O que não pode aparecer."
+                  >
+                    ?
+                  </button>
+                </div>
+                <textarea id="dcRestricoes" class="ctx-field" style="min-height: 4.5rem; margin-bottom: 0" rows="3" placeholder="Ex.: não mencionar concorrentes · não usar tom religioso"></textarea>
+              </div>
+              <div class="ctx-form-actions">
+                <button type="button" class="chip-btn" id="btnCtxDataVoltar">Voltar</button>
+                <button type="button" class="action" id="btnCtxDataAdd">Incluir data comemorativa</button>
+              </div>
+            </div>
+            <div id="ctxFormPersonalizado" class="ctx-surface--custom" hidden>
+              <div class="ctx-panel-head">
+                <span class="ctx-panel-eyebrow">Contexto livre</span>
+                <h3 class="ctx-panel-title"><span class="ctx-panel-accent">Personalizado</span></h3>
+              </div>
+              <p class="ctx-type-explain">
+                Monte o seu próprio roteiro: <strong>crie os nomes dos campos</strong> e preencha com o que quiser. A IA usa isso como informação — não precisa seguir um modelo fixo de promoção ou data.
+              </p>
+              <p class="ctx-form-hint">
+                Adicione quantos campos precisar. Linhas totalmente vazias são ignoradas.
+              </p>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="persTitulo">Nome deste contexto (opcional)</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Um título curto para reconhecer este contexto na lista (ex.: Burguer dia dos pais)."
+                    aria-label="Ajuda: Nome deste contexto. Título para reconhecer na lista."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="persTitulo" autocomplete="off" placeholder="Ex.: Campanha hambúrguer artesanal" />
+              </div>
+              <div id="persRows" class="ctx-pers-rows"></div>
+              <button type="button" class="btn-add-field" id="btnPersAddField">+ Adicionar campo</button>
+              <div class="ctx-form-actions">
+                <button type="button" class="chip-btn" id="btnCtxPersVoltar">Voltar</button>
+                <button type="button" class="action" id="btnCtxPersAdd">Incluir contexto</button>
+              </div>
+            </div>
+            <div id="ctxFormPromocao" hidden>
+              <div class="ctx-panel-head">
+                <span class="ctx-panel-eyebrow">Contexto</span>
+                <h3 class="ctx-panel-title"><span class="ctx-panel-accent">Promoção</span></h3>
+              </div>
+              <p class="ctx-type-explain">
+                Use quando o post for sobre <strong>oferta ou campanha promocional</strong>. Os campos abaixo amarram preço, validade e restrições — assim o texto não inventa regra nem foge do que você pode prometer.
+              </p>
+              <p class="ctx-form-hint">
+                Preencha o que fizer sentido; campos em branco serão ignorados na hora de gerar o texto.
+              </p>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoNome">Nome</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Nome da campanha ou da ação (como você chama essa promoção por dentro)."
+                    aria-label="Ajuda: Nome. Nome da campanha ou da ação (como você chama essa promoção por dentro)."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoNome" autocomplete="off" placeholder="Ex.: Semana do cliente" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoProduto">Produto</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O que está em destaque: produto, serviço ou linha que o anúncio deve mencionar."
+                    aria-label="Ajuda: Produto. O que está em destaque: produto, serviço ou linha que o anúncio deve mencionar."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoProduto" autocomplete="off" placeholder="Ex.: Plano anual, assinatura premium" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoBeneficio">Benefício</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O ganho principal para quem compra (economia, praticidade, resultado)."
+                    aria-label="Ajuda: Benefício. O ganho principal para quem compra (economia, praticidade, resultado)."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoBeneficio" autocomplete="off" placeholder="Ex.: economize 30% no primeiro mês" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoTipo">Tipo</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Formato da promoção: porcentagem, cupom, combo, frete grátis, brinde, etc."
+                    aria-label="Ajuda: Tipo. Formato da promoção: porcentagem, cupom, combo, frete grátis, brinde, etc."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoTipo" autocomplete="off" placeholder="Ex.: 20% off, cupom, combo, frete grátis" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoDetalhe">Detalhe</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Condições que precisam aparecer no texto: código do cupom, regras de uso, o que entra na oferta."
+                    aria-label="Ajuda: Detalhe. Condições que precisam aparecer no texto: código do cupom, regras de uso, o que entra na oferta."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoDetalhe" autocomplete="off" placeholder="Ex.: cupom VERAO30 — válido 1x por CPF" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoPreco">Preço / oferta</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Valores que devem constar: de/por, parcelamento, preço promocional. Evite inventar números depois."
+                    aria-label="Ajuda: Preço ou oferta. Valores que devem constar: de/por, parcelamento, preço promocional."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoPreco" autocomplete="off" placeholder="Ex.: de R$ 100 por R$ 79" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoValidade">Validade</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Até quando a oferta vale: datas ou frases como “só este fim de semana”."
+                    aria-label="Ajuda: Validade. Até quando a oferta vale: datas ou frases como só este fim de semana."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoValidade" autocomplete="off" placeholder="Ex.: até 30/04 ou só neste fim de semana" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoOnde">Onde</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Onde o cliente usa: site, app, loja física, cidade ou canal."
+                    aria-label="Ajuda: Onde. Onde o cliente usa: site, app, loja física, cidade ou canal."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoOnde" autocomplete="off" placeholder="Ex.: site, app, loja do Shopping X" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoPublico">Público</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Para quem é a promoção: novos clientes, assinantes, B2B, etc."
+                    aria-label="Ajuda: Público. Para quem é a promoção: novos clientes, assinantes, B2B, etc."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoPublico" autocomplete="off" placeholder="Ex.: quem nunca comprou, assinantes" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoCta">CTA</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="Chamada para ação: o que você quer que a pessoa faça (comprar, usar o cupom, chamar no WhatsApp)."
+                    aria-label="Ajuda: CTA. Chamada para ação: o que você quer que a pessoa faça."
+                  >
+                    ?
+                  </button>
+                </div>
+                <input type="text" id="promoCta" autocomplete="off" placeholder="Ex.: comprar no site, chamar no WhatsApp" />
+              </div>
+              <div class="ctx-field-group">
+                <div class="ctx-label-row">
+                  <label for="promoRestricoes">Restrições</label>
+                  <button
+                    type="button"
+                    class="ctx-help"
+                    title="O que não pode ser prometido ou o que não acumula: limites legais, estoque, primeira compra."
+                    aria-label="Ajuda: Restrições. O que não pode ser prometido ou o que não acumula: limites legais, estoque, primeira compra."
+                  >
+                    ?
+                  </button>
+                </div>
+                <textarea id="promoRestricoes" class="ctx-field" style="min-height: 4.5rem; margin-bottom: 0" rows="3" placeholder="Ex.: não acumula com outras promoções"></textarea>
+              </div>
+              <div class="ctx-form-actions">
+                <button type="button" class="chip-btn" id="btnCtxPromoVoltar">Voltar</button>
+                <button type="button" class="action" id="btnCtxPromoAdd">Incluir promoção</button>
+              </div>
+            </div>
+          </div>
+          <ul id="ctxLista" class="ctx-list"></ul>
+        </div>
+      </section>
+
+      <section id="view-midias" class="view">
+        <div class="card midias-card">
+          <h2>Mídias</h2>
+          <p class="midias-hint">
+            Organize em <strong>pastas</strong> e dê um <strong>nome</strong> para cada arquivo. Isto é só a interface da demo — nada é enviado ao servidor.
+          </p>
+          <div class="midias-toolbar">
+            <nav class="midias-bc" id="midiasBreadcrumb" aria-label="Caminho da pasta"></nav>
+            <div class="midias-actions">
+              <button type="button" class="chip-btn" id="btnMidiasSubir" hidden>Subir</button>
+              <button type="button" class="chip-btn" id="btnMidiasNovaPasta">Nova pasta</button>
+              <button type="button" class="action" id="btnMidiasEnviar">Enviar arquivos</button>
+              <input type="file" id="midiasFileInput" hidden multiple accept="image/*,video/*" />
+            </div>
+          </div>
+          <div id="midiasNovaPastaPanel" class="midias-new-folder" hidden>
+            <label for="midiasNovaPastaNome" class="visually-hidden">Nome da nova pasta</label>
+            <input type="text" id="midiasNovaPastaNome" placeholder="Nome da pasta" maxlength="120" autocomplete="off" />
+            <button type="button" class="action" id="btnMidiasCriarPasta">Criar</button>
+            <button type="button" class="chip-btn" id="btnMidiasCancelarPasta">Cancelar</button>
+          </div>
+          <div id="midiasGrid" class="midias-grid"></div>
+          <p id="midiasEmpty" class="midias-empty" hidden>Esta pasta está vazia. Crie uma subpasta ou envie fotos e vídeos.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="demo.js"></script>
+</body>
+</html>
