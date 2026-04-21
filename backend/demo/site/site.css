@@ -1,0 +1,354 @@
+/* Estrutura simples do site institucional (MVP) */
+.site {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, Segoe UI, Roboto, sans-serif;
+  background: #0f1419;
+  color: #e8edf4;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+}
+
+.site a {
+  color: #93c5fd;
+  text-decoration: none;
+}
+.site a:hover {
+  text-decoration: underline;
+}
+
+.site-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  padding: 0.65rem 1.25rem;
+  border-bottom: 1px solid #2d3a4d;
+  background: #1a2332;
+  /* Uma linha: marca | nav (cresce) | login/cadastro */
+  justify-content: flex-start;
+}
+
+.site-brand {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #e8edf4;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.site-brand:hover {
+  text-decoration: none;
+  color: #fff;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.5rem;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+/* Links da navegação como “botões” visíveis */
+.site-header .site-nav a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #e8edf4 !important;
+  text-decoration: none !important;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
+}
+.site-header .site-nav a:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #64748b;
+}
+.site-header .site-nav a[aria-current="page"] {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.2);
+  color: #fff !important;
+}
+
+.site-auth {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.site-auth a {
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border: 1px solid #475569;
+  color: #e8edf4;
+}
+.site-auth a:hover {
+  background: rgba(255, 255, 255, 0.06);
+  text-decoration: none;
+}
+
+.site-auth-primary {
+  background: #3b82f6;
+  border-color: #3b82f6 !important;
+  color: #fff !important;
+}
+.site-auth-primary:hover {
+  filter: brightness(1.05);
+}
+
+.site-user-greet--header {
+  margin-right: 0.5rem;
+  font-size: 0.92rem;
+  color: #cbd5e1;
+}
+.site-user-greet--header strong {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+/* Acesso à demo / área do usuário (visível só quando logado) */
+.site-auth .site-auth-link-area {
+  white-space: nowrap;
+}
+
+/* Mesmo visual dos links Login/Cadastro */
+.site-auth .site-btn-logout {
+  cursor: pointer;
+  font: inherit;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  border: 1px solid #475569;
+  background: transparent;
+  color: #e8edf4;
+}
+.site-auth .site-btn-logout:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.site-main {
+  flex: 1;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  box-sizing: border-box;
+}
+
+.site-hero--home {
+  padding-top: 0.25rem;
+}
+
+.site-lorem--first {
+  font-size: 0.92rem;
+  color: #a8b8cc;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #2d3a4d;
+}
+
+.site-hero h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+.site-lead {
+  color: #8b9cb3;
+  font-size: 1rem;
+  margin: 0 0 1.5rem;
+}
+
+.site-lorem {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  margin: 0 0 1rem;
+  line-height: 1.6;
+}
+
+.site-section {
+  margin-bottom: 2rem;
+}
+
+.site-section h2 {
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8b9cb3;
+  margin: 0 0 0.75rem;
+}
+
+.site-card {
+  background: #1a2332;
+  border: 1px solid #2d3a4d;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.75rem;
+}
+
+.site-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.site-card p {
+  margin: 0;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.site-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: #cbd5e1;
+}
+
+.site-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #2d3a4d;
+  background: #141c28;
+  font-size: 0.85rem;
+  color: #8b9cb3;
+  text-align: center;
+}
+
+.site-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.site-btn {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #fff !important;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none !important;
+}
+.site-btn:hover {
+  filter: brightness(1.05);
+}
+
+.site-btn-secondary {
+  background: transparent;
+  border: 1px solid #475569;
+  color: #e8edf4 !important;
+}
+
+/* Login / cadastro (páginas dedicadas, sem sidebar da demo) */
+.site-auth-page-title {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.site-auth-lead {
+  margin: 0 0 1.25rem;
+  color: #94a3b8;
+  font-size: 0.95rem;
+}
+
+.site-auth-form {
+  max-width: 420px;
+}
+
+.site-auth-form label {
+  display: block;
+  margin: 0.65rem 0 0.25rem;
+  font-size: 0.88rem;
+  color: #cbd5e1;
+}
+
+.site-auth-form input[type="text"],
+.site-auth-form input[type="email"],
+.site-auth-form input[type="password"] {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: #0f1419;
+  color: #e8edf4;
+  font: inherit;
+}
+
+.site-auth-form input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.site-auth-password-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.site-auth-password-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.site-auth-password-row .auth-password-toggle {
+  flex-shrink: 0;
+  align-self: stretch;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid #475569;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e8edf4;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.site-auth-form .site-btn {
+  margin-top: 1rem;
+  width: 100%;
+  text-align: center;
+}
+
+.site-auth-msg {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+}
+
+.site-auth-msg--ok {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #bbf7d0;
+}
+
+.site-auth-msg--err {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fecaca;
+}
+
+.site-auth-footer-links {
+  margin-top: 1.25rem;
+  font-size: 0.92rem;
+  color: #94a3b8;
+}
+
+.site-auth-footer-links a {
+  font-weight: 500;
+}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TumaIA — Planos</title>
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body class="site">
+  <header class="site-header">
+    <a class="site-brand" href="index.html">TumaIA</a>
+    <nav class="site-nav" aria-label="Principal">
+      <a href="index.html">Início</a>
+      <a href="produto.html">Produto</a>
+      <a href="planos.html" aria-current="page">Planos</a>
+      <a href="simulacao.html">Simulação</a>
+    </nav>
+    <div class="site-auth" id="siteAuthBar">
+      <span id="siteUserGreeting" class="site-user-greet site-user-greet--header" hidden>
+        Olá, <strong id="siteUserName">—</strong>
+      </span>
+      <a href="../index.html" id="siteLinkAreaUsuario" class="site-auth-link-area" hidden title="Abrir sua área na TumaIA">Minha página</a>
+      <a href="login.html" id="siteLinkLogin">Login</a>
+      <a class="site-auth-primary" href="cadastro.html" id="siteLinkCadastro">Cadastro</a>
+      <button type="button" id="siteBtnLogout" class="site-btn-logout" hidden>Sair</button>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <section class="site-hero">
+      <h1>Donec sodales sagittis magna</h1>
+      <p class="site-lead">
+        Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis.
+      </p>
+    </section>
+
+    <section class="site-section">
+      <h2>Voluptatem sequi</h2>
+      <p class="site-lorem">
+        Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.
+      </p>
+      <div class="site-card">
+        <h3>Neque porro quisquam</h3>
+        <p class="site-lorem" style="margin:0">
+          Est qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem.
+        </p>
+      </div>
+      <div class="site-card">
+        <h3>Ut enim ad minima</h3>
+        <p class="site-lorem" style="margin:0">
+          Quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">TumaIA — demo / MVP</footer>
+  <script src="site-auth.js"></script>
+</body>
+</html>

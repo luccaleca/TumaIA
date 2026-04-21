@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TumaIA — Produto</title>
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body class="site">
+  <header class="site-header">
+    <a class="site-brand" href="index.html">TumaIA</a>
+    <nav class="site-nav" aria-label="Principal">
+      <a href="index.html">Início</a>
+      <a href="produto.html" aria-current="page">Produto</a>
+      <a href="planos.html">Planos</a>
+      <a href="simulacao.html">Simulação</a>
+    </nav>
+    <div class="site-auth" id="siteAuthBar">
+      <span id="siteUserGreeting" class="site-user-greet site-user-greet--header" hidden>
+        Olá, <strong id="siteUserName">—</strong>
+      </span>
+      <a href="../index.html" id="siteLinkAreaUsuario" class="site-auth-link-area" hidden title="Abrir sua área na TumaIA">Minha página</a>
+      <a href="login.html" id="siteLinkLogin">Login</a>
+      <a class="site-auth-primary" href="cadastro.html" id="siteLinkCadastro">Cadastro</a>
+      <button type="button" id="siteBtnLogout" class="site-btn-logout" hidden>Sair</button>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <section class="site-hero">
+      <h1>Fusce ac felis ullamcorper</h1>
+      <p class="site-lead">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae.
+      </p>
+    </section>
+
+    <section class="site-section">
+      <h2>Adipiscing elit</h2>
+      <p class="site-lorem">
+        Nulla metus metus, ullamcorper vel, tincidunt sed, euismod in, nibh. Quisque volutpat condimentum velit. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+      </p>
+      <p class="site-lorem">
+        Nam nec ante. Sed lacinia, urna non tincidunt mattis, tortor neque adipiscing diam, a cursus ipsum ante quis turpis. Nulla facilisi. Ut fringilla. Suspendisse potenti.
+      </p>
+    </section>
+
+    <section class="site-section">
+      <h2>Morbi in sem quis dui</h2>
+      <div class="site-card">
+        <p class="site-lorem" style="margin:0">
+          Nunc feugiat mi a tellus consequat imperdiet. Vestibulum sapien. Proin quam. Etiam ultrices. Suspendisse in justo eu magna luctus suscipit.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">TumaIA — demo / MVP</footer>
+  <script src="site-auth.js"></script>
+</body>
+</html>

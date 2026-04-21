@@ -2,6 +2,9 @@
 
     const LS_API = "tuma_demo_api_base";
     const TOKEN_KEY = "tuma_demo_access_token";
+    const EMPRESA_KEY = "tuma_demo_empresa_profile";
+    /** Quando o usuário escolhe «Cadastrar minha empresa» sem ter perfil salvo ainda. */
+    const EMPRESA_FORM_OPEN_KEY = "tuma_demo_empresa_abrir_form";
 
     const $ = (id) => document.getElementById(id);
 
@@ -20,6 +23,7 @@
     }
 
     let session = null;
+    let empresaProfile = null;
 
     function loadTokenFromStorage() {
       try {
@@ -41,33 +45,180 @@
     function setTopNavActive(which) {
       $("navLogin").classList.toggle("is-active", which === "login");
       $("navCadastro").classList.toggle("is-active", which === "cadastro");
+      $("navPlanos").classList.toggle("is-active", which === "planos");
     }
 
     function showView(name) {
-      ["view-login", "view-cadastro", "view-config", "view-contextos", "view-midias"].forEach((id) => {
+      ["view-login", "view-cadastro", "view-planos", "view-empresa", "view-config", "view-contextos", "view-midias"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle("is-active", id === `view-${name}`);
       });
+      $("navEmpresa").classList.toggle("is-active", name === "empresa");
       $("navConfig").classList.toggle("is-active", name === "config");
       $("navContextos").classList.toggle("is-active", name === "contextos");
       $("navMidias").classList.toggle("is-active", name === "midias");
       if (name !== "contextos" && $("ctxPicker")) resetCtxPickerUi();
       if (name === "login") setTopNavActive("login");
       else if (name === "cadastro") setTopNavActive("cadastro");
-      else if (name === "config" || name === "contextos" || name === "midias") {
+      else if (name === "planos") setTopNavActive("planos");
+      else if (name === "empresa" || name === "config" || name === "contextos" || name === "midias") {
         $("navLogin").classList.remove("is-active");
         $("navCadastro").classList.remove("is-active");
+        $("navPlanos").classList.remove("is-active");
       }
       if (name === "midias") renderMidiasExplorer();
+      if (name === "empresa") renderEmpresaUi();
     }
 
     function setUiLogged(on) {
       $("btnContaEditar").disabled = !on;
       $("btnContaSalvar").disabled = !on;
+      $("btnEmpresaSalvar").disabled = !on;
+      $("navEmpresa").disabled = !on;
       $("navConfig").disabled = !on;
       $("navContextos").disabled = !on;
       $("navMidias").disabled = !on;
       $("navLogout").hidden = !on;
+      $("navLogin").hidden = on;
+      $("navCadastro").hidden = on;
+      $("navUserGreeting").hidden = !on;
+      $("navPlanos").hidden = on;
+      if (!on) {
+        $("navUserName").textContent = "—";
+      }
+    }
+
+    function normalizeEmpresaProfile(raw) {
+      if (!raw || typeof raw !== "object") return null;
+      return {
+        nome_fantasia: String(raw.nome_fantasia || "").trim(),
+        razao_social: String(raw.razao_social || "").trim(),
+        descricao: String(raw.descricao || "").trim(),
+        instagram_empresa: String(raw.instagram_empresa || "").trim(),
+        telefone_principal: String(raw.telefone_principal || "").trim(),
+        segmento: String(raw.segmento || "").trim(),
+        cnpj: String(raw.cnpj || "").trim(),
+        email_principal: String(raw.email_principal || "").trim(),
+        nome_contato_principal: String(raw.nome_contato_principal || "").trim(),
+        plano_codigo: raw.plano_codigo === "teste_gratuito" ? "teste_gratuito" : "nenhum",
+        plano_status:
+          raw.plano_status === "trial" ||
+          raw.plano_status === "ativo" ||
+          raw.plano_status === "cancelado" ||
+          raw.plano_status === "sem_plano"
+            ? raw.plano_status
+            : "sem_plano",
+        updated_at: raw.updated_at || null,
+      };
+    }
+
+    function loadEmpresaFromStorage() {
+      try {
+        const raw = localStorage.getItem(EMPRESA_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        return normalizeEmpresaProfile(obj);
+      } catch {
+        return null;
+      }
+    }
+
+    function saveEmpresaToStorage(obj) {
+      try {
+        if (obj) localStorage.setItem(EMPRESA_KEY, JSON.stringify(obj));
+        else localStorage.removeItem(EMPRESA_KEY);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function normalizeInstagram(v) {
+      const raw = String(v || "").trim();
+      if (!raw) return "";
+      return raw.startsWith("@") ? raw : `@${raw}`;
+    }
+
+    function labelPlanoNome(codigo) {
+      if (codigo === "teste_gratuito") return "Teste gratuito";
+      return "Nenhum";
+    }
+
+    function labelPlanoStatus(status) {
+      if (status === "trial") return "Em período de teste";
+      if (status === "ativo") return "Ativo";
+      if (status === "cancelado") return "Cancelado";
+      return "Sem plano";
+    }
+
+    function empresaCadastroCompleto(p) {
+      const n = normalizeEmpresaProfile(p);
+      if (!n) return false;
+      return !!(
+        n.nome_fantasia &&
+        n.razao_social &&
+        n.descricao &&
+        n.instagram_empresa &&
+        n.telefone_principal &&
+        n.segmento &&
+        n.cnpj &&
+        n.email_principal &&
+        n.nome_contato_principal
+      );
+    }
+
+    function usuarioTemEmpresaVinculada() {
+      return !!(empresaProfile && (empresaProfile.nome_fantasia || "").trim());
+    }
+
+    function empresaDeveMostrarEstadoVazio() {
+      if (usuarioTemEmpresaVinculada()) return false;
+      try {
+        if (sessionStorage.getItem(EMPRESA_FORM_OPEN_KEY) === "1") return false;
+      } catch {
+        /* ignore */
+      }
+      return true;
+    }
+
+    function renderEmpresaUi() {
+      const showEmpty = empresaDeveMostrarEstadoVazio();
+      const emptyEl = $("empresaEmptyState");
+      const formEl = $("empresaFormSection");
+      if (emptyEl) emptyEl.hidden = !showEmpty;
+      if (formEl) formEl.hidden = showEmpty;
+
+      if (showEmpty) {
+        const invitePanel = $("empresaInvitePanel");
+        const hint = $("empresaConviteHint");
+        const conviteInput = $("empConviteCodigo");
+        if (invitePanel) invitePanel.hidden = true;
+        if (hint) {
+          hint.hidden = true;
+          hint.textContent = "";
+        }
+        if (conviteInput) conviteInput.value = "";
+        return;
+      }
+
+      const has = !!empresaProfile;
+      $("displayEmpresaStatus").textContent = has
+        ? "Empresa cadastrada"
+        : "Nenhuma empresa cadastrada";
+      $("displayEmpresaNome").textContent = has ? (empresaProfile.nome_fantasia || "—") : "—";
+      $("displayEmpresaInstagram").textContent = has
+        ? (empresaProfile.instagram_empresa || "—")
+        : "—";
+      $("displayPlanoNome").textContent = has ? labelPlanoNome(empresaProfile.plano_codigo) : "—";
+      $("displayPlanoStatus").textContent = has ? labelPlanoStatus(empresaProfile.plano_status) : "—";
+      $("empNomeFantasia").value = has ? (empresaProfile.nome_fantasia || "") : "";
+      $("empRazaoSocial").value = has ? (empresaProfile.razao_social || "") : "";
+      $("empDescricao").value = has ? (empresaProfile.descricao || "") : "";
+      $("empCnpj").value = has ? (empresaProfile.cnpj || "") : "";
+      $("empInstagram").value = has ? (empresaProfile.instagram_empresa || "") : "";
+      $("empTelefone").value = has ? (empresaProfile.telefone_principal || "") : "";
+      $("empSegmento").value = has ? (empresaProfile.segmento || "") : "";
+      $("empEmailPrincipal").value = has ? (empresaProfile.email_principal || "") : "";
+      $("empNomeContato").value = has ? (empresaProfile.nome_contato_principal || "") : "";
     }
 
     function exitContaEditMode() {
@@ -537,11 +688,20 @@
       clearMidiasExplorerOnLogout();
     }
 
+    function displayNameForGreeting(u) {
+      const nome = typeof u?.nome === "string" ? u.nome.trim() : "";
+      if (nome) return nome;
+      const email = typeof u?.email === "string" ? u.email.trim() : "";
+      if (email) return email.split("@")[0] || email;
+      return "visitante";
+    }
+
     async function loadProfile() {
       const result = await apiFetch("/auth/me");
       if (result.ok && result.json?.usuario) {
         const u = result.json.usuario;
         const nome = typeof u.nome === "string" ? u.nome.trim() : "";
+        $("navUserName").textContent = displayNameForGreeting(u);
         $("displayNome").textContent = nome || "—";
         $("displayEmail").textContent = u.email || "—";
         const tel = u.telefone;
@@ -553,6 +713,9 @@
         $("patchTelClear").checked = false;
         setContaMsg("", null);
       } else {
+        if (session?.access_token) {
+          $("navUserName").textContent = "usuário";
+        }
         setContaMsg(
           result.networkError
             ? "Não foi possível carregar seus dados. Verifique a conexão."
@@ -614,6 +777,15 @@
       return typeof s === "string" ? s.normalize("NFC").trim() : s;
     }
 
+    function togglePasswordVisibility(inputId, buttonEl) {
+      const input = $(inputId);
+      if (!input || !buttonEl) return;
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      buttonEl.textContent = show ? "Ocultar" : "Mostrar";
+      buttonEl.setAttribute("aria-pressed", show ? "true" : "false");
+    }
+
     const DEFAULT_FETCH_TIMEOUT_MS = 25000;
 
     async function apiFetch(path, opts = {}) {
@@ -664,8 +836,23 @@
       }
     }
 
-    $("navLogin").addEventListener("click", () => showView("login"));
-    $("navCadastro").addEventListener("click", () => showView("cadastro"));
+    $("navLogin").addEventListener("click", () => {
+      window.location.href = new URL("site/login.html", window.location.href).href;
+    });
+    $("navCadastro").addEventListener("click", () => {
+      window.location.href = new URL("site/cadastro.html", window.location.href).href;
+    });
+    $("navPlanos").addEventListener("click", () => showView("planos"));
+    $("navEmpresa").addEventListener("click", () => {
+      if (!$("navEmpresa").disabled) showView("empresa");
+    });
+    document.querySelectorAll(".password-toggle").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const target = btn.getAttribute("data-toggle-target");
+        if (!target) return;
+        togglePasswordVisibility(target, btn);
+      });
+    });
     $("navConfig").addEventListener("click", () => {
       if (!$("navConfig").disabled) showView("config");
     });
@@ -911,17 +1098,32 @@
       saveToken(null);
       setUiLogged(false);
       clearProfileUi();
-      showView("login");
-      setTopNavActive("login");
-      showPre($("outLogin"), "Logout.", "ok");
+      try {
+        sessionStorage.removeItem(EMPRESA_FORM_OPEN_KEY);
+      } catch {
+        /* ignore */
+      }
+      window.location.href = new URL("site/login.html", window.location.href).href;
     });
 
     $("btnRegister").addEventListener("click", async () => {
       const btn = $("btnRegister");
+      const senha = normalizeSenhaClient($("regSenha").value);
+      const senhaConfirm = normalizeSenhaClient($("regSenhaConfirm").value);
+
+      if (senha.length < 8) {
+        showPre($("outRegister"), "[Cadastro] Senha deve ter no mínimo 8 caracteres.", "err");
+        return;
+      }
+      if (senha !== senhaConfirm) {
+        showPre($("outRegister"), "[Cadastro] Senha e confirmação não conferem.", "err");
+        return;
+      }
+
       const body = {
         nome: $("regNome").value.trim(),
         email: normalizeEmailClient($("regEmail").value),
-        senha: normalizeSenhaClient($("regSenha").value),
+        senha,
         telefone: $("regTel").value.trim() || null,
       };
       btn.disabled = true;
@@ -950,6 +1152,170 @@
       } finally {
         btn.disabled = false;
       }
+    });
+
+    $("btnPlanoTeste").addEventListener("click", () => {
+      if (!session?.access_token) {
+        showPre(
+          $("outPlanos"),
+          "[Planos] Faça login para ativar o teste gratuito.",
+          "err",
+        );
+        showView("login");
+        return;
+      }
+      if (!empresaCadastroCompleto(empresaProfile)) {
+        showPre(
+          $("outPlanos"),
+          "[Planos] Antes de assinar, preencha o cadastro completo da empresa (menu Empresa).",
+          "err",
+        );
+        showView("empresa");
+        return;
+      }
+      const next = {
+        ...empresaProfile,
+        plano_codigo: "teste_gratuito",
+        plano_status: "trial",
+        updated_at: new Date().toISOString(),
+      };
+      empresaProfile = normalizeEmpresaProfile(next);
+      saveEmpresaToStorage(empresaProfile);
+      renderEmpresaUi();
+      showPre(
+        $("outPlanos"),
+        `[Planos] Teste gratuito ativado para ${empresaProfile.nome_fantasia}.\nPlano: ${labelPlanoNome(empresaProfile.plano_codigo)} · ${labelPlanoStatus(empresaProfile.plano_status)}`,
+        "ok",
+      );
+      showView("contextos");
+    });
+
+    $("btnEmpresaSalvar").addEventListener("click", () => {
+      const nome_fantasia = $("empNomeFantasia").value.trim();
+      const razao_social = $("empRazaoSocial").value.trim();
+      const descricao = $("empDescricao").value.trim();
+      const cnpj = $("empCnpj").value.trim();
+      const instagram_empresa = normalizeInstagram($("empInstagram").value);
+      const telefone_principal = $("empTelefone").value.trim();
+      const segmento = $("empSegmento").value.trim();
+      const email_principal = normalizeEmailClient($("empEmailPrincipal").value);
+      const nome_contato_principal = $("empNomeContato").value.trim();
+
+      if (
+        !nome_fantasia ||
+        !razao_social ||
+        !descricao ||
+        !cnpj ||
+        !instagram_empresa ||
+        !telefone_principal ||
+        !segmento ||
+        !email_principal ||
+        !nome_contato_principal
+      ) {
+        showPre(
+          $("outEmpresa"),
+          "[Empresa] Preencha todos os campos obrigatórios (incluindo descrição, telefone, segmento, e-mail e contato).",
+          "err",
+        );
+        return;
+      }
+
+      const prev = empresaProfile || {};
+      empresaProfile = normalizeEmpresaProfile({
+        nome_fantasia,
+        razao_social,
+        descricao,
+        cnpj,
+        instagram_empresa,
+        telefone_principal,
+        segmento,
+        email_principal,
+        nome_contato_principal,
+        plano_codigo: prev.plano_codigo || "nenhum",
+        plano_status: prev.plano_status || "sem_plano",
+        updated_at: new Date().toISOString(),
+      });
+      saveEmpresaToStorage(empresaProfile);
+      try {
+        sessionStorage.removeItem(EMPRESA_FORM_OPEN_KEY);
+      } catch {
+        /* ignore */
+      }
+      renderEmpresaUi();
+      showPre(
+        $("outEmpresa"),
+        `[Empresa] Cadastro salvo com sucesso.\nEmpresa ativa: ${nome_fantasia}`,
+        "ok",
+      );
+    });
+
+    $("btnEmpresaAdicionar")?.addEventListener("click", () => {
+      try {
+        sessionStorage.setItem(EMPRESA_FORM_OPEN_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+      renderEmpresaUi();
+    });
+
+    $("btnEmpresaConvite")?.addEventListener("click", () => {
+      const panel = $("empresaInvitePanel");
+      if (!panel) return;
+      const open = panel.hidden;
+      panel.hidden = !open;
+      if (!panel.hidden) $("empConviteCodigo")?.focus();
+    });
+
+    $("btnEmpresaConviteContinuar")?.addEventListener("click", async () => {
+      const code = ($("empConviteCodigo")?.value || "").trim();
+      const hint = $("empresaConviteHint");
+      if (!hint) return;
+      hint.hidden = false;
+      if (!code) {
+        hint.textContent = "Informe o código do convite.";
+        hint.className = "empresa-invite-hint empresa-invite-hint--err";
+        return;
+      }
+      if (!session?.access_token) {
+        hint.textContent = "Faça login novamente para usar o convite.";
+        hint.className = "empresa-invite-hint empresa-invite-hint--err";
+        return;
+      }
+      hint.textContent = "Validando convite…";
+      hint.className = "empresa-invite-hint empresa-invite-hint--muted";
+      const result = await apiFetch("/empresas/convites/resgatar", {
+        method: "POST",
+        body: JSON.stringify({ codigo: code }),
+      });
+      if (!result.ok || result.networkError) {
+        const msg =
+          result.networkError?.message ||
+          (typeof result.json?.error === "string"
+            ? result.json.error
+            : result.json?.error
+              ? JSON.stringify(result.json.error)
+              : "Não foi possível usar este convite.");
+        hint.textContent = msg;
+        hint.className = "empresa-invite-hint empresa-invite-hint--err";
+        return;
+      }
+      const j = result.json || {};
+      const emp = j.empresa;
+      if (emp && typeof emp === "object") {
+        empresaProfile = normalizeEmpresaProfile(emp);
+        saveEmpresaToStorage(empresaProfile);
+        try {
+          sessionStorage.removeItem(EMPRESA_FORM_OPEN_KEY);
+        } catch {
+          /* ignore */
+        }
+        showPre($("outEmpresa"), j.mensagem || "[Empresa] Vínculo atualizado.", "ok");
+        renderEmpresaUi();
+      }
+      hint.textContent =
+        j.mensagem ||
+        (j.ja_membro ? "Você já estava nesta empresa." : "Convite aceito.");
+      hint.className = "empresa-invite-hint empresa-invite-hint--ok";
     });
 
     $("btnLogin").addEventListener("click", async () => {
@@ -1054,12 +1420,44 @@
       }
     });
 
+    function applyEntryHashView() {
+      const h = (location.hash || "").replace(/^#/, "");
+      if (h === "cadastro") {
+        location.replace(new URL("site/cadastro.html", location.href));
+        return;
+      }
+      if (h === "login") {
+        location.replace(new URL("site/login.html", location.href));
+        return;
+      }
+      if (h === "") {
+        location.replace(new URL("site/login.html", location.href));
+        return;
+      }
+      if (h === "planos") {
+        showView("planos");
+        setTopNavActive("planos");
+        return;
+      }
+      showView("login");
+      setTopNavActive("login");
+    }
+
     (function restoreSession() {
+      empresaProfile = loadEmpresaFromStorage();
+      renderEmpresaUi();
       const t = loadTokenFromStorage();
       if (t) {
         session = { access_token: t };
         setUiLogged(true);
         showView("config");
         loadProfile();
+        return;
       }
+      applyEntryHashView();
     })();
+
+    window.addEventListener("hashchange", () => {
+      if (loadTokenFromStorage()) return;
+      applyEntryHashView();
+    });

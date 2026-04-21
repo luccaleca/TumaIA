@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TumaIA — Início</title>
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body class="site">
+  <header class="site-header">
+    <a class="site-brand" href="index.html">TumaIA</a>
+    <nav class="site-nav" aria-label="Principal">
+      <a href="index.html" aria-current="page">Início</a>
+      <a href="produto.html">Produto</a>
+      <a href="planos.html">Planos</a>
+      <a href="simulacao.html">Simulação</a>
+    </nav>
+    <div class="site-auth" id="siteAuthBar">
+      <span id="siteUserGreeting" class="site-user-greet site-user-greet--header" hidden>
+        Olá, <strong id="siteUserName">—</strong>
+      </span>
+      <a href="../index.html" id="siteLinkAreaUsuario" class="site-auth-link-area" hidden title="Abrir sua área na TumaIA">Minha página</a>
+      <a href="login.html" id="siteLinkLogin">Login</a>
+      <a class="site-auth-primary" href="cadastro.html" id="siteLinkCadastro">Cadastro</a>
+      <button type="button" id="siteBtnLogout" class="site-btn-logout" hidden>Sair</button>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <!-- Parte inicial: só Lorem (estrutura / preenchimento) -->
+    <section class="site-hero site-hero--home">
+      <p class="site-lorem site-lorem--first">
+        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+      </p>
+      <h1>Lorem ipsum dolor sit amet</h1>
+      <p class="site-lead">
+        Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.
+      </p>
+      <p class="site-lorem">
+        Sed nisi. Nulla quis sem at nibh elementum imperdiet. Duis sagittis ipsum. Praesent mauris. Fusce nec tellus sed augue semper porta. Mauris massa. Vestibulum lacinia arcu eget nulla. Curabitur ullamcorper ultricies nisi. Nam eget dui. Etiam rhoncus. Maecenas tempus, tellus eget condimentum rhoncus, sem quam semper libero, sit amet adipiscing sem neque sed ipsum.
+      </p>
+      <p class="site-lorem">
+        Nam quam nunc, blandit vel, luctus pulvinar, hendrerit id, lorem. Maecenas nec odio et ante tincidunt tempus. Donec vitae sapien ut libero venenatis faucibus. Nullam quis ante. Etiam sit amet orci eget eros faucibus tincidunt. Duis leo. Sed fringilla mauris sit amet nibh.
+      </p>
+    </section>
+
+    <section class="site-section">
+      <h2>Consectetur</h2>
+      <p class="site-lorem">
+        Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Curabitur sodales ligula in libero. Sed dignissim lacinia nunc. Curabitur tortor.
+      </p>
+      <p class="site-lorem">
+        Pellentesque nibh. Aenean quam. In scelerisque sem at dolor. Maecenas mattis. Sed convallis tristique sem. Proin ut ligula vel nunc egestas porttitor. Morbi lectus risus, iaculis vel, suscipit quis, luctus non, massa.
+      </p>
+    </section>
+  </main>
+
+  <footer class="site-footer">TumaIA — demo / MVP</footer>
+  <script src="site-auth.js"></script>
+</body>
+</html>

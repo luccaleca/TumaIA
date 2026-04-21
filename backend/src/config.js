@@ -7,6 +7,7 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   INTERNAL_WEBHOOK_SECRET: z.preprocess(empty, z.string().min(1).optional()),
   SUPABASE_URL: z.preprocess(empty, z.string().url().optional()),
+  SUPABASE_ANON_KEY: z.preprocess(empty, z.string().optional()),
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(empty, z.string().optional()),
   DATABASE_URL: z.preprocess(empty, z.string().optional()),
   GOOGLE_AI_API_KEY: z.preprocess(empty, z.string().optional()),

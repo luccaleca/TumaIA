@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TumaIA — Cadastro</title>
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body class="site" data-auth-page="cadastro">
+  <header class="site-header">
+    <a class="site-brand" href="index.html">TumaIA</a>
+    <nav class="site-nav" aria-label="Principal">
+      <a href="index.html">Início</a>
+      <a href="produto.html">Produto</a>
+      <a href="planos.html">Planos</a>
+      <a href="simulacao.html">Simulação</a>
+    </nav>
+    <div class="site-auth" id="siteAuthBar">
+      <span id="siteUserGreeting" class="site-user-greet site-user-greet--header" hidden>
+        Olá, <strong id="siteUserName">—</strong>
+      </span>
+      <a href="../index.html" id="siteLinkAreaUsuario" class="site-auth-link-area" hidden title="Abrir sua área na TumaIA">Minha página</a>
+      <a href="login.html" id="siteLinkLogin">Login</a>
+      <a class="site-auth-primary" href="cadastro.html" id="siteLinkCadastro">Cadastro</a>
+      <button type="button" id="siteBtnLogout" class="site-btn-logout" hidden>Sair</button>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <h1 class="site-auth-page-title">Criar cadastro</h1>
+    <p class="site-auth-lead">Preencha os dados abaixo. Depois você será levado à tela de login.</p>
+
+    <form id="formCadastro" class="site-auth-form" autocomplete="on">
+      <label for="authRegNome">Nome</label>
+      <input type="text" id="authRegNome" name="nome" autocomplete="name" required />
+
+      <label for="authRegEmail">E-mail</label>
+      <input type="email" id="authRegEmail" name="email" autocomplete="email" required />
+
+      <label for="authRegSenha">Senha (mín. 8 caracteres)</label>
+      <div class="site-auth-password-row">
+        <input type="password" id="authRegSenha" name="senha" autocomplete="new-password" required />
+        <button type="button" class="auth-password-toggle" data-target="authRegSenha" aria-pressed="false">Mostrar</button>
+      </div>
+
+      <label for="authRegSenhaConfirm">Confirmar senha</label>
+      <div class="site-auth-password-row">
+        <input type="password" id="authRegSenhaConfirm" autocomplete="new-password" required />
+        <button type="button" class="auth-password-toggle" data-target="authRegSenhaConfirm" aria-pressed="false">Mostrar</button>
+      </div>
+
+      <label for="authRegTel">Telefone (opcional)</label>
+      <input type="text" id="authRegTel" name="tel" placeholder="11999999999" autocomplete="tel" />
+
+      <button type="submit" class="site-btn" id="authBtnCadastro">Cadastrar</button>
+      <p id="authCadastroMsg" class="site-auth-msg" hidden></p>
+    </form>
+
+    <p class="site-auth-footer-links">
+      Já tem conta? <a href="login.html">Entrar</a>
+      · <a href="index.html">Voltar ao início</a>
+    </p>
+  </main>
+
+  <footer class="site-footer">TumaIA — demo / MVP</footer>
+  <script src="site-auth.js"></script>
+  <script src="site-auth-forms.js"></script>
+</body>
+</html>

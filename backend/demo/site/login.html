@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TumaIA — Login</title>
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body class="site" data-auth-page="login">
+  <header class="site-header">
+    <a class="site-brand" href="index.html">TumaIA</a>
+    <nav class="site-nav" aria-label="Principal">
+      <a href="index.html">Início</a>
+      <a href="produto.html">Produto</a>
+      <a href="planos.html">Planos</a>
+      <a href="simulacao.html">Simulação</a>
+    </nav>
+    <div class="site-auth" id="siteAuthBar">
+      <span id="siteUserGreeting" class="site-user-greet site-user-greet--header" hidden>
+        Olá, <strong id="siteUserName">—</strong>
+      </span>
+      <a href="../index.html" id="siteLinkAreaUsuario" class="site-auth-link-area" hidden title="Abrir sua área na TumaIA">Minha página</a>
+      <a href="login.html" id="siteLinkLogin">Login</a>
+      <a class="site-auth-primary" href="cadastro.html" id="siteLinkCadastro">Cadastro</a>
+      <button type="button" id="siteBtnLogout" class="site-btn-logout" hidden>Sair</button>
+    </div>
+  </header>
+
+  <main class="site-main">
+    <h1 class="site-auth-page-title">Entrar</h1>
+    <p class="site-auth-lead">Use seu e-mail e senha para acessar a área da TumaIA.</p>
+
+    <form id="formLogin" class="site-auth-form" autocomplete="on">
+      <label for="authLoginEmail">E-mail</label>
+      <input
+        type="email"
+        id="authLoginEmail"
+        name="tuma_site_login_email"
+        autocomplete="username"
+        required
+        autocapitalize="off"
+        spellcheck="false"
+      />
+      <label for="authLoginSenha">Senha</label>
+      <input
+        type="password"
+        id="authLoginSenha"
+        name="tuma_site_login_senha"
+        autocomplete="current-password"
+        required
+      />
+      <button type="submit" class="site-btn" id="authBtnLogin">Entrar</button>
+      <p id="authLoginMsg" class="site-auth-msg" hidden></p>
+    </form>
+
+    <p class="site-auth-footer-links">
+      Não tem conta? <a href="cadastro.html">Criar cadastro</a>
+      · <a href="index.html">Voltar ao início</a>
+    </p>
+  </main>
+
+  <footer class="site-footer">TumaIA — demo / MVP</footer>
+  <script src="site-auth.js"></script>
+  <script src="site-auth-forms.js"></script>
+</body>
+</html>
