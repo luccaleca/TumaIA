@@ -11,6 +11,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(empty, z.string().optional()),
   DATABASE_URL: z.preprocess(empty, z.string().optional()),
   GOOGLE_AI_API_KEY: z.preprocess(empty, z.string().optional()),
+  MEDIA_BUCKET: z.preprocess(empty, z.string().optional()),
 });
 
 export const env = envSchema.parse(process.env);

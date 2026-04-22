@@ -12,7 +12,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export function createApp() {
   const app = express();
   app.use(cors());
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "60mb" }));
 
   // Abrir /demo vai para a capa do site; o app fica em /demo/index.html (simulação após login).
   app.get(["/demo", "/demo/"], (_req, res) => {
