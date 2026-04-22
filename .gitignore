@@ -16,7 +16,7 @@ out/
 secrets/
 credentials/
 
-# Demo front temporário (não versionar; o front oficial fica em outro lugar)
+# Demo front temporário (não versionar no main; desenvolvimento na branch demo)
 backend/demo/
 
 dist/

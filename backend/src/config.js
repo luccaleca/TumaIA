@@ -11,6 +11,7 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.preprocess(empty, z.string().optional()),
   DATABASE_URL: z.preprocess(empty, z.string().optional()),
   GOOGLE_AI_API_KEY: z.preprocess(empty, z.string().optional()),
+  MEDIA_BUCKET: z.preprocess(empty, z.string().optional()),
   /** Se true, POST /auth/register inclui login_probe (testa signIn logo após criar usuário). */
   AUTH_DEBUG_LOGIN_PROBE: z.preprocess(
     (v) => {

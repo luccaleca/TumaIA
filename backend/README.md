@@ -5,7 +5,7 @@
 API interna para o N8N (e depois o painel Next.js) acessar:
 
 - contexto de marca no Supabase
-- geração de texto no Gemini
+- (geração com IA pode ser integrada depois neste backend ou no orquestrador)
 
 As rotas em `/internal/*` são protegidas por `INTERNAL_WEBHOOK_SECRET`.
 
@@ -20,7 +20,6 @@ As rotas em `/internal/*` são protegidas por `INTERNAL_WEBHOOK_SECRET`.
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` (use no backend; **nunca** no browser)
 - `INTERNAL_WEBHOOK_SECRET`
-- `GOOGLE_AI_API_KEY` (opcional por enquanto)
 
 3) Instale e rode:
 
