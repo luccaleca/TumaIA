@@ -17,6 +17,7 @@ As rotas em `/internal/*` são protegidas por `INTERNAL_WEBHOOK_SECRET`.
 
 2) Preencha:
 
+- `PORT` (opcional; padrão `4000`. Se a porta estiver em uso, defina outra no `.env`, ex. `PORT=4040`)
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` (use no backend; **nunca** no browser)
 - `INTERNAL_WEBHOOK_SECRET`
@@ -29,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Servidor padrão: `http://localhost:4000`
+URL do servidor: `http://localhost:<PORT>` (padrão `4000`; veja `PORT` no `.env`).
 
 ## Schema Supabase (mínimo)
 
@@ -96,4 +97,19 @@ curl -X POST http://localhost:4000/internal/brand-context \
   -H "X-Internal-Secret: SEU_SECRET" \
   -d "{\"userId\":\"user_123\"}"
 ```
+
+### Ver uso de chamadas/tokens do Gemini (diário)
+
+```bash
+curl -H "X-Internal-Secret: SEU_SECRET" \
+  http://localhost:4000/internal/social-content/usage
+```
+
+Opcional no `.env`:
+
+```bash
+GEMINI_DAILY_TOKEN_BUDGET=200000
+```
+
+Com esse valor, a resposta da rota inclui `remaining_tokens_today`.
 

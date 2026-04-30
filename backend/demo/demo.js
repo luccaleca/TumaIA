@@ -10,11 +10,11 @@
 
     function getApiBase() {
       if (API_BASE_OVERRIDE) return String(API_BASE_OVERRIDE).replace(/\/$/, "");
-      const ls = localStorage.getItem(LS_API);
-      if (ls) return ls.replace(/\/$/, "");
       if (typeof location !== "undefined" && location.origin && location.origin !== "null") {
         return location.origin.replace(/\/$/, "");
       }
+      const ls = localStorage.getItem(LS_API);
+      if (ls) return ls.replace(/\/$/, "");
       return "http://localhost:4000";
     }
 
@@ -167,6 +167,10 @@
       if (vm?.classList.contains("is-active")) {
         aplicarPermissoesMidiasUi();
         renderMidiasExplorer();
+      }
+      const vc = $("view-contextos");
+      if (vc?.classList.contains("is-active")) {
+        await loadContextosData();
       }
       return result;
     }
@@ -514,6 +518,8 @@
     };
 
     let contextosItems = [];
+    let contextoEmEdicaoId = null;
+    let contextoSelecionadoId = null;
 
     let midiasFolders = [];
     let midiasFiles = [];
@@ -1338,6 +1344,7 @@
     }
 
     function resetCtxPickerUi() {
+      contextoEmEdicaoId = null;
       $("ctxPicker").classList.remove("open");
       $("ctxPickerChoose").hidden = false;
       $("ctxFormPromocao").hidden = true;
@@ -1348,6 +1355,203 @@
       clearLancamentoForm();
       clearDataComemorativaForm();
       clearPersonalizadoForm();
+    }
+
+    function makeContextoNome(item) {
+      if (!item || !item.tipo) return "Contexto";
+      if (item.tipo === "promocao" && item.promocao?.nome) return item.promocao.nome;
+      if (item.tipo === "lancamento" && item.lancamento?.nome) return item.lancamento.nome;
+      if (item.tipo === "data_comemorativa" && item.dataComemorativa?.nome) return item.dataComemorativa.nome;
+      if (item.tipo === "personalizado" && item.personalizado?.titulo) return item.personalizado.titulo;
+      return `${CTX_LABEL[item.tipo] || "Contexto"} ${new Date().toLocaleDateString("pt-BR")}`;
+    }
+
+    function normalizeContextoFromApi(row) {
+      const dados = row?.dados_json && typeof row.dados_json === "object" ? row.dados_json : {};
+      const tipoRaw = String(dados?.tipo || row?.schema_json?.tipo || "").trim().toLowerCase();
+      const tipo =
+        tipoRaw === "promocao" ||
+        tipoRaw === "lancamento" ||
+        tipoRaw === "data_comemorativa" ||
+        tipoRaw === "personalizado"
+          ? tipoRaw
+          : "personalizado";
+      return {
+        id: row?.id_contexto_empresa || newCtxId(),
+        tipo,
+        texto: "",
+        promocao: tipo === "promocao" ? (dados.promocao || null) : null,
+        lancamento: tipo === "lancamento" ? (dados.lancamento || null) : null,
+        dataComemorativa: tipo === "data_comemorativa" ? (dados.dataComemorativa || null) : null,
+        personalizado: tipo === "personalizado" ? (dados.personalizado || null) : null,
+      };
+    }
+
+    function buildContextoPayload(item) {
+      const dados = { tipo: item.tipo };
+      if (item.tipo === "promocao") dados.promocao = item.promocao || {};
+      if (item.tipo === "lancamento") dados.lancamento = item.lancamento || {};
+      if (item.tipo === "data_comemorativa") dados.dataComemorativa = item.dataComemorativa || {};
+      if (item.tipo === "personalizado") dados.personalizado = item.personalizado || {};
+      return {
+        tipo: item.tipo,
+        nome: makeContextoNome(item),
+        descricao: "",
+        dados,
+      };
+    }
+
+    function errorMessageFromResult(result, fallback) {
+      if (result?.networkError?.message) return result.networkError.message;
+      const err = result?.json?.error;
+      if (typeof err === "string" && err.trim()) return err;
+      if (err && typeof err === "object") {
+        if (typeof err.message === "string" && err.message.trim()) return err.message;
+        if (typeof err.details === "string" && err.details.trim()) return err.details;
+        try {
+          return JSON.stringify(err);
+        } catch {
+          return fallback;
+        }
+      }
+      return fallback;
+    }
+
+    async function loadContextosData() {
+      const idEmpresa = empresaProfile?.id_empresa;
+      if (!idEmpresa || !session?.access_token) {
+        contextosItems = [];
+        renderCtxList();
+        return;
+      }
+      const result = await apiFetch(`/empresas/${idEmpresa}/contextos`);
+      if (!result.ok || result.networkError) {
+        showPre(
+          $("outContextos"),
+          errorMessageFromResult(result, "Falha ao carregar contextos."),
+          "err",
+        );
+        return;
+      }
+      contextosItems = Array.isArray(result.json?.contextos)
+        ? result.json.contextos.map(normalizeContextoFromApi)
+        : [];
+      renderCtxList();
+    }
+
+    function openCtxEditorForType(tipo) {
+      $("ctxPicker").classList.add("open");
+      $("ctxPickerChoose").hidden = true;
+      $("ctxFormPromocao").hidden = tipo !== "promocao";
+      $("ctxFormLancamento").hidden = tipo !== "lancamento";
+      $("ctxFormDataComemorativa").hidden = tipo !== "data_comemorativa";
+      $("ctxFormPersonalizado").hidden = tipo !== "personalizado";
+    }
+
+    function beginCtxEdit(item) {
+      if (!item || !item.id || !item.tipo) return;
+      contextoEmEdicaoId = item.id;
+      openCtxEditorForType(item.tipo);
+      if (item.tipo === "promocao") {
+        clearPromocaoForm();
+        const p = item.promocao || {};
+        $("promoNome").value = p.nome || "";
+        $("promoProduto").value = p.produto || "";
+        $("promoBeneficio").value = p.beneficio || "";
+        $("promoTipo").value = p.tipo || "";
+        $("promoDetalhe").value = p.detalhe || "";
+        $("promoPreco").value = p.precoOferta || "";
+        $("promoValidade").value = p.validade || "";
+        $("promoOnde").value = p.onde || "";
+        $("promoPublico").value = p.publico || "";
+        $("promoCta").value = p.cta || "";
+        $("promoRestricoes").value = p.restricoes || "";
+        $("promoNome")?.focus();
+        return;
+      }
+      if (item.tipo === "lancamento") {
+        clearLancamentoForm();
+        const l = item.lancamento || {};
+        $("lancNome").value = l.nome || "";
+        $("lancOQue").value = l.oQue || "";
+        $("lancProblema").value = l.problema || "";
+        $("lancNovidades").value = l.novidades || "";
+        $("lancDiferencial").value = l.diferencial || "";
+        $("lancPublico").value = l.publico || "";
+        $("lancDisponibilidade").value = l.disponibilidade || "";
+        $("lancDataMomento").value = l.dataMomento || "";
+        $("lancTom").value = l.tom || "";
+        $("lancCta").value = l.cta || "";
+        $("lancRestricoes").value = l.restricoes || "";
+        $("lancNome")?.focus();
+        return;
+      }
+      if (item.tipo === "data_comemorativa") {
+        clearDataComemorativaForm();
+        const d = item.dataComemorativa || {};
+        $("dcNome").value = d.nome || "";
+        $("dcOcasiao").value = d.ocasiao || "";
+        $("dcPeriodo").value = d.periodo || "";
+        $("dcMensagem").value = d.mensagem || "";
+        $("dcTom").value = d.tom || "";
+        $("dcPublico").value = d.publico || "";
+        $("dcConexao").value = d.conexaoMarca || "";
+        $("dcCta").value = d.cta || "";
+        $("dcRestricoes").value = d.restricoes || "";
+        $("dcNome")?.focus();
+        return;
+      }
+      if (item.tipo === "personalizado") {
+        clearPersonalizadoForm();
+        const p = item.personalizado || {};
+        $("persTitulo").value = p.titulo || "";
+        const box = $("persRows");
+        if (box) {
+          box.innerHTML = "";
+          const campos = Array.isArray(p.campos) ? p.campos : [];
+          if (campos.length === 0) addPersRow();
+          else {
+            campos.forEach((c) => {
+              addPersRow();
+              const rows = box.querySelectorAll(".ctx-pers-row");
+              const row = rows[rows.length - 1];
+              const nome = row?.querySelector(".pers-nome");
+              const valor = row?.querySelector(".pers-valor");
+              if (nome) nome.value = c?.nome || "";
+              if (valor) valor.value = c?.valor || "";
+            });
+          }
+        }
+        $("persTitulo")?.focus();
+      }
+    }
+
+    async function saveCtxItem(nextItem) {
+      const idEmpresa = empresaProfile?.id_empresa;
+      if (!idEmpresa || !session?.access_token) {
+        showPre($("outContextos"), "Empresa não identificada para salvar contexto.", "err");
+        return;
+      }
+      const payload = buildContextoPayload(nextItem);
+      const path = contextoEmEdicaoId
+        ? `/empresas/${idEmpresa}/contextos/${contextoEmEdicaoId}`
+        : `/empresas/${idEmpresa}/contextos`;
+      const method = contextoEmEdicaoId ? "PATCH" : "POST";
+      const result = await apiFetch(path, {
+        method,
+        body: JSON.stringify(payload),
+      });
+      if (!result.ok || result.networkError) {
+        showPre(
+          $("outContextos"),
+          errorMessageFromResult(result, "Falha ao salvar contexto."),
+          "err",
+        );
+        return;
+      }
+      await loadContextosData();
+      resetCtxPickerUi();
+      showPre($("outContextos"), "Contexto salvo no banco.", "ok");
     }
 
     function promocaoPreviewLine(p) {
@@ -1382,7 +1586,9 @@
         const li = document.createElement("li");
         li.dataset.id = item.id;
         if (item.tipo === "personalizado") li.classList.add("ctx-list-li--custom");
+        if (contextoSelecionadoId === item.id) li.classList.add("ctx-list-li--selected");
         const left = document.createElement("div");
+        left.className = "ctx-main";
         const meta = document.createElement("div");
         meta.className = "ctx-meta";
         meta.textContent = CTX_LABEL[item.tipo] ?? item.tipo;
@@ -1400,24 +1606,162 @@
         }
         left.appendChild(meta);
         left.appendChild(body);
+        left.addEventListener("click", () => selectCtxForRead(item.id));
+
+        const actions = document.createElement("div");
+        actions.className = "ctx-actions";
+        const edit = document.createElement("button");
+        edit.type = "button";
+        edit.className = "ctx-edit";
+        edit.textContent = "Editar";
+        edit.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          beginCtxEdit(item);
+        });
         const rm = document.createElement("button");
         rm.type = "button";
         rm.className = "ctx-remove";
         rm.textContent = "Remover";
-        rm.addEventListener("click", () => {
-          contextosItems = contextosItems.filter((x) => x.id !== item.id);
-          renderCtxList();
+        rm.addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          const idEmpresa = empresaProfile?.id_empresa;
+          if (!idEmpresa || !session?.access_token) {
+            showPre($("outContextos"), "Empresa não identificada para remover contexto.", "err");
+            return;
+          }
+          const result = await apiFetch(`/empresas/${idEmpresa}/contextos/${item.id}`, {
+            method: "DELETE",
+          });
+          if (!result.ok || result.networkError) {
+            showPre(
+              $("outContextos"),
+              errorMessageFromResult(result, "Falha ao remover contexto."),
+              "err",
+            );
+            return;
+          }
+          if (contextoEmEdicaoId === item.id) contextoEmEdicaoId = null;
+          if (contextoSelecionadoId === item.id) contextoSelecionadoId = null;
+          await loadContextosData();
+          showPre($("outContextos"), "Contexto removido.", "ok");
         });
+        actions.appendChild(edit);
+        actions.appendChild(rm);
         li.appendChild(left);
-        li.appendChild(rm);
+        li.appendChild(actions);
         ul.appendChild(li);
       });
+      renderCtxDetails();
+    }
+
+    function ctxLabelForDisplay(item) {
+      return CTX_LABEL[item?.tipo] ?? item?.tipo ?? "Contexto";
+    }
+
+    function contextoToDisplayLines(item) {
+      if (!item || !item.tipo) return "(sem conteúdo)";
+      if (item.tipo === "promocao" && item.promocao) {
+        const p = item.promocao;
+        return [
+          ["Nome", p.nome],
+          ["Produto", p.produto],
+          ["Benefício", p.beneficio],
+          ["Tipo", p.tipo],
+          ["Detalhe", p.detalhe],
+          ["Preço / oferta", p.precoOferta],
+          ["Validade", p.validade],
+          ["Onde", p.onde],
+          ["Público", p.publico],
+          ["CTA", p.cta],
+          ["Restrições", p.restricoes],
+        ];
+      }
+      if (item.tipo === "lancamento" && item.lancamento) {
+        const l = item.lancamento;
+        return [
+          ["Nome", l.nome],
+          ["O que está sendo lançado", l.oQue],
+          ["Problema que resolve", l.problema],
+          ["O que há de novo", l.novidades],
+          ["Diferencial", l.diferencial],
+          ["Público", l.publico],
+          ["Disponibilidade", l.disponibilidade],
+          ["Data / momento", l.dataMomento],
+          ["Tom", l.tom],
+          ["CTA", l.cta],
+          ["Restrições", l.restricoes],
+        ];
+      }
+      if (item.tipo === "data_comemorativa" && item.dataComemorativa) {
+        const d = item.dataComemorativa;
+        return [
+          ["Nome / tema", d.nome],
+          ["Ocasião", d.ocasiao],
+          ["Data / período", d.periodo],
+          ["Mensagem central", d.mensagem],
+          ["Tom", d.tom],
+          ["Público", d.publico],
+          ["Conexão com a marca", d.conexaoMarca],
+          ["CTA", d.cta],
+          ["Restrições", d.restricoes],
+        ];
+      }
+      if (item.tipo === "personalizado" && item.personalizado) {
+        const p = item.personalizado;
+        const lines = [["Nome", p.titulo || "—"]];
+        const campos = Array.isArray(p.campos) ? p.campos : [];
+        if (campos.length === 0) {
+          lines.push(["Campos", "—"]);
+          return lines;
+        }
+        campos.forEach((c, idx) => {
+          const nome = String(c?.nome || "").trim() || `Campo ${idx + 1}`;
+          const valor = String(c?.valor || "").trim() || "—";
+          lines.push([nome, valor]);
+        });
+        return lines;
+      }
+      return [["Texto", item.texto || "(sem texto)"]];
+    }
+
+    function formatCtxDetailText(item) {
+      const lines = contextoToDisplayLines(item);
+      return lines
+        .map(([label, value]) => `${label}: ${String(value || "").trim() || "—"}`)
+        .join("\n");
+    }
+
+    function renderCtxDetails() {
+      const box = $("ctxDetalheBox");
+      const tipo = $("ctxDetalheTipo");
+      const texto = $("ctxDetalheTexto");
+      const vazio = $("ctxDetalheVazio");
+      if (!box || !tipo || !texto || !vazio) return;
+      const item = contextosItems.find((x) => x.id === contextoSelecionadoId);
+      if (!item) {
+        box.hidden = true;
+        tipo.textContent = "";
+        texto.textContent = "";
+        vazio.hidden = false;
+        return;
+      }
+      tipo.textContent = ctxLabelForDisplay(item);
+      texto.textContent = formatCtxDetailText(item);
+      box.hidden = false;
+      vazio.hidden = true;
+    }
+
+    function selectCtxForRead(id) {
+      if (!id) return;
+      contextoSelecionadoId = id;
+      renderCtxList();
     }
 
     function clearContextosUi() {
       contextosItems = [];
+      contextoSelecionadoId = null;
       renderCtxList();
-      $("ctxTexto").value = "";
+      showPre($("outContextos"), "", null);
       resetCtxPickerUi();
     }
 
@@ -1630,7 +1974,9 @@
     });
 
     $("navContextos").addEventListener("click", () => {
-      if (!$("navContextos").disabled) showView("contextos");
+      if ($("navContextos").disabled) return;
+      showView("contextos");
+      void loadContextosData();
     });
 
     $("navMidias").addEventListener("click", async () => {
@@ -1774,6 +2120,22 @@
       }
     });
 
+    document.addEventListener("click", (ev) => {
+      if (!contextoSelecionadoId) return;
+      const viewContextos = $("view-contextos");
+      if (!viewContextos?.classList.contains("is-active")) return;
+      const target = ev.target;
+      if (!(target instanceof Element)) return;
+      const contextoContainer = $("ctxLista")?.closest(".card");
+      if (!contextoContainer) return;
+      const eventPath = typeof ev.composedPath === "function" ? ev.composedPath() : [];
+      const clicouDentroDoContainer =
+        eventPath.includes(contextoContainer) || contextoContainer.contains(target);
+      if (clicouDentroDoContainer) return;
+      contextoSelecionadoId = null;
+      renderCtxList();
+    });
+
     document.querySelectorAll(".ctx-opt").forEach((btn) => {
       btn.addEventListener("click", () => {
         const tipo = btn.getAttribute("data-tipo");
@@ -1849,7 +2211,7 @@
       addPersRow();
     });
 
-    $("btnCtxPersAdd").addEventListener("click", () => {
+    $("btnCtxPersAdd").addEventListener("click", async () => {
       const personalizado = getPersonalizadoFromInputs();
       const hasAny =
         personalizado.titulo.length > 0 ||
@@ -1857,62 +2219,54 @@
       if (!hasAny) {
         return;
       }
-      contextosItems.push({
-        id: newCtxId(),
+      await saveCtxItem({
+        id: contextoEmEdicaoId || newCtxId(),
         tipo: "personalizado",
         texto: "",
         personalizado,
       });
-      renderCtxList();
-      resetCtxPickerUi();
     });
 
-    $("btnCtxLancamentoAdd").addEventListener("click", () => {
+    $("btnCtxLancamentoAdd").addEventListener("click", async () => {
       const lancamento = getLancamentoFromInputs();
       const hasAny = Object.values(lancamento).some((v) => v.length > 0);
       if (!hasAny) {
         return;
       }
-      contextosItems.push({
-        id: newCtxId(),
+      await saveCtxItem({
+        id: contextoEmEdicaoId || newCtxId(),
         tipo: "lancamento",
         texto: "",
         lancamento,
       });
-      renderCtxList();
-      resetCtxPickerUi();
     });
 
-    $("btnCtxDataAdd").addEventListener("click", () => {
+    $("btnCtxDataAdd").addEventListener("click", async () => {
       const dataComemorativa = getDataComemorativaFromInputs();
       const hasAny = Object.values(dataComemorativa).some((v) => v.length > 0);
       if (!hasAny) {
         return;
       }
-      contextosItems.push({
-        id: newCtxId(),
+      await saveCtxItem({
+        id: contextoEmEdicaoId || newCtxId(),
         tipo: "data_comemorativa",
         texto: "",
         dataComemorativa,
       });
-      renderCtxList();
-      resetCtxPickerUi();
     });
 
-    $("btnCtxPromoAdd").addEventListener("click", () => {
+    $("btnCtxPromoAdd").addEventListener("click", async () => {
       const promocao = getPromocaoFromInputs();
       const hasAny = Object.values(promocao).some((v) => v.length > 0);
       if (!hasAny) {
         return;
       }
-      contextosItems.push({
-        id: newCtxId(),
+      await saveCtxItem({
+        id: contextoEmEdicaoId || newCtxId(),
         tipo: "promocao",
         texto: "",
         promocao,
       });
-      renderCtxList();
-      resetCtxPickerUi();
     });
 
     $("navLogout").addEventListener("click", () => {

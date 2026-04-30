@@ -1,0 +1,16 @@
+{
+  "2026-04-28": {
+    "total_calls": 2,
+    "ok_calls": 0,
+    "error_calls": 2,
+    "by_status": {
+      "500": 2
+    },
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "total_tokens": 0,
+    "calls_with_token_metadata": 0,
+    "by_model": {},
+    "updated_at": "2026-04-28T14:24:39.489Z"
+  }
+}

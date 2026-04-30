@@ -3,12 +3,21 @@
  * Mesmo token que `demo.js` (`tuma_demo_access_token`).
  */
 const AUTH_TOKEN_KEY = "tuma_demo_access_token";
+const AUTH_FORMS_API_BASE_KEY = "tuma_demo_api_base";
 
 function getApiBase() {
+  try {
+    const override = localStorage.getItem(AUTH_FORMS_API_BASE_KEY);
+    if (override && override.trim()) {
+      return override.trim().replace(/\/$/, "");
+    }
+  } catch {
+    /* ignore */
+  }
   if (typeof location !== "undefined" && location.origin && location.origin !== "null") {
     return location.origin.replace(/\/$/, "");
   }
-  return "";
+  return "http://localhost:4000";
 }
 
 function normalizeEmailClient(s) {

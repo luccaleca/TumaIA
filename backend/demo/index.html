@@ -315,12 +315,11 @@
       </section>
 
       <section id="view-contextos" class="view">
-        <div class="card">
-          <h2>Contextos</h2>
-          <label for="ctxTexto">Descrição (opcional)</label>
-          <textarea id="ctxTexto" class="ctx-field" placeholder="" rows="4"></textarea>
-          <button type="button" class="action" id="btnCtxAdd">Adicionar contextos</button>
-          <div id="ctxPicker" class="ctx-picker" aria-live="polite">
+        <div class="ctx-layout">
+          <div class="card">
+            <h2>Adicionar contextos</h2>
+            <button type="button" class="action" id="btnCtxAdd">Adicionar contextos</button>
+            <div id="ctxPicker" class="ctx-picker" aria-live="polite">
             <div id="ctxPickerChoose">
               <p>Escolha o tipo de contexto:</p>
               <div class="ctx-options">
@@ -849,8 +848,20 @@
                 <button type="button" class="action" id="btnCtxPromoAdd">Incluir promoção</button>
               </div>
             </div>
+            </div>
           </div>
-          <ul id="ctxLista" class="ctx-list"></ul>
+          <div class="card">
+            <h2>Contextos criados</h2>
+            <ul id="ctxLista" class="ctx-list"></ul>
+            <div id="ctxDetalheBox" class="ctx-detail" hidden>
+              <p id="ctxDetalheTipo" class="ctx-detail-type"></p>
+              <pre id="ctxDetalheTexto" class="ctx-detail-pre"></pre>
+            </div>
+            <p id="ctxDetalheVazio" class="ctx-detail-empty">
+              Clique em um contexto para visualizar as informações.
+            </p>
+            <pre id="outContextos" hidden></pre>
+          </div>
         </div>
       </section>
 

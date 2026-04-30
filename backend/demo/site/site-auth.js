@@ -2,6 +2,27 @@
  * Mesmo token da demo (`demo.js`): mostra Olá + nome nas páginas do site se estiver logado.
  */
 const SITE_TOKEN_KEY = "tuma_demo_access_token";
+const API_BASE_KEY = "tuma_demo_api_base";
+
+function getApiBase() {
+  try {
+    const override = localStorage.getItem(API_BASE_KEY);
+    if (override && override.trim()) {
+      return override.trim().replace(/\/$/, "");
+    }
+  } catch {
+    /* ignore */
+  }
+  if (
+    typeof window !== "undefined" &&
+    window.location &&
+    window.location.origin &&
+    window.location.origin !== "null"
+  ) {
+    return window.location.origin;
+  }
+  return "http://localhost:4000";
+}
 
 function displayNameFromUsuario(u) {
   const nome = typeof u?.nome === "string" ? u.nome.trim() : "";
@@ -51,7 +72,7 @@ async function initSiteHeaderAuth() {
   }
 
   try {
-    const r = await fetch(`${window.location.origin}/auth/me`, {
+    const r = await fetch(`${getApiBase()}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await r.json().catch(() => ({}));
