@@ -1,0 +1,80 @@
+RESUMO DO PROJETO - TumaIA
+
+O TumaIA e uma plataforma criada para ajudar pequenas e medias empresas a produzirem conteudo para Instagram de forma mais rapida e organizada. Em vez de gastar horas toda semana criando posts manualmente, a empresa usa o sistema para automatizar grande parte desse trabalho com inteligencia artificial.
+
+Na pratica, o projeto conecta WhatsApp, IA, automacao e Instagram em um unico fluxo. A empresa envia a solicitacao, o sistema entende o contexto da marca, gera texto e imagem do post, e prepara a publicacao automaticamente.
+
+PROBLEMA QUE O PROJETO RESOLVE
+
+Muitas PMEs nao conseguem manter constancia nas redes sociais porque:
+- Falta tempo para produzir conteudo com frequencia.
+- Criar posts de qualidade exige escrita, design e planejamento.
+- O processo manual vira um gargalo para o marketing.
+
+COMO O TumaIA FUNCIONA
+
+1. A empresa cadastra informacoes da marca (tom de voz, publico, produtos e objetivos).
+2. O pedido de conteudo pode ser iniciado via WhatsApp.
+3. A IA gera sugestoes de legenda e arte com base no contexto cadastrado.
+4. Um fluxo de automacao (n8n) organiza e envia o conteudo para publicacao no Instagram.
+5. O processo pode ser repetido de forma rapida e com consistencia.
+
+O QUE JA FAZ PARTE DO PROJETO
+
+- Integracao com WhatsApp para receber solicitacoes.
+- Website para configurar marca, contexto e catalogo.
+- Automacao com n8n para orquestrar o fluxo.
+- IA generativa para criacao de textos e imagens.
+- Documentacao para apoiar uso, implantacao e evolucao.
+
+RESULTADO ESPERADO
+
+Com o TumaIA, a empresa consegue:
+- Produzir conteudo com mais frequencia.
+- Manter padrao visual e de comunicacao.
+- Reduzir horas operacionais por semana.
+- Focar mais em estrategia e menos em tarefas repetitivas.
+
+
+
+Cliente pede um post
+Pelo WhatsApp ou painel.
+
+Sistema vê quem é o cliente
+Descobre qual empresa está pedindo.
+
+Sistema checa se ainda pode usar hoje
+Se acabou o limite do dia, para aqui e avisa:
+“Seu limite de hoje acabou.”
+
+Sistema monta as informações da marca
+Junta nome, cores, logo, estilo e o pedido do cliente.
+
+IA escreve o texto do post
+Faz legenda e hashtags.
+Se a IA principal falhar, usa a reserva.
+
+Sistema cria a imagem em 3 passos
+
+tira fundo da foto (se precisar)
+cria o cenário novo
+junta produto + cenário final
+Sistema conta o consumo em cada passo
+Toda vez que usa IA, já registra quanto gastou.
+
+Sistema salva tudo e entrega
+Guarda imagem/texto e envia o resultado para o cliente.
+
+No fim do dia, faz o resumo
+Mostra quanto cada cliente usou e quanto ainda teria no plano.
+
+Resumo em 1 frase:
+Recebe pedido -> checa limite -> cria texto e imagem -> conta gasto -> entrega -> mostra consumo do dia.
+
+
+Gemini 2.5 Flash (principal de texto): escreve a legenda, descrição e hashtags do post.
+Groq (Llama 3.3) (reserva de texto): entra só se o Gemini falhar, para não parar o fluxo.
+Remove.bg (principal de recorte): remove o fundo da foto do produto quando precisar.
+Photoroom API (reserva de imagem/recorte): substitui Remove.bg ou ajuda na parte visual se houver falha.
+FLUX (fal.ai) (principal de geração de cenário): cria o fundo/cenário novo da arte final.
+n8n + backend (não é IA): junta tudo, controla limite diário, registra consumo e entrega pro cliente.

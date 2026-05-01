@@ -10,6 +10,14 @@ export function createApp() {
   app.use(cors());
   app.use(express.json({ limit: "60mb" }));
 
+  // Demo está temporariamente desativada enquanto o frontend em Next.js evolui.
+  app.get(["/demo", "/demo/"], (_req, res) => {
+    res.status(410).json({ error: "Demo desativada temporariamente. Use o frontend Next.js." });
+  });
+  app.get("/demo/*", (_req, res) => {
+    res.status(410).json({ error: "Demo desativada temporariamente. Use o frontend Next.js." });
+  });
+
   app.use("/health", health);
   app.use("/auth", auth);
   app.use("/empresas", empresas);

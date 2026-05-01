@@ -116,6 +116,74 @@ const patchMidiaBody = z
   .refine((d) => d.id_pasta !== undefined || d.nome_exibicao !== undefined, {
     message: "Informe id_pasta ou nome_exibicao",
   });
+const contextoParam = z.object({
+  idEmpresa: z.string().uuid(),
+  idContexto: z.string().uuid(),
+});
+const contextoTipoSchema = z.enum(["promocao", "lancamento", "data_comemorativa", "personalizado"]);
+
+function parseJsonIfString(v) {
+  if (typeof v !== "string") return v;
+  const txt = v.trim();
+  if (!txt) return {};
+  try {
+    return JSON.parse(txt);
+  } catch {
+    return v;
+  }
+}
+
+function textoNormalizado(v, maxLen) {
+  if (v == null) return null;
+  const txt = String(v).replace(/\r\n/g, "\n").trim();
+  if (!txt) return null;
+  return txt.slice(0, maxLen);
+}
+
+function sanitizeJsonValue(value, depth = 0) {
+  if (depth > 8) return null;
+  if (value == null) return null;
+  if (typeof value === "string") return value.replace(/\r\n/g, "\n").trim();
+  if (typeof value === "number" || typeof value === "boolean") return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizeJsonValue(item, depth + 1))
+      .filter((item) => item !== undefined);
+  }
+  if (typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (!k) continue;
+      const clean = sanitizeJsonValue(v, depth + 1);
+      if (clean !== undefined) out[k] = clean;
+    }
+    return out;
+  }
+  return undefined;
+}
+
+function normalizeContextoPayload(input) {
+  const tipo = contextoTipoSchema.parse(input?.tipo);
+  const nome = textoNormalizado(input?.nome, 200);
+  const descricao = textoNormalizado(input?.descricao, 2000) ?? "";
+  const dadosBase = parseJsonIfString(input?.dados);
+  const dados = sanitizeJsonValue(dadosBase);
+  const dadosObj =
+    dados && typeof dados === "object" && !Array.isArray(dados) ? dados : { conteudo: dados };
+  return {
+    tipo,
+    nome,
+    descricao,
+    dados: dadosObj,
+  };
+}
+
+const contextoBody = z.object({
+  tipo: contextoTipoSchema,
+  nome: z.string().max(200).optional().nullable(),
+  descricao: z.string().max(2000).optional().nullable(),
+  dados: z.preprocess(parseJsonIfString, z.record(z.unknown())),
+});
 
 function perfilAcessoPorCargo(cargo) {
   if (cargo === "administrador") return "administrador";
@@ -124,19 +192,173 @@ function perfilAcessoPorCargo(cargo) {
 
 const MEDIA_BUCKET = env.MEDIA_BUCKET || "midias";
 
+async function vincularCriadorComoMembro(supabase, idEmpresa, idUsuario) {
+  const payloadLegacy = {
+    id_empresa: idEmpresa,
+    id_usuario: idUsuario,
+    cargo: "administrador",
+    perfil_acesso: "administrador",
+    responsavel_operacional: true,
+    receber_alertas: true,
+    ativo: true,
+  };
+
+  const legacyInsert = await supabase.from("usuario_empresa").insert(payloadLegacy);
+  if (!legacyInsert.error) return { ok: true };
+
+  const msg = String(legacyInsert.error.message || "");
+  const schemaLegacyInvalido =
+    /column|schema|does not exist|not found|papel|cargo|perfil_acesso/i.test(msg);
+  if (!schemaLegacyInvalido) {
+    return { ok: false, error: legacyInsert.error };
+  }
+
+  const payloadNovo = {
+    id_empresa: idEmpresa,
+    id_usuario: idUsuario,
+    papel: "admin",
+  };
+  const novoInsert = await supabase.from("usuario_empresa").insert(payloadNovo);
+  if (!novoInsert.error) return { ok: true };
+  return { ok: false, error: novoInsert.error };
+}
+
 async function getMembroAtivoEmpresa(supabase, idEmpresa, idUsuario) {
   const { data, error } = await supabase
-    .from("usuarios_empresa")
+    .from("usuario_empresa")
     .select("id_usuario, cargo, ativo")
     .eq("id_empresa", idEmpresa)
     .eq("id_usuario", idUsuario)
     .eq("ativo", true)
     .maybeSingle();
-  return { data, error };
+  if (!data) return { data, error };
+  const roleRaw = typeof data.cargo === "string" && data.cargo.trim() ? data.cargo : null;
+  const role = String(roleRaw || "").trim().toLowerCase();
+  const cargoNormalizado =
+    role === "admin" || role === "administrador"
+      ? "administrador"
+      : role === "editor"
+        ? "editor"
+        : role === "membro" || role === "member"
+          ? "membro"
+          : null;
+  return {
+    data: {
+      ...data,
+      cargo: cargoNormalizado,
+    },
+    error,
+  };
 }
 
 function podeGerenciarMidias(cargo) {
   return cargo === "administrador" || cargo === "editor";
+}
+
+function slugify(texto) {
+  return String(texto || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function nomesTipoAceitos(tipo) {
+  if (tipo === "promocao") return ["promocao", "promoção"];
+  if (tipo === "lancamento") return ["lancamento", "lançamento"];
+  if (tipo === "data_comemorativa") return ["data comemorativa", "data_comemorativa"];
+  if (tipo === "personalizado") return ["personalizado"];
+  return [tipo];
+}
+
+function nomeTipoPadrao(tipo) {
+  if (tipo === "promocao") return "Promoção";
+  if (tipo === "lancamento") return "Lançamento";
+  if (tipo === "data_comemorativa") return "Data Comemorativa";
+  if (tipo === "personalizado") return "Personalizado";
+  return String(tipo || "Personalizado");
+}
+
+async function resolverTipoETemplate(supabase, tipo) {
+  const { data: tipos, error: eTipos } = await supabase
+    .from("tipo_contexto")
+    .select("id_tipo_contexto, nome")
+    .eq("ativo", true);
+  if (eTipos) throw new Error(eTipos.message);
+  const wanted = new Set(nomesTipoAceitos(tipo).map(slugify));
+  let tipoRow = (tipos || []).find((t) => wanted.has(slugify(t.nome)));
+  if (!tipoRow) {
+    const nomePadrao = nomeTipoPadrao(tipo);
+    const { data: createdTipo, error: eInsTipo } = await supabase
+      .from("tipo_contexto")
+      .insert({
+        nome: nomePadrao,
+        descricao: `Tipo de contexto: ${nomePadrao}`,
+        ativo: true,
+      })
+      .select("id_tipo_contexto, nome")
+      .single();
+    if (eInsTipo) {
+      const { data: retryTipos, error: eRetryTipos } = await supabase
+        .from("tipo_contexto")
+        .select("id_tipo_contexto, nome")
+        .eq("ativo", true);
+      if (eRetryTipos) throw new Error(eRetryTipos.message);
+      tipoRow = (retryTipos || []).find((t) => wanted.has(slugify(t.nome)));
+      if (!tipoRow) throw new Error(eInsTipo.message);
+    } else {
+      tipoRow = createdTipo;
+    }
+  }
+
+  const { data: templates, error: eTpl } = await supabase
+    .from("template_contexto")
+    .select("id_template")
+    .eq("id_tipo_contexto", tipoRow.id_tipo_contexto)
+    .eq("ativo", true)
+    .limit(1);
+  if (eTpl) throw new Error(eTpl.message);
+  let idTemplate = templates?.[0]?.id_template;
+  if (!idTemplate) {
+    const nomePadrao = nomeTipoPadrao(tipo);
+    const { data: createdTpl, error: eInsTpl } = await supabase
+      .from("template_contexto")
+      .insert({
+        id_tipo_contexto: tipoRow.id_tipo_contexto,
+        nome: "Template padrão",
+        descricao: `Template padrão para ${nomePadrao}`,
+        schema_json: {
+          tipo,
+          versao: 1,
+        },
+        ui_schema_json: {
+          layout: "auto",
+          tipo,
+        },
+        prompt_base: `Use o contexto do tipo "${nomePadrao}" para gerar texto de marketing.`,
+        ativo: true,
+      })
+      .select("id_template")
+      .single();
+    if (eInsTpl) {
+      const { data: retryTpl, error: eRetryTpl } = await supabase
+        .from("template_contexto")
+        .select("id_template")
+        .eq("id_tipo_contexto", tipoRow.id_tipo_contexto)
+        .eq("ativo", true)
+        .limit(1);
+      if (eRetryTpl) throw new Error(eRetryTpl.message);
+      idTemplate = retryTpl?.[0]?.id_template;
+      if (!idTemplate) throw new Error(eInsTpl.message);
+    } else {
+      idTemplate = createdTpl.id_template;
+    }
+  }
+  return {
+    idTipoContexto: tipoRow.id_tipo_contexto,
+    nomeTipoContexto: tipoRow.nome,
+    idTemplate,
+  };
 }
 
 /** IDs de todas as subpastas (não inclui `rootId`). */
@@ -165,7 +387,7 @@ const PASTA_UPLOAD_RAIZ_NOME = "Geral";
 
 async function getOrCreatePastaUploadRaiz(supabase, idEmpresa) {
   const { data: found, error: eFind } = await supabase
-    .from("pastas")
+    .from("pasta")
     .select("id_pasta")
     .eq("id_empresa", idEmpresa)
     .is("id_pasta_pai", null)
@@ -176,7 +398,7 @@ async function getOrCreatePastaUploadRaiz(supabase, idEmpresa) {
   if (found?.id_pasta) return found.id_pasta;
 
   const { data: created, error: eIns } = await supabase
-    .from("pastas")
+    .from("pasta")
     .insert({
       id_empresa: idEmpresa,
       id_pasta_pai: null,
@@ -190,7 +412,7 @@ async function getOrCreatePastaUploadRaiz(supabase, idEmpresa) {
     const msg = String(eIns.message || "");
     if (/duplicate|unique/i.test(msg)) {
       const { data: again, error: e2 } = await supabase
-        .from("pastas")
+        .from("pasta")
         .select("id_pasta")
         .eq("id_empresa", idEmpresa)
         .is("id_pasta_pai", null)
@@ -230,8 +452,8 @@ r.post("/convites/resgatar", async (req, res) => {
     }
 
     const { data: conv, error: eC } = await supabase
-      .from("empresa_convites")
-      .select("*, empresas (*)")
+      .from("empresa_convite")
+      .select("*")
       .eq("codigo", codigo)
       .eq("ativo", true)
       .maybeSingle();
@@ -256,22 +478,19 @@ r.post("/convites/resgatar", async (req, res) => {
       return;
     }
 
-    let empresa = conv.empresas;
-    if (!empresa) {
-      const { data: empRow, error: eEmp } = await supabase
-        .from("empresas")
-        .select("*")
-        .eq("id_empresa", conv.id_empresa)
-        .maybeSingle();
-      if (eEmp || !empRow) {
-        res.status(500).json({ error: "Empresa do convite não encontrada" });
-        return;
-      }
-      empresa = empRow;
+    const { data: empRow, error: eEmp } = await supabase
+      .from("empresa")
+      .select("*")
+      .eq("id_empresa", conv.id_empresa)
+      .maybeSingle();
+    if (eEmp || !empRow) {
+      res.status(500).json({ error: "Empresa do convite não encontrada" });
+      return;
     }
+    const empresa = empRow;
 
     const { data: jaMembro } = await supabase
-      .from("usuarios_empresa")
+      .from("usuario_empresa")
       .select(
         "id, cargo, perfil_acesso, responsavel_operacional, receber_alertas, ativo",
       )
@@ -300,7 +519,7 @@ r.post("/convites/resgatar", async (req, res) => {
 
     if (jaMembro) {
       const { error: eUpM } = await supabase
-        .from("usuarios_empresa")
+        .from("usuario_empresa")
         .update(membroPayload)
         .eq("id", jaMembro.id);
       if (eUpM) {
@@ -309,7 +528,7 @@ r.post("/convites/resgatar", async (req, res) => {
       }
     } else {
       const { error: eIns } = await supabase
-        .from("usuarios_empresa")
+        .from("usuario_empresa")
         .insert(membroPayload);
       if (eIns) {
         res.status(500).json({ error: eIns.message });
@@ -321,7 +540,7 @@ r.post("/convites/resgatar", async (req, res) => {
     const esgotou = novosUsos >= conv.max_usos;
 
     const { data: updated, error: eUp } = await supabase
-      .from("empresa_convites")
+      .from("empresa_convite")
       .update({
         usos: novosUsos,
         ativo: !esgotou,
@@ -333,7 +552,7 @@ r.post("/convites/resgatar", async (req, res) => {
 
     if (eUp || !updated) {
       await supabase
-        .from("usuarios_empresa")
+        .from("usuario_empresa")
         .delete()
         .eq("id_empresa", conv.id_empresa)
         .eq("id_usuario", req.usuario.id_usuario);
@@ -365,8 +584,8 @@ r.get("/minhas", async (req, res) => {
     }
 
     const { data: membros, error: e1 } = await supabase
-      .from("usuarios_empresa")
-      .select("cargo, perfil_acesso, responsavel_operacional, receber_alertas, id_empresa, empresas (*)")
+      .from("usuario_empresa")
+      .select("cargo, perfil_acesso, responsavel_operacional, receber_alertas, id_empresa")
       .eq("id_usuario", req.usuario.id_usuario)
       .eq("ativo", true);
 
@@ -375,12 +594,28 @@ r.get("/minhas", async (req, res) => {
       return;
     }
 
+    const empresaIds = [...new Set((membros || []).map((m) => m.id_empresa).filter(Boolean))];
+    const empresasMap = new Map();
+    if (empresaIds.length) {
+      const { data: empresasRows, error: eEmps } = await supabase
+        .from("empresa")
+        .select("*")
+        .in("id_empresa", empresaIds);
+      if (eEmps) {
+        res.status(500).json({ error: eEmps.message });
+        return;
+      }
+      for (const emp of empresasRows || []) {
+        empresasMap.set(emp.id_empresa, emp);
+      }
+    }
+
     const lista = (membros || []).map((m) => ({
       papel: m.cargo,
       perfil_acesso: m.perfil_acesso,
       responsavel_operacional: !!m.responsavel_operacional,
       receber_alertas: !!m.receber_alertas,
-      empresa: m.empresas,
+      empresa: empresasMap.get(m.id_empresa) || null,
     }));
 
     res.json({ empresas: lista });
@@ -444,7 +679,7 @@ r.patch("/:idEmpresa", async (req, res) => {
     }
 
     const { data: updated, error: eUp } = await supabase
-      .from("empresas")
+      .from("empresa")
       .update(row)
       .eq("id_empresa", idEmpresa.data)
       .select("*")
@@ -490,7 +725,7 @@ r.get("/:idEmpresa/membros", async (req, res) => {
     }
 
     const { data: membroAtual, error: ePerm } = await supabase
-      .from("usuarios_empresa")
+      .from("usuario_empresa")
       .select("id")
       .eq("id_empresa", idEmpresa.data)
       .eq("id_usuario", req.usuario.id_usuario)
@@ -508,10 +743,8 @@ r.get("/:idEmpresa/membros", async (req, res) => {
     }
 
     const { data: membros, error: eList } = await supabase
-      .from("usuarios_empresa")
-      .select(
-        "id_usuario, cargo, perfil_acesso, responsavel_operacional, receber_alertas, ativo, usuarios (nome, email)",
-      )
+      .from("usuario_empresa")
+      .select("id_usuario, cargo, perfil_acesso, responsavel_operacional, receber_alertas, ativo")
       .eq("id_empresa", idEmpresa.data)
       .eq("ativo", true);
 
@@ -520,21 +753,292 @@ r.get("/:idEmpresa/membros", async (req, res) => {
       return;
     }
 
-    const lista = (membros || []).map((m) => ({
-      id_usuario: m.id_usuario,
-      nome: m.usuarios?.nome ?? null,
-      email: m.usuarios?.email ?? null,
-      cargo: m.cargo,
-      perfil_acesso: m.perfil_acesso,
-      responsavel_operacional: !!m.responsavel_operacional,
-      receber_alertas: !!m.receber_alertas,
-      ativo: !!m.ativo,
-    }));
+    const idsUsuarios = [...new Set((membros || []).map((m) => m.id_usuario).filter(Boolean))];
+    const usuarioMap = new Map();
+    if (idsUsuarios.length) {
+      const { data: usuariosRows, error: eUsers } = await supabase
+        .from("usuario")
+        .select("id_usuario, nome, email")
+        .in("id_usuario", idsUsuarios);
+      if (eUsers) {
+        res.status(500).json({ error: eUsers.message });
+        return;
+      }
+      for (const u of usuariosRows || []) {
+        usuarioMap.set(u.id_usuario, u);
+      }
+    }
+
+    const lista = (membros || []).map((m) => {
+      const u = usuarioMap.get(m.id_usuario);
+      return {
+        id_usuario: m.id_usuario,
+        nome: u?.nome ?? null,
+        email: u?.email ?? null,
+        cargo: m.cargo,
+        perfil_acesso: m.perfil_acesso,
+        responsavel_operacional: !!m.responsavel_operacional,
+        receber_alertas: !!m.receber_alertas,
+        ativo: !!m.ativo,
+      };
+    });
 
     res.json({ membros: lista });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro interno";
     console.error("empresas.membros:", e);
+    if (!res.headersSent) res.status(500).json({ error: msg });
+  }
+});
+
+/** Lista contextos ativos da empresa (qualquer membro ativo pode ver). */
+r.get("/:idEmpresa/contextos", async (req, res) => {
+  try {
+    const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+    if (!idEmpresa.success) {
+      res.status(400).json({ error: "id_empresa inválido" });
+      return;
+    }
+    const supabase = db();
+    if (!supabase) {
+      res.status(503).json({ error: "Supabase não configurado" });
+      return;
+    }
+    const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+      supabase,
+      idEmpresa.data,
+      req.usuario.id_usuario,
+    );
+    if (ePerm) {
+      res.status(500).json({ error: ePerm.message });
+      return;
+    }
+    if (!membro) {
+      res.status(403).json({ error: "Sem permissão para acessar contextos desta empresa" });
+      return;
+    }
+    const { data: rows, error: eList } = await supabase
+      .from("contexto_empresa")
+      .select("id_contexto_empresa, nome, descricao, schema_json, dados_json, data_criacao, data_atualizacao")
+      .eq("id_empresa", idEmpresa.data)
+      .eq("ativo", true)
+      .order("data_criacao", { ascending: false });
+    if (eList) {
+      res.status(500).json({ error: eList.message });
+      return;
+    }
+    res.json({ contextos: rows || [] });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro interno";
+    console.error("empresas.listContextos:", e);
+    if (!res.headersSent) res.status(500).json({ error: msg });
+  }
+});
+
+/** Cria contexto na empresa (admin/editor). */
+r.post("/:idEmpresa/contextos", async (req, res) => {
+  try {
+    const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+    if (!idEmpresa.success) {
+      res.status(400).json({ error: "id_empresa inválido" });
+      return;
+    }
+    const body = contextoBody.safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json({
+        error: "Payload de contexto invalido",
+        details: body.error.flatten(),
+      });
+      return;
+    }
+    const supabase = db();
+    if (!supabase) {
+      res.status(503).json({ error: "Supabase não configurado" });
+      return;
+    }
+    const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+      supabase,
+      idEmpresa.data,
+      req.usuario.id_usuario,
+    );
+    if (ePerm) {
+      res.status(500).json({ error: ePerm.message });
+      return;
+    }
+    if (!membro || !podeGerenciarMidias(membro.cargo)) {
+      res.status(403).json({
+        error: "Sem permissão para criar contexto",
+        details: {
+          cargo_detectado: membro?.cargo ?? null,
+        },
+      });
+      return;
+    }
+    const payload = normalizeContextoPayload(body.data);
+    const resolved = await resolverTipoETemplate(supabase, payload.tipo);
+    const { data: created, error: eInsert } = await supabase
+      .from("contexto_empresa")
+      .insert({
+        id_empresa: idEmpresa.data,
+        id_tipo_contexto: resolved.idTipoContexto,
+        id_template: resolved.idTemplate,
+        criado_por_usuario_id: req.usuario.id_usuario,
+        nome: payload.nome || `${resolved.nomeTipoContexto} ${new Date().toLocaleDateString("pt-BR")}`,
+        descricao: payload.descricao,
+        origem: "manual",
+        schema_json: {
+          tipo: payload.tipo,
+          versao: 1,
+        },
+        dados_json: {
+          tipo: payload.tipo,
+          ...payload.dados,
+        },
+        ativo: true,
+      })
+      .select("id_contexto_empresa, nome, descricao, schema_json, dados_json, data_criacao, data_atualizacao")
+      .single();
+    if (eInsert) {
+      res.status(500).json({ error: eInsert.message });
+      return;
+    }
+    res.status(201).json({ contexto: created });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro interno";
+    console.error("empresas.createContexto:", e);
+    if (!res.headersSent) res.status(500).json({ error: msg });
+  }
+});
+
+/** Atualiza contexto da empresa (admin/editor). */
+r.patch("/:idEmpresa/contextos/:idContexto", async (req, res) => {
+  try {
+    const p = contextoParam.safeParse(req.params);
+    if (!p.success) {
+      res.status(400).json({ error: p.error.flatten() });
+      return;
+    }
+    const body = contextoBody.safeParse(req.body ?? {});
+    if (!body.success) {
+      res.status(400).json({
+        error: "Payload de contexto invalido",
+        details: body.error.flatten(),
+      });
+      return;
+    }
+    const supabase = db();
+    if (!supabase) {
+      res.status(503).json({ error: "Supabase não configurado" });
+      return;
+    }
+    const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+      supabase,
+      p.data.idEmpresa,
+      req.usuario.id_usuario,
+    );
+    if (ePerm) {
+      res.status(500).json({ error: ePerm.message });
+      return;
+    }
+    if (!membro || !podeGerenciarMidias(membro.cargo)) {
+      res.status(403).json({
+        error: "Sem permissão para editar contexto",
+        details: {
+          cargo_detectado: membro?.cargo ?? null,
+        },
+      });
+      return;
+    }
+    const payload = normalizeContextoPayload(body.data);
+    const resolved = await resolverTipoETemplate(supabase, payload.tipo);
+    const { data: updated, error: eUp } = await supabase
+      .from("contexto_empresa")
+      .update({
+        id_tipo_contexto: resolved.idTipoContexto,
+        id_template: resolved.idTemplate,
+        nome: payload.nome || `${resolved.nomeTipoContexto} ${new Date().toLocaleDateString("pt-BR")}`,
+        descricao: payload.descricao,
+        schema_json: {
+          tipo: payload.tipo,
+          versao: 1,
+        },
+        dados_json: {
+          tipo: payload.tipo,
+          ...payload.dados,
+        },
+      })
+      .eq("id_contexto_empresa", p.data.idContexto)
+      .eq("id_empresa", p.data.idEmpresa)
+      .eq("ativo", true)
+      .select("id_contexto_empresa, nome, descricao, schema_json, dados_json, data_criacao, data_atualizacao")
+      .maybeSingle();
+    if (eUp) {
+      res.status(500).json({ error: eUp.message });
+      return;
+    }
+    if (!updated) {
+      res.status(404).json({ error: "Contexto não encontrado" });
+      return;
+    }
+    res.json({ contexto: updated });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro interno";
+    console.error("empresas.patchContexto:", e);
+    if (!res.headersSent) res.status(500).json({ error: msg });
+  }
+});
+
+/** Remove contexto (soft delete, admin/editor). */
+r.delete("/:idEmpresa/contextos/:idContexto", async (req, res) => {
+  try {
+    const p = contextoParam.safeParse(req.params);
+    if (!p.success) {
+      res.status(400).json({ error: p.error.flatten() });
+      return;
+    }
+    const supabase = db();
+    if (!supabase) {
+      res.status(503).json({ error: "Supabase não configurado" });
+      return;
+    }
+    const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+      supabase,
+      p.data.idEmpresa,
+      req.usuario.id_usuario,
+    );
+    if (ePerm) {
+      res.status(500).json({ error: ePerm.message });
+      return;
+    }
+    if (!membro || !podeGerenciarMidias(membro.cargo)) {
+      res.status(403).json({
+        error: "Sem permissão para remover contexto",
+        details: {
+          cargo_detectado: membro?.cargo ?? null,
+        },
+      });
+      return;
+    }
+    const { data: removed, error: eDel } = await supabase
+      .from("contexto_empresa")
+      .update({ ativo: false })
+      .eq("id_contexto_empresa", p.data.idContexto)
+      .eq("id_empresa", p.data.idEmpresa)
+      .eq("ativo", true)
+      .select("id_contexto_empresa")
+      .maybeSingle();
+    if (eDel) {
+      res.status(500).json({ error: eDel.message });
+      return;
+    }
+    if (!removed) {
+      res.status(404).json({ error: "Contexto não encontrado" });
+      return;
+    }
+    res.json({ removido: true, id_contexto_empresa: removed.id_contexto_empresa });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro interno";
+    console.error("empresas.deleteContexto:", e);
     if (!res.headersSent) res.status(500).json({ error: msg });
   }
 });
@@ -569,7 +1073,7 @@ r.get("/:idEmpresa/pastas", async (req, res) => {
     }
 
     const { data: pastas, error: eList } = await supabase
-      .from("pastas")
+      .from("pasta")
       .select("*")
       .eq("id_empresa", idEmpresa.data)
       .eq("ativo", true)
@@ -639,7 +1143,7 @@ r.post("/:idEmpresa/pastas", async (req, res) => {
       ativo: true,
     };
     const { data: created, error: eCreate } = await supabase
-      .from("pastas")
+      .from("pasta")
       .insert(row)
       .select("*")
       .single();
@@ -695,7 +1199,7 @@ r.patch("/:idEmpresa/pastas/:idPasta", async (req, res) => {
     }
 
     const { data: pastaRow, error: eFind } = await supabase
-      .from("pastas")
+      .from("pasta")
       .select("id_pasta, id_empresa, id_pasta_pai, nome, ativo")
       .eq("id_pasta", p.data.idPasta)
       .eq("id_empresa", p.data.idEmpresa)
@@ -738,7 +1242,7 @@ r.patch("/:idEmpresa/pastas/:idPasta", async (req, res) => {
 
     async function conflitoNomeEm(nomeChecar, idPastaPaiDest, excetoId) {
       let q = supabase
-        .from("pastas")
+        .from("pasta")
         .select("id_pasta")
         .eq("id_empresa", p.data.idEmpresa)
         .eq("nome", nomeChecar)
@@ -755,7 +1259,7 @@ r.patch("/:idEmpresa/pastas/:idPasta", async (req, res) => {
         return;
       }
       const { data: atualizada, error: eUp } = await supabase
-        .from("pastas")
+        .from("pasta")
         .update({
           nome: destNome,
           data_atualizacao: new Date().toISOString(),
@@ -780,7 +1284,7 @@ r.patch("/:idEmpresa/pastas/:idPasta", async (req, res) => {
 
     if (novoPai) {
       const { data: paiRow, error: ePai } = await supabase
-        .from("pastas")
+        .from("pasta")
         .select("id_pasta")
         .eq("id_pasta", novoPai)
         .eq("id_empresa", p.data.idEmpresa)
@@ -795,7 +1299,7 @@ r.patch("/:idEmpresa/pastas/:idPasta", async (req, res) => {
         return;
       }
       const { data: todas, error: eTodas } = await supabase
-        .from("pastas")
+        .from("pasta")
         .select("id_pasta, id_pasta_pai")
         .eq("id_empresa", p.data.idEmpresa)
         .eq("ativo", true);
@@ -816,7 +1320,7 @@ r.patch("/:idEmpresa/pastas/:idPasta", async (req, res) => {
     }
 
     const { data: atualizada, error: eUp } = await supabase
-      .from("pastas")
+      .from("pasta")
       .update({
         id_pasta_pai: novoPai,
         nome: destNome,
@@ -877,7 +1381,7 @@ r.get("/:idEmpresa/midias", async (req, res) => {
     }
 
     let query = supabase
-      .from("midias")
+      .from("midia")
       .select("*")
       .eq("id_empresa", idEmpresa.data)
       .eq("ativo", true)
@@ -990,7 +1494,7 @@ r.post("/:idEmpresa/midias/upload-base64", async (req, res) => {
     };
 
     const { data: created, error: eInsert } = await supabase
-      .from("midias")
+      .from("midia")
       .insert(row)
       .select("*")
       .single();
@@ -1038,7 +1542,7 @@ r.delete("/:idEmpresa/midias/:idMidia", async (req, res) => {
     }
 
     const { data: midia, error: eFind } = await supabase
-      .from("midias")
+      .from("midia")
       .select("id_midia, caminho_storage")
       .eq("id_midia", p.data.idMidia)
       .eq("id_empresa", p.data.idEmpresa)
@@ -1054,7 +1558,7 @@ r.delete("/:idEmpresa/midias/:idMidia", async (req, res) => {
     }
 
     const { error: eSoft } = await supabase
-      .from("midias")
+      .from("midia")
       .update({ ativo: false })
       .eq("id_midia", p.data.idMidia)
       .eq("id_empresa", p.data.idEmpresa);
@@ -1112,7 +1616,7 @@ r.patch("/:idEmpresa/midias/:idMidia", async (req, res) => {
     const wantNomeRaw = parsed.data.nome_exibicao;
 
     const { data: midia, error: eFind } = await supabase
-      .from("midias")
+      .from("midia")
       .select("*")
       .eq("id_midia", p.data.idMidia)
       .eq("id_empresa", p.data.idEmpresa)
@@ -1140,7 +1644,7 @@ r.patch("/:idEmpresa/midias/:idMidia", async (req, res) => {
 
     if (!mudouPasta && mudouNome) {
       const { data: atualizada, error: eUp } = await supabase
-        .from("midias")
+        .from("midia")
         .update({
           nome_exibicao: nomeExFinal,
           data_atualizacao: new Date().toISOString(),
@@ -1159,7 +1663,7 @@ r.patch("/:idEmpresa/midias/:idMidia", async (req, res) => {
 
     const novaPasta = wantPasta;
     const { data: pastaDest, error: ePasta } = await supabase
-      .from("pastas")
+      .from("pasta")
       .select("id_pasta")
       .eq("id_pasta", novaPasta)
       .eq("id_empresa", p.data.idEmpresa)
@@ -1188,7 +1692,7 @@ r.patch("/:idEmpresa/midias/:idMidia", async (req, res) => {
     const publicUrl = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(novoCaminho)?.data?.publicUrl;
 
     const { data: atualizada, error: eUp } = await supabase
-      .from("midias")
+      .from("midia")
       .update({
         id_pasta: novaPasta,
         caminho_storage: novoCaminho,
@@ -1243,7 +1747,7 @@ r.delete("/:idEmpresa/pastas/:idPasta", async (req, res) => {
     }
 
     const { count: hasFilhos, error: eFilhos } = await supabase
-      .from("pastas")
+      .from("pasta")
       .select("id_pasta", { count: "exact", head: true })
       .eq("id_empresa", p.data.idEmpresa)
       .eq("id_pasta_pai", p.data.idPasta)
@@ -1254,7 +1758,7 @@ r.delete("/:idEmpresa/pastas/:idPasta", async (req, res) => {
     }
 
     const { count: hasMidias, error: eMidias } = await supabase
-      .from("midias")
+      .from("midia")
       .select("id_midia", { count: "exact", head: true })
       .eq("id_empresa", p.data.idEmpresa)
       .eq("id_pasta", p.data.idPasta)
@@ -1270,7 +1774,7 @@ r.delete("/:idEmpresa/pastas/:idPasta", async (req, res) => {
     }
 
     const { error: eDelete } = await supabase
-      .from("pastas")
+      .from("pasta")
       .update({ ativo: false })
       .eq("id_pasta", p.data.idPasta)
       .eq("id_empresa", p.data.idEmpresa)
@@ -1310,7 +1814,7 @@ r.patch("/:idEmpresa/membros/:idUsuario", async (req, res) => {
     }
 
     const { data: admin, error: ePerm } = await supabase
-      .from("usuarios_empresa")
+      .from("usuario_empresa")
       .select("cargo")
       .eq("id_empresa", p.data.idEmpresa)
       .eq("id_usuario", req.usuario.id_usuario)
@@ -1327,7 +1831,7 @@ r.patch("/:idEmpresa/membros/:idUsuario", async (req, res) => {
     }
 
     const { data: updated, error: eUp } = await supabase
-      .from("usuarios_empresa")
+      .from("usuario_empresa")
       .update({
         cargo: b.data.cargo,
         perfil_acesso: perfilAcessoPorCargo(b.data.cargo),
@@ -1378,7 +1882,7 @@ r.delete("/:idEmpresa/membros/:idUsuario", async (req, res) => {
     }
 
     const { data: admin, error: ePerm } = await supabase
-      .from("usuarios_empresa")
+      .from("usuario_empresa")
       .select("cargo")
       .eq("id_empresa", p.data.idEmpresa)
       .eq("id_usuario", req.usuario.id_usuario)
@@ -1395,7 +1899,7 @@ r.delete("/:idEmpresa/membros/:idUsuario", async (req, res) => {
     }
 
     const { data: updated, error: eUp } = await supabase
-      .from("usuarios_empresa")
+      .from("usuario_empresa")
       .update({ ativo: false })
       .eq("id_empresa", p.data.idEmpresa)
       .eq("id_usuario", p.data.idUsuario)
@@ -1451,7 +1955,7 @@ r.post("/", async (req, res) => {
     };
 
     const { data: emp, error: eEmp } = await supabase
-      .from("empresas")
+      .from("empresa")
       .insert(row)
       .select("*")
       .single();
@@ -1461,18 +1965,15 @@ r.post("/", async (req, res) => {
       return;
     }
 
-    const { error: eMem } = await supabase.from("usuarios_empresa").insert({
-      id_empresa: emp.id_empresa,
-      id_usuario: req.usuario.id_usuario,
-      cargo: "administrador",
-      perfil_acesso: "administrador",
-      responsavel_operacional: true,
-      receber_alertas: true,
-      ativo: true,
-    });
+    const memb = await vincularCriadorComoMembro(
+      supabase,
+      emp.id_empresa,
+      req.usuario.id_usuario,
+    );
+    const eMem = memb.ok ? null : memb.error;
 
     if (eMem) {
-      await supabase.from("empresas").delete().eq("id_empresa", emp.id_empresa);
+      await supabase.from("empresa").delete().eq("id_empresa", emp.id_empresa);
       res.status(500).json({ error: eMem.message });
       return;
     }
@@ -1510,7 +2011,7 @@ r.post("/:idEmpresa/convites", async (req, res) => {
     }
 
     const { data: membro, error: eM } = await supabase
-      .from("usuarios_empresa")
+      .from("usuario_empresa")
       .select("cargo, ativo")
       .eq("id_empresa", idEmpresa.data)
       .eq("id_usuario", req.usuario.id_usuario)
@@ -1552,7 +2053,7 @@ r.post("/:idEmpresa/convites", async (req, res) => {
       };
 
       const { data: conv, error: eC } = await supabase
-        .from("empresa_convites")
+        .from("empresa_convite")
         .insert(insertRow)
         .select("id_convite, codigo, data_expiracao, max_usos, data_criacao")
         .single();

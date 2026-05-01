@@ -118,7 +118,7 @@ r.post("/register", async (req, res) => {
 
     const id_usuario = randomUUID();
 
-    const { error: insertError } = await db.from("usuarios").insert({
+    const { error: insertError } = await db.from("usuario").insert({
       id_usuario,
       auth_user_id: userId,
       nome,
@@ -250,7 +250,7 @@ r.get("/me", requireUserJwt, async (req, res) => {
     }
 
     const { data, error } = await db
-      .from("usuarios")
+      .from("usuario")
       .select("*")
       .eq("auth_user_id", req.authUserId)
       .maybeSingle();
@@ -261,7 +261,53 @@ r.get("/me", requireUserJwt, async (req, res) => {
     }
 
     if (!data) {
-      res.status(404).json({ error: "Perfil não encontrado para este usuário" });
+      const { data: authUserRes, error: authErr } = await db.auth.admin.getUserById(req.authUserId);
+      if (authErr || !authUserRes?.user) {
+        res.status(404).json({ error: "Perfil não encontrado para este usuário" });
+        return;
+      }
+
+      const authUser = authUserRes.user;
+      const nomeMeta =
+        typeof authUser.user_metadata?.nome === "string"
+          ? authUser.user_metadata.nome.trim()
+          : "";
+      const emailAuth = typeof authUser.email === "string" ? authUser.email.trim().toLowerCase() : "";
+      const fallbackNome = nomeMeta || (emailAuth ? emailAuth.split("@")[0] : "Usuário");
+
+      const { data: created, error: createErr } = await db
+        .from("usuario")
+        .insert({
+          id_usuario: randomUUID(),
+          auth_user_id: req.authUserId,
+          nome: fallbackNome,
+          email: emailAuth || null,
+          telefone: null,
+          ativo: true,
+        })
+        .select("*")
+        .maybeSingle();
+
+      if (createErr || !created) {
+        const msg = String(createErr?.message || "");
+        if (/duplicate|unique/i.test(msg)) {
+          const { data: retried, error: retryErr } = await db
+            .from("usuario")
+            .select("*")
+            .eq("auth_user_id", req.authUserId)
+            .maybeSingle();
+          if (retryErr || !retried) {
+            res.status(500).json({ error: retryErr?.message || "Falha ao recuperar perfil" });
+            return;
+          }
+          res.json({ usuario: retried });
+          return;
+        }
+        res.status(500).json({ error: createErr?.message || "Falha ao criar perfil" });
+        return;
+      }
+
+      res.json({ usuario: created });
       return;
     }
 
@@ -316,7 +362,7 @@ r.patch("/me", requireUserJwt, async (req, res) => {
     if (email !== undefined) rowUpdates.email = email;
 
     const { data, error } = await db
-      .from("usuarios")
+      .from("usuario")
       .update(rowUpdates)
       .eq("auth_user_id", req.authUserId)
       .select("*")

@@ -17,7 +17,7 @@ export async function requireUsuario(req, res, next) {
     }
 
     const { data, error } = await db
-      .from("usuarios")
+      .from("usuario")
       .select("*")
       .eq("auth_user_id", req.authUserId)
       .maybeSingle();

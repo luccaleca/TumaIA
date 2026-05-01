@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "test:register": "node scripts/register-test.mjs"
+    "test:gemini:text": "node ia/tests/check-gemini-text.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
