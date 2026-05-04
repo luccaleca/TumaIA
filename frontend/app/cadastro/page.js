@@ -89,13 +89,16 @@ export default function CadastroPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
-      <section className="w-full rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-zinc-900">Criar conta no TumaIA</h1>
-        <p className="mt-1 text-sm text-zinc-600">Cadastro rápido para começar a usar.</p>
+      <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-[0_0_40px_-12px_rgba(57,255,20,0.12)]">
+        <h1 className="text-2xl font-semibold text-zinc-50">
+          Criar conta no <span className="text-white">Tuma</span>
+          <span className="text-accent">IA</span>
+        </h1>
+        <p className="mt-1 text-sm text-zinc-400">Cadastro rápido para começar a usar.</p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="nome">
+            <label className="mb-1 block text-sm font-medium text-zinc-300" htmlFor="nome">
               Nome
             </label>
             <input
@@ -103,12 +106,12 @@ export default function CadastroPage() {
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-zinc-100 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="email">
+            <label className="mb-1 block text-sm font-medium text-zinc-300" htmlFor="email">
               E-mail
             </label>
             <input
@@ -116,12 +119,12 @@ export default function CadastroPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-zinc-100 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="telefone">
+            <label className="mb-1 block text-sm font-medium text-zinc-300" htmlFor="telefone">
               Telefone (opcional)
             </label>
             <input
@@ -129,11 +132,11 @@ export default function CadastroPage() {
               type="text"
               value={telefone}
               onChange={(e) => setTelefone(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-zinc-100 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="senha">
+            <label className="mb-1 block text-sm font-medium text-zinc-300" htmlFor="senha">
               Senha
             </label>
             <input
@@ -141,12 +144,12 @@ export default function CadastroPage() {
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-zinc-100 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="senhaConfirm">
+            <label className="mb-1 block text-sm font-medium text-zinc-300" htmlFor="senhaConfirm">
               Confirmar senha
             </label>
             <input
@@ -154,14 +157,14 @@ export default function CadastroPage() {
               type="password"
               value={senhaConfirm}
               onChange={(e) => setSenhaConfirm(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-zinc-100 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-accent px-4 py-2 font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {loading ? "Enviando..." : "Cadastrar"}
           </button>
@@ -170,16 +173,18 @@ export default function CadastroPage() {
         {msg ? (
           <p
             className={`mt-4 rounded-lg px-3 py-2 text-sm ${
-              msgKind === "err" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+              msgKind === "err"
+                ? "border border-red-500/30 bg-red-950/40 text-red-300"
+                : "border border-accent/30 bg-accent-muted text-accent"
             }`}
           >
             {msg}
           </p>
         ) : null}
 
-        <p className="mt-5 text-sm text-zinc-600">
+        <p className="mt-5 text-sm text-zinc-400">
           Já tem conta?{" "}
-          <Link className="font-medium text-zinc-900 underline" href="/login">
+          <Link className="font-medium text-accent underline-offset-2 hover:underline" href="/login">
             Entrar
           </Link>
         </p>

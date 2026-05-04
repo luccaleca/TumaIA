@@ -1,12 +1,23 @@
- "use client";
+"use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { clearToken, fetchMe } from "../lib/auth";
 
+const NAV_SECTION_IDS = ["produto", "planos", "quem-somos"];
+
+function navLinkClass(active) {
+  return [
+    "inline-flex rounded-md px-3 py-1 text-sm font-medium transition-colors",
+    active ? "bg-accent text-accent-foreground" : "text-zinc-400 hover:text-white",
+  ].join(" ");
+}
+
 export default function Home() {
   const [authReady, setAuthReady] = useState(false);
   const [usuarioNome, setUsuarioNome] = useState("");
+  const [activeNav, setActiveNav] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -25,52 +36,129 @@ export default function Home() {
     };
   }, []);
 
+  useEffect(() => {
+    const offset = 120;
+
+    function updateActiveNav() {
+      const y = window.scrollY + offset;
+      let current = "";
+      for (const id of NAV_SECTION_IDS) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (el.offsetTop <= y) current = id;
+      }
+      setActiveNav(current);
+    }
+
+    updateActiveNav();
+    window.addEventListener("scroll", updateActiveNav, { passive: true });
+    window.addEventListener("resize", updateActiveNav);
+    return () => {
+      window.removeEventListener("scroll", updateActiveNav);
+      window.removeEventListener("resize", updateActiveNav);
+    };
+  }, []);
+
   function onLogout() {
     clearToken();
     setUsuarioNome("");
   }
 
+  const faqItems = [
+    {
+      q: "Como funciona a integração com o WhatsApp?",
+      a: "Você conecta o número do seu negócio ao fluxo do TumaIA. A partir daí, pedidos de conteúdo podem ser feitos por mensagem, áudio ou foto no WhatsApp, e o sistema responde com prévias e próximos passos no mesmo canal.",
+    },
+    {
+      q: "Preciso saber de design ou edição de imagem?",
+      a: "Não. O TumaIA gera sugestões de legenda e arte com base no contexto da sua marca. Você só revisa e aprova quando estiver satisfeito.",
+    },
+    {
+      q: "Meus dados e mídias ficam seguros?",
+      a: "Sim. O fluxo foi pensado para uso comercial, com armazenamento e tráfego adequados ao painel e à automação. Evite compartilhar senhas e use sempre o cadastro oficial da sua equipe.",
+    },
+    {
+      q: "Quanto tempo leva para publicar no Instagram?",
+      a: "Depois que a IA processa seu pedido e você aprova a prévia, a publicação segue o fluxo configurado para o seu Instagram. Em geral, são poucos minutos do pedido à entrega da arte para aprovação.",
+    },
+    {
+      q: "Posso cancelar ou mudar de plano depois?",
+      a: "Sim. Os planos foram pensados sem fidelidade forçada: você escolhe o pacote que faz sentido hoje e pode ajustar conforme sua loja crescer.",
+    },
+  ];
+
+  const depoimentos = [
+    {
+      texto:
+        "Antes eu passava o domingo fazendo post. Agora mando um áudio no WhatsApp e em minutos já tenho legenda e imagem prontas para aprovar.",
+      nome: "Mariana Souza",
+      cargo: "Loja de roupas, Belo Horizonte",
+    },
+    {
+      texto:
+        "O melhor é não precisar abrir outro app na correria do balcão. Peço pelo WhatsApp e sigo atendendo cliente; o marketing não para.",
+      nome: "Ricardo Almeida",
+      cargo: "Padaria & cafeteria, Curitiba",
+    },
+    {
+      texto:
+        "Eu não entendo nada de design. O TumaIA mantém um padrão parecido com o que eu já postava, só que bem mais rápido e organizado.",
+      nome: "Fernanda Costa",
+      cargo: "Estética automotiva, Fortaleza",
+    },
+  ];
+
   return (
-    <div className="bg-zinc-50 text-zinc-900">
-      <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/95 backdrop-blur">
+    <div className="bg-background text-foreground">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <a href="#inicio" className="text-xl font-bold tracking-tight">
-            TumaIA
+            <span className="text-white">Tuma</span>
+            <span className="text-accent">IA</span>
           </a>
-          <nav className="hidden items-center gap-5 text-sm font-medium md:flex">
-            <a href="#produto" className="text-zinc-700 hover:text-zinc-900">
+          <nav className="hidden items-center gap-1 md:flex">
+            <a href="#produto" className={navLinkClass(activeNav === "produto")}>
               Produto
             </a>
-            <a href="#planos" className="text-zinc-700 hover:text-zinc-900">
+            <a href="#planos" className={navLinkClass(activeNav === "planos")}>
               Planos
             </a>
-            <a href="#quem-somos" className="text-zinc-700 hover:text-zinc-900">
+            <a href="#quem-somos" className={navLinkClass(activeNav === "quem-somos")}>
               Quem somos
             </a>
           </nav>
           <div className="flex items-center gap-2">
             {authReady && usuarioNome ? (
               <>
-                <span className="hidden text-sm text-zinc-700 md:inline">
-                  Olá, <strong>{usuarioNome}</strong>
+                <span className="hidden text-sm text-zinc-400 md:inline">
+                  Olá, <strong className="text-zinc-100">{usuarioNome}</strong>
                 </span>
-                <Link className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm" href="/painel">
+                <Link
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-zinc-100 transition-colors hover:border-zinc-600"
+                  href="/painel"
+                >
                   Área do usuário
                 </Link>
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm text-white"
+                  className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
                 >
                   Sair
                 </button>
               </>
             ) : (
               <>
-                <Link className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm" href="/login">
+                <Link
+                  className="rounded-lg border border-border bg-transparent px-3 py-1.5 text-sm text-zinc-100 transition-colors hover:border-zinc-500"
+                  href="/login"
+                >
                   Entrar
                 </Link>
-                <Link className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm text-white" href="/cadastro">
+                <Link
+                  className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+                  href="/cadastro"
+                >
                   Cadastrar
                 </Link>
               </>
@@ -81,118 +169,153 @@ export default function Home() {
 
       <main className="scroll-smooth">
         <section id="inicio" className="mx-auto w-full max-w-6xl px-6 pb-14 pt-20">
-          <div className="rounded-3xl border border-zinc-200 bg-white p-8 shadow-sm md:p-12">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Plataforma TumaIA</p>
-            <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-tight md:text-5xl">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-            </h1>
-            <p className="mt-4 max-w-3xl text-zinc-600">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et
-              dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip
-              ex ea commodo consequat.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a href="#produto" className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white">
-                Ver produto
-              </a>
-              <a href="#planos" className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium">
-                Ver planos
-              </a>
+          <div className="rounded-3xl border border-border bg-surface p-8 shadow-[0_0_60px_-12px_rgba(57,255,20,0.08)] md:p-12">
+            <div className="grid grid-cols-1 items-center gap-8 lg:gap-12 md:grid-cols-2">
+              <div className="order-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">PLATAFORMA TUMAIA</p>
+                <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-tight text-zinc-50 md:text-5xl">
+                  Do WhatsApp para o Instagram em segundos.
+                </h1>
+                <p className="mt-4 max-w-3xl text-zinc-400">
+                  O TumaIA é o seu assistente virtual inteligente. Ele transforma suas mensagens, áudios e fotos do
+                  WhatsApp em posts profissionais para o Instagram de forma 100% automatizada.
+                </p>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link
+                    href="/cadastro"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-[0_0_24px_-4px_rgba(57,255,20,0.45)] transition-opacity hover:opacity-90"
+                  >
+                    Começar agora
+                  </Link>
+                  <a
+                    href="#planos"
+                    className="rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-zinc-100 transition-colors hover:border-zinc-500"
+                  >
+                    Ver planos
+                  </a>
+                </div>
+              </div>
+              <div className="order-2 w-full max-w-md justify-self-center md:max-w-none md:justify-self-end">
+                <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl shadow-[0_0_30px_rgba(0,255,0,0.2)] ring-1 ring-white/5">
+                  <Image
+                    src="/imagens/close-up-food-lover-eating.jpg"
+                    alt="Cliente representando o uso do TumaIA no dia a dia"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 45vw"
+                    priority
+                  />
+                  <div
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-black/70 via-black/35 to-black/25"
+                    aria-hidden
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </section>
 
         <section id="produto" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold md:text-5xl">Produto</h2>
-          <p className="mt-3 max-w-4xl text-zinc-600">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
-            dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
-            ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu
-            fugiat nulla pariatur.
+          <h2 className="section-title text-4xl font-semibold text-zinc-50 md:text-5xl">Como o TumaIA funciona</h2>
+          <p className="mt-3 max-w-4xl text-zinc-400">
+            Simplificamos o marketing do seu comércio. Esqueça horas perdidas criando posts, nossa IA cuida de tudo
+            para você.
           </p>
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {["Lorem ipsum", "Dolor sit amet", "Consectetur elit"].map((title) => (
-              <article key={title} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-                <h3 className="font-semibold">{title}</h3>
-                <p className="mt-2 text-sm text-zinc-600">
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore.
-                </p>
-              </article>
-            ))}
-          </div>
-          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <article className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-semibold">Automação inteligente</h3>
-              <p className="mt-2 text-sm text-zinc-600">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum lacinia arcu eget nulla. Class
-                aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
-              </p>
-              <p className="mt-2 text-sm text-zinc-600">
-                Curabitur sodales ligula in libero. Sed dignissim lacinia nunc. Curabitur tortor. Pellentesque nibh.
+
+          <div className="mt-8 grid grid-cols-1 gap-4 md:mt-10 md:grid-cols-3">
+            <article className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="font-semibold text-zinc-50">Conexão Direta</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Integre o TumaIA diretamente ao seu WhatsApp de forma simples e rápida.
               </p>
             </article>
-            <article className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-semibold">Fluxo de produção</h3>
-              <p className="mt-2 text-sm text-zinc-600">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus
-                ante dapibus diam. Sed nisi.
+            <article className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="font-semibold text-zinc-50">Criação com IA</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Nossa inteligência artificial gera legendas persuasivas e imagens otimizadas para o seu nicho.
               </p>
-              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-zinc-600">
-                <li>Lorem ipsum dolor sit amet, consectetur.</li>
-                <li>Sed do eiusmod tempor incididunt ut labore.</li>
-                <li>Ut enim ad minim veniam quis nostrud.</li>
-                <li>Duis aute irure dolor in reprehenderit.</li>
-              </ul>
+            </article>
+            <article className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="font-semibold text-zinc-50">Postagem Automática</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Aprovação em um clique e publicação direta no seu feed ou stories do Instagram.
+              </p>
+            </article>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <article className="rounded-xl border border-border bg-surface p-6">
+              <h3 className="text-xl font-semibold text-zinc-50">Automação inteligente</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Deixe a tecnologia trabalhar por você. O TumaIA aprende o tom de voz da sua marca e cria conteúdos como
+                se fosse você, liberando seu tempo para focar no que realmente importa: o seu negócio.
+              </p>
+            </article>
+            <article className="relative overflow-visible rounded-xl border border-border bg-surface p-6">
+              <div className="relative z-0 pr-44 sm:pr-56 md:pr-64 lg:pr-72 xl:pr-80">
+                <h3 className="text-xl font-semibold text-zinc-50">Fluxo de produção</h3>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-400">
+                  <li>Você envia um áudio ou foto no WhatsApp.</li>
+                  <li>A IA processa e cria a arte + legenda.</li>
+                  <li>Você recebe a prévia no próprio WhatsApp.</li>
+                  <li>É só aprovar e o post vai pro ar.</li>
+                </ul>
+              </div>
+              <div className="pointer-events-none absolute -bottom-12 -right-12 z-10 h-72 w-72 sm:-bottom-14 sm:-right-14 sm:h-80 sm:w-80 md:-bottom-16 md:-right-16 md:h-96 md:w-96 lg:-bottom-20 lg:-right-16 lg:h-[26rem] lg:w-[26rem]">
+                <Image
+                  src="/imagens/IMAGEM2.1.png"
+                  alt="Tuma, assistente virtual do TumaIA"
+                  width={384}
+                  height={384}
+                  className="h-full w-full object-contain object-bottom object-right drop-shadow-[0_16px_48px_rgba(57,255,20,0.35)]"
+                />
+              </div>
             </article>
           </div>
         </section>
 
         <section id="planos" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold md:text-5xl">Planos</h2>
-          <p className="mt-3 max-w-4xl text-zinc-600">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus
-            ante dapibus diam. Sed nisi. Nulla quis sem at nibh elementum imperdiet.
+          <h2 className="section-title text-4xl font-semibold text-zinc-50 md:text-5xl">
+            Planos que impulsionam seu negócio
+          </h2>
+          <p className="mt-3 max-w-4xl text-zinc-400">
+            Escolha o pacote ideal para a sua necessidade, sem fidelidade ou letras miúdas.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <article className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-              <p className="text-sm font-medium text-zinc-500">Plano Inicial</p>
-              <h3 className="mt-1 text-2xl font-semibold">Lorem Ipsum</h3>
-              <p className="mt-2 text-sm text-zinc-600">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.
-              </p>
+            <article className="rounded-xl border border-border bg-surface p-6">
+              <p className="text-sm font-medium text-zinc-500">Plano</p>
+              <h3 className="mt-1 text-2xl font-semibold text-zinc-50">Starter</h3>
+              <p className="mt-2 text-sm text-zinc-400">Ideal para quem está começando a estruturar as redes sociais.</p>
             </article>
-            <article className="rounded-xl border border-zinc-900 bg-zinc-900 p-6 text-white shadow-sm">
-              <p className="text-sm font-medium text-zinc-300">Plano Pro</p>
-              <h3 className="mt-1 text-2xl font-semibold">Dolor Sit Amet</h3>
-              <p className="mt-2 text-sm text-zinc-300">
-                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor.
-              </p>
+            <article className="rounded-xl border-2 border-accent bg-surface-elevated p-6 shadow-[0_0_40px_-8px_rgba(57,255,20,0.35)]">
+              <p className="text-sm font-medium text-accent">Plano</p>
+              <h3 className="mt-1 text-2xl font-semibold text-zinc-50">Pro</h3>
+              <p className="mt-2 text-sm text-zinc-400">Automação completa para quem quer presença digital diária.</p>
             </article>
           </div>
-          <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-            <h3 className="text-xl font-semibold">Comparativo de benefícios</h3>
+          <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+            <h3 className="text-xl font-semibold text-zinc-50">Comparativo de benefícios</h3>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[700px] border-separate border-spacing-0 text-left text-sm">
                 <thead>
                   <tr>
-                    <th className="border-b border-zinc-200 py-2 pr-4 font-semibold text-zinc-700">Recurso</th>
-                    <th className="border-b border-zinc-200 py-2 pr-4 font-semibold text-zinc-700">Inicial</th>
-                    <th className="border-b border-zinc-200 py-2 pr-4 font-semibold text-zinc-700">Pro</th>
-                    <th className="border-b border-zinc-200 py-2 font-semibold text-zinc-700">Enterprise</th>
+                    <th className="border-b border-border py-2 pr-4 font-semibold text-zinc-300">Recurso</th>
+                    <th className="border-b border-border py-2 pr-4 font-semibold text-zinc-300">Starter</th>
+                    <th className="border-b border-border py-2 pr-4 font-semibold text-zinc-300">Pro</th>
+                    <th className="border-b border-border py-2 font-semibold text-zinc-300">Business</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    ["Lorem ipsum generator", "Básico", "Avançado", "Completo"],
-                    ["Dolor sit analytics", "Limitado", "Ilimitado", "Ilimitado+"],
-                    ["Consectetur workspace", "1 equipe", "5 equipes", "Multi-equipe"],
-                    ["Amet suporte", "E-mail", "Prioritário", "Dedicado"],
+                    ["Posts mensais (referência)", "Até 30", "Até 120", "Sob consulta"],
+                    ["Geração de imagens com IA", "Incluída (padrão)", "Incluída (prioridade)", "Fluxo customizado"],
+                    ["Suporte", "E-mail", "E-mail + chat prioritário", "Gerente de conta"],
                   ].map((row) => (
                     <tr key={row[0]}>
-                      <td className="border-b border-zinc-100 py-2 pr-4 text-zinc-700">{row[0]}</td>
-                      <td className="border-b border-zinc-100 py-2 pr-4 text-zinc-600">{row[1]}</td>
-                      <td className="border-b border-zinc-100 py-2 pr-4 text-zinc-600">{row[2]}</td>
-                      <td className="border-b border-zinc-100 py-2 text-zinc-600">{row[3]}</td>
+                      <td className="border-b border-border py-2 pr-4 text-zinc-300">{row[0]}</td>
+                      <td className="border-b border-border py-2 pr-4 text-zinc-400">{row[1]}</td>
+                      <td className="border-b border-border py-2 pr-4 text-zinc-400">{row[2]}</td>
+                      <td className="border-b border-border py-2 text-zinc-400">{row[3]}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -202,86 +325,73 @@ export default function Home() {
         </section>
 
         <section id="depoimentos" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold md:text-5xl">Depoimentos</h2>
-          <p className="mt-3 max-w-4xl text-zinc-600">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Suspendisse potenti. Nunc feugiat mi a tellus
-            consequat imperdiet. Vestibulum sapien.
+          <h2 className="section-title text-4xl font-semibold text-zinc-50 md:text-5xl">O que nossos clientes dizem</h2>
+          <p className="mt-3 max-w-4xl text-zinc-400">
+            Veja como o TumaIA está transformando a rotina de empreendedores.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {[
-              "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus luctus urna sed urna ultricies.",
-              "Curabitur tortor. Pellentesque nibh. Aenean quam. In scelerisque sem at dolor.",
-              "Maecenas mattis. Sed convallis tristique sem. Proin ut ligula vel nunc egestas porttitor.",
-            ].map((text, idx) => (
-              <article key={idx} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-                <p className="text-sm text-zinc-600">“{text}”</p>
-                <p className="mt-3 text-sm font-medium text-zinc-800">Pessoa Exemplo {idx + 1}</p>
-                <p className="text-xs text-zinc-500">Cargo Lorem Ipsum</p>
+            {depoimentos.map((d) => (
+              <article key={d.nome} className="rounded-xl border border-border bg-surface p-5">
+                <p className="text-sm text-zinc-400">“{d.texto}”</p>
+                <p className="mt-3 text-sm font-medium text-zinc-100">{d.nome}</p>
+                <p className="text-xs text-zinc-500">{d.cargo}</p>
               </article>
             ))}
           </div>
         </section>
 
         <section id="faq" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold md:text-5xl">Perguntas frequentes</h2>
+          <h2 className="section-title text-4xl font-semibold text-zinc-50 md:text-5xl">Dúvidas Comuns</h2>
           <div className="mt-6 space-y-3">
-            {[
-              "Lorem ipsum dolor sit amet, consectetur adipiscing elit?",
-              "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua?",
-              "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris?",
-              "Duis aute irure dolor in reprehenderit in voluptate velit esse?",
-              "Excepteur sint occaecat cupidatat non proident, sunt in culpa?",
-            ].map((question, idx) => (
-              <details key={question} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                <summary className="cursor-pointer list-none font-medium text-zinc-900">
-                  {idx + 1}. {question}
+            {faqItems.map((item, idx) => (
+              <details
+                key={item.q}
+                className="group rounded-xl border border-border bg-surface p-4 open:border-zinc-600"
+              >
+                <summary className="cursor-pointer list-none font-medium text-zinc-100 marker:hidden [&::-webkit-details-marker]:hidden">
+                  {idx + 1}. {item.q}
                 </summary>
-                <p className="mt-2 text-sm text-zinc-600">
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore
-                  et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut
-                  aliquip ex ea commodo consequat.
-                </p>
+                <p className="mt-2 text-sm text-zinc-400">{item.a}</p>
               </details>
             ))}
           </div>
         </section>
 
         <section id="quem-somos" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold md:text-5xl">Quem somos</h2>
-          <p className="mt-3 max-w-4xl text-zinc-600">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur sodales ligula in libero. Sed dignissim
-            lacinia nunc. Curabitur tortor. Pellentesque nibh. Aenean quam. In scelerisque sem at dolor. Maecenas
-            mattis.
-          </p>
-          <p className="mt-3 max-w-4xl text-zinc-600">
-            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nam nec ante. Sed lacinia, urna non tincidunt
-            mattis, tortor neque adipiscing diam, a cursus ipsum ante quis turpis.
+          <h2 className="section-title text-4xl font-semibold text-zinc-50 md:text-5xl">Nossa História</h2>
+          <p className="mt-3 max-w-4xl text-zinc-400">
+            Nascemos para descomplicar o marketing digital para pequenos e médios empreendedores, unindo a praticidade do
+            aplicativo de mensagens mais usado do Brasil com o poder da Inteligência Artificial.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-            {["Missão", "Visão", "Valores"].map((item) => (
-              <article key={item} className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
-                <h3 className="font-semibold">{item}</h3>
-                <p className="mt-2 text-sm text-zinc-600">
-                  Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec eu libero sit amet quam egestas semper.
-                </p>
-              </article>
-            ))}
+            <article className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="font-semibold text-zinc-50">Missão</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Democratizar o acesso a um marketing de qualidade e automatizado.
+              </p>
+            </article>
+            <article className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="font-semibold text-zinc-50">Visão</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Ser a principal ferramenta de automação de redes sociais para o comércio local.
+              </p>
+            </article>
+            <article className="rounded-xl border border-border bg-surface p-5">
+              <h3 className="font-semibold text-zinc-50">Valores</h3>
+              <p className="mt-2 text-sm text-zinc-400">Inovação, simplicidade e foco total no sucesso do cliente.</p>
+            </article>
           </div>
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-900 p-8 text-white shadow-sm">
-            <h2 className="text-3xl font-semibold">Lorem ipsum call to action</h2>
-            <p className="mt-3 max-w-3xl text-zinc-300">
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et
-              dolore magna aliqua. Ut enim ad minim veniam.
-            </p>
+          <div className="rounded-2xl border border-accent/40 bg-surface-elevated p-8 shadow-[0_0_48px_-12px_rgba(57,255,20,0.25)]">
+            <h2 className="text-3xl font-semibold text-zinc-50">Pronto para revolucionar seu Instagram?</h2>
             <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-zinc-900" href="/cadastro">
+              <Link
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
+                href="/cadastro"
+              >
                 Começar agora
-              </Link>
-              <Link className="rounded-lg border border-zinc-500 px-4 py-2 text-sm font-medium text-white" href="/login">
-                Já tenho conta
               </Link>
             </div>
           </div>

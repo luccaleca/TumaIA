@@ -1,28 +1,33 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #050505;
+  --foreground: #f4f4f5;
+  --surface: #121212;
+  --surface-elevated: #1a1a1a;
+  --border: #27272a;
+  --accent: #39ff14;
+  --accent-foreground: #050505;
+  --accent-muted: rgba(57, 255, 20, 0.12);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-muted: var(--accent-muted);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
 html {
@@ -35,10 +40,11 @@ html {
 }
 
 .landing-section:target {
-  background: linear-gradient(to bottom, rgba(24, 24, 27, 0.06), transparent 50%);
+  background: linear-gradient(to bottom, var(--accent-muted), transparent 55%);
 }
 
 .landing-section:target .section-title {
   font-size: clamp(2.8rem, 5.4vw, 4.4rem);
   line-height: 1.05;
 }
+

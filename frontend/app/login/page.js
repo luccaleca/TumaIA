@@ -78,13 +78,16 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
-      <section className="w-full rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-zinc-900">Entrar no TumaIA</h1>
-        <p className="mt-1 text-sm text-zinc-600">Use sua conta para acessar a plataforma.</p>
+      <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-[0_0_40px_-12px_rgba(57,255,20,0.12)]">
+        <h1 className="text-2xl font-semibold text-zinc-50">
+          Entrar no <span className="text-white">Tuma</span>
+          <span className="text-accent">IA</span>
+        </h1>
+        <p className="mt-1 text-sm text-zinc-400">Use sua conta para acessar a plataforma.</p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="email">
+            <label className="mb-1 block text-sm font-medium text-zinc-300" htmlFor="email">
               E-mail
             </label>
             <input
@@ -92,13 +95,13 @@ export default function LoginPage() {
               type="email"
               value={email || emailFromQuery}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-zinc-100 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="senha">
+            <label className="mb-1 block text-sm font-medium text-zinc-300" htmlFor="senha">
               Senha
             </label>
             <input
@@ -106,7 +109,7 @@ export default function LoginPage() {
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-zinc-100 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
@@ -114,7 +117,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-60"
+            className="w-full rounded-lg bg-accent px-4 py-2 font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {loading ? "Entrando..." : "Entrar"}
           </button>
@@ -123,16 +126,18 @@ export default function LoginPage() {
         {displayMsg ? (
           <p
             className={`mt-4 rounded-lg px-3 py-2 text-sm ${
-              displayKind === "err" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+              displayKind === "err"
+                ? "border border-red-500/30 bg-red-950/40 text-red-300"
+                : "border border-accent/30 bg-accent-muted text-accent"
             }`}
           >
             {displayMsg}
           </p>
         ) : null}
 
-        <p className="mt-5 text-sm text-zinc-600">
+        <p className="mt-5 text-sm text-zinc-400">
           Ainda não tem conta?{" "}
-          <Link className="font-medium text-zinc-900 underline" href="/cadastro">
+          <Link className="font-medium text-accent underline-offset-2 hover:underline" href="/cadastro">
             Criar cadastro
           </Link>
         </p>
