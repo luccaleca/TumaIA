@@ -1,0 +1,2 @@
+TODO: Definir instrucoes de foco SQL para o TumaIA.
+Recomendacao: orientar respostas em SELECT seguro, sem executar comandos destrutivos.

@@ -31,6 +31,7 @@ export default function PainelLayout({ children }) {
 
   const links = useMemo(
     () => [
+      { href: "/painel/chat", label: "Chat" },
       { href: "/painel/conta", label: "Conta" },
       { href: "/painel/empresa", label: "Empresa" },
       { href: "/painel/contextos", label: "Contextos" },
@@ -45,7 +46,7 @@ export default function PainelLayout({ children }) {
   }
 
   if (!ready) {
-    return <main className="p-8 text-sm text-zinc-400">Carregando sessão...</main>;
+    return <main className="p-8 text-sm text-emerald-700">Carregando sessão...</main>;
   }
 
   return (
@@ -53,17 +54,17 @@ export default function PainelLayout({ children }) {
       <header className="border-b border-border bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="text-lg font-bold tracking-tight">
-            <span className="text-white">Tuma</span>
+            <span className="text-emerald-900">Tuma</span>
             <span className="text-accent">IA</span>
           </Link>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-zinc-400">
-              Olá, <strong className="text-zinc-100">{nome}</strong>
+            <span className="text-sm text-emerald-700">
+              Olá, <strong className="text-emerald-900">{nome}</strong>
             </span>
             <button
               type="button"
               onClick={onLogout}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm text-zinc-100 transition-colors hover:border-zinc-500"
+              className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-emerald-800 transition-colors hover:border-emerald-400"
             >
               Sair
             </button>
@@ -83,7 +84,7 @@ export default function PainelLayout({ children }) {
                   className={`block rounded-md px-3 py-1 text-sm transition-colors ${
                     active
                       ? "bg-accent font-medium text-accent-foreground"
-                      : "text-zinc-400 hover:bg-surface-elevated hover:text-zinc-100"
+                      : "text-emerald-700 hover:bg-surface-elevated hover:text-emerald-900"
                   }`}
                 >
                   {item.label}

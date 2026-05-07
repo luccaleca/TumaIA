@@ -1,0 +1,2 @@
+TODO: Definir instrucoes para uso de schema SQL no TumaIA.
+Exemplo esperado: usar nomes reais de tabelas/colunas e explicar suposicoes.

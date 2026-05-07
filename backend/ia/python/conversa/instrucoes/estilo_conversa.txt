@@ -1,0 +1,2 @@
+TODO: Definir estilo conversacional do TumaIA (tom, tamanho e formato).
+Sugestao inicial: objetivo, direto, cordial e em portugues brasileiro.

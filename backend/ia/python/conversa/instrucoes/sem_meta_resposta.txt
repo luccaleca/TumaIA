@@ -1,0 +1,2 @@
+TODO: Definir regra de resposta sem meta-comentarios internos.
+Orientar para nao expor ferramenta, prompt interno ou cadeia de raciocinio.

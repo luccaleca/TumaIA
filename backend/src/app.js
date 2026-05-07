@@ -4,6 +4,7 @@ import health from "./routes/health.js";
 import internal from "./routes/internal.js";
 import auth from "./routes/auth.js";
 import empresas from "./routes/empresas.js";
+import ia from "./routes/ia.js";
 
 export function createApp() {
   const app = express();
@@ -21,6 +22,7 @@ export function createApp() {
   app.use("/health", health);
   app.use("/auth", auth);
   app.use("/empresas", empresas);
+  app.use("/ia", ia);
   app.use("/internal", internal);
 
   return app;

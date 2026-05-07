@@ -1247,6 +1247,118 @@ ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON T
 ALTER DEFAULT PRIVILEGES FOR ROLE supabase_admin IN SCHEMA public GRANT ALL ON TABLES TO service_role;
 
 
+-- Name: chat_conversa; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.chat_conversa (
+    id_conversa uuid DEFAULT gen_random_uuid() NOT NULL,
+    id_usuario uuid NOT NULL,
+    id_empresa uuid NOT NULL,
+    titulo character varying,
+    ativo boolean DEFAULT true NOT NULL,
+    data_criacao timestamp with time zone DEFAULT now() NOT NULL,
+    data_atualizacao timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE public.chat_conversa OWNER TO postgres;
+
+--
+-- Name: chat_mensagem; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.chat_mensagem (
+    id_mensagem uuid DEFAULT gen_random_uuid() NOT NULL,
+    id_conversa uuid NOT NULL,
+    papel character varying NOT NULL,
+    conteudo text NOT NULL,
+    metadados_json jsonb,
+    data_criacao timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT chat_mensagem_papel_check CHECK (((papel)::text = ANY ((ARRAY['user'::character varying, 'assistant'::character varying, 'system'::character varying])::text[])))
+);
+
+ALTER TABLE public.chat_mensagem OWNER TO postgres;
+
+--
+-- Name: chat_conversa chat_conversa_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chat_conversa
+    ADD CONSTRAINT chat_conversa_pkey PRIMARY KEY (id_conversa);
+
+--
+-- Name: chat_mensagem chat_mensagem_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chat_mensagem
+    ADD CONSTRAINT chat_mensagem_pkey PRIMARY KEY (id_mensagem);
+
+--
+-- Name: chat_conversa_idx_usuario_empresa_data; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX chat_conversa_idx_usuario_empresa_data ON public.chat_conversa USING btree (id_usuario, id_empresa, data_atualizacao DESC);
+
+--
+-- Name: chat_mensagem_idx_conversa_data; Type: INDEX; Schema: public; Owner: postgres
+--
+
+CREATE INDEX chat_mensagem_idx_conversa_data ON public.chat_mensagem USING btree (id_conversa, data_criacao);
+
+--
+-- Name: chat_conversa trg_chat_conversa_set_data_atualizacao; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_chat_conversa_set_data_atualizacao BEFORE UPDATE ON public.chat_conversa FOR EACH ROW EXECUTE FUNCTION public.set_data_atualizacao();
+
+--
+-- Name: chat_conversa chat_conversa_id_usuario_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chat_conversa
+    ADD CONSTRAINT chat_conversa_id_usuario_fkey FOREIGN KEY (id_usuario) REFERENCES public.usuario(id_usuario) ON DELETE CASCADE;
+
+--
+-- Name: chat_conversa chat_conversa_id_empresa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chat_conversa
+    ADD CONSTRAINT chat_conversa_id_empresa_fkey FOREIGN KEY (id_empresa) REFERENCES public.empresa(id_empresa) ON DELETE CASCADE;
+
+--
+-- Name: chat_mensagem chat_mensagem_id_conversa_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.chat_mensagem
+    ADD CONSTRAINT chat_mensagem_id_conversa_fkey FOREIGN KEY (id_conversa) REFERENCES public.chat_conversa(id_conversa) ON DELETE CASCADE;
+
+--
+-- Name: chat_conversa; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.chat_conversa ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: chat_mensagem; Type: ROW SECURITY; Schema: public; Owner: postgres
+--
+
+ALTER TABLE public.chat_mensagem ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: TABLE chat_conversa; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.chat_conversa TO anon;
+GRANT ALL ON TABLE public.chat_conversa TO authenticated;
+GRANT ALL ON TABLE public.chat_conversa TO service_role;
+
+--
+-- Name: TABLE chat_mensagem; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON TABLE public.chat_mensagem TO anon;
+GRANT ALL ON TABLE public.chat_mensagem TO authenticated;
+GRANT ALL ON TABLE public.chat_mensagem TO service_role;
+
 --
 -- PostgreSQL database dump complete
 --

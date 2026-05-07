@@ -1,0 +1,2 @@
+TODO: Definir regras RAG do TumaIA do zero.
+Este arquivo deve conter somente orientacoes do projeto atual.
