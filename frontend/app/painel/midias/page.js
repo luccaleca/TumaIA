@@ -550,7 +550,7 @@ export default function MidiasPage() {
                   void handleDrop(null);
                 }}
                 className={`rounded-md border px-2 py-1 text-zinc-700 hover:bg-zinc-100 ${
-                  dropTarget === "bc-root" ? "border-emerald-400 bg-emerald-50" : "border-zinc-300"
+                  dropTarget === "bc-root" ? "border-accent/50 bg-accent-muted" : "border-zinc-300"
                 }`}
               >
                 Raiz /
@@ -576,7 +576,7 @@ export default function MidiasPage() {
                   void handleDrop(item.id_pasta);
                 }}
                 className={`rounded-md border px-2 py-1 text-zinc-700 hover:bg-zinc-100 ${
-                  dropTarget === `bc-${item.id_pasta}` ? "border-emerald-400 bg-emerald-50" : "border-zinc-300"
+                  dropTarget === `bc-${item.id_pasta}` ? "border-accent/50 bg-accent-muted" : "border-zinc-300"
                 }`}
               >
                 {item.nome}
@@ -626,7 +626,7 @@ export default function MidiasPage() {
                   void handleDrop(p.id_pasta);
                 }}
                 className={`rounded-md border bg-white p-3 hover:bg-zinc-50 ${
-                  dropTarget === `folder-${p.id_pasta}` ? "border-emerald-400 ring-1 ring-emerald-200" : "border-zinc-200"
+                  dropTarget === `folder-${p.id_pasta}` ? "border-accent/50 ring-1 ring-accent/25" : "border-zinc-200"
                 }`}
               >
                 <button

@@ -78,16 +78,16 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
-      <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-[0_0_40px_-12px_rgba(45,155,98,0.2)]">
-        <h1 className="text-2xl font-semibold text-emerald-950">
-          Entrar no <span className="text-emerald-900">Tuma</span>
+      <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-[0_12px_36px_-20px_rgba(15,23,42,0.3)]">
+        <h1 className="text-2xl font-semibold text-slate-900">
+          Entrar no <span className="text-slate-900">Tuma</span>
           <span className="text-accent">IA</span>
         </h1>
-        <p className="mt-1 text-sm text-emerald-700">Use sua conta para acessar a plataforma.</p>
+        <p className="mt-1 text-sm text-slate-600">Use sua conta para acessar a plataforma.</p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
-            <label className="mb-1 block text-sm font-medium text-emerald-800" htmlFor="email">
+            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="email">
               E-mail
             </label>
             <input
@@ -95,13 +95,13 @@ export default function LoginPage() {
               type="email"
               value={email || emailFromQuery}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-emerald-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-emerald-800" htmlFor="senha">
+            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="senha">
               Senha
             </label>
             <input
@@ -109,7 +109,7 @@ export default function LoginPage() {
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-emerald-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
@@ -128,14 +128,14 @@ export default function LoginPage() {
             className={`mt-4 rounded-lg px-3 py-2 text-sm ${
               displayKind === "err"
                 ? "border border-red-500/30 bg-red-950/40 text-red-300"
-                : "border border-accent/30 bg-accent-muted text-accent"
+                : "border border-accent/30 bg-accent-muted text-[#009638]"
             }`}
           >
             {displayMsg}
           </p>
         ) : null}
 
-        <p className="mt-5 text-sm text-emerald-700">
+        <p className="mt-5 text-sm text-slate-600">
           Ainda não tem conta?{" "}
           <Link className="font-medium text-accent underline-offset-2 hover:underline" href="/cadastro">
             Criar cadastro

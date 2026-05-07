@@ -10,7 +10,7 @@ const NAV_SECTION_IDS = ["produto", "planos", "quem-somos"];
 function navLinkClass(active) {
   return [
     "inline-flex rounded-md px-3 py-1 text-sm font-medium transition-colors",
-    active ? "bg-accent text-accent-foreground" : "text-emerald-700 hover:text-emerald-900",
+    active ? "bg-accent text-accent-foreground" : "text-slate-600 hover:text-slate-900",
   ].join(" ");
 }
 
@@ -113,7 +113,7 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
           <a href="#inicio" className="text-xl font-bold tracking-tight">
-            <span className="text-emerald-900">Tuma</span>
+            <span className="text-slate-900">Tuma</span>
             <span className="text-accent">IA</span>
           </a>
           <nav className="hidden items-center gap-1 md:flex">
@@ -130,11 +130,11 @@ export default function Home() {
           <div className="flex items-center gap-2">
             {authReady && usuarioNome ? (
               <>
-                <span className="hidden text-sm text-emerald-700 md:inline">
-                  Olá, <strong className="text-emerald-900">{usuarioNome}</strong>
+                <span className="hidden text-sm text-slate-600 md:inline">
+                  Olá, <strong className="text-slate-900">{usuarioNome}</strong>
                 </span>
                 <Link
-                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-emerald-800 transition-colors hover:border-emerald-400"
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-slate-800 transition-colors hover:border-slate-400"
                   href="/painel"
                 >
                   Área do usuário
@@ -150,7 +150,7 @@ export default function Home() {
             ) : (
               <>
                 <Link
-                  className="rounded-lg border border-border bg-transparent px-3 py-1.5 text-sm text-emerald-800 transition-colors hover:border-emerald-400"
+                  className="rounded-lg border border-border bg-transparent px-3 py-1.5 text-sm text-slate-800 transition-colors hover:border-slate-400"
                   href="/login"
                 >
                   Entrar
@@ -173,23 +173,23 @@ export default function Home() {
             <div className="grid grid-cols-1 items-center gap-8 lg:gap-12 md:grid-cols-2">
               <div className="order-1 min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">PLATAFORMA TUMAIA</p>
-                <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-tight text-emerald-950 md:text-5xl">
+                <h1 className="mt-3 max-w-3xl text-4xl font-bold leading-tight text-slate-900 md:text-5xl">
                   Do WhatsApp para o Instagram em segundos.
                 </h1>
-                <p className="mt-4 max-w-3xl text-emerald-700">
+                <p className="mt-4 max-w-3xl text-slate-600">
                   O TumaIA é o seu assistente virtual inteligente. Ele transforma suas mensagens, áudios e fotos do
                   WhatsApp em posts profissionais para o Instagram de forma 100% automatizada.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   <Link
                     href="/cadastro"
-                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-[0_0_24px_-4px_rgba(57,255,20,0.45)] transition-opacity hover:opacity-90"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground shadow-[0_8px_24px_-8px_rgba(0,179,65,0.45)] transition-opacity hover:opacity-90"
                   >
                     Começar agora
                   </Link>
                   <a
                     href="#planos"
-                    className="rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-emerald-800 transition-colors hover:border-emerald-400"
+                    className="rounded-lg border border-border bg-surface-elevated px-4 py-2 text-sm font-medium text-slate-800 transition-colors hover:border-slate-400"
                   >
                     Ver planos
                   </a>
@@ -206,7 +206,7 @@ export default function Home() {
                     priority
                   />
                   <div
-                    className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-emerald-950/45 via-emerald-900/20 to-transparent"
+                    className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-t from-slate-900/50 via-slate-900/15 to-transparent"
                     aria-hidden
                   />
                 </div>
@@ -216,28 +216,28 @@ export default function Home() {
         </section>
 
         <section id="produto" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold text-emerald-950 md:text-5xl">Como o TumaIA funciona</h2>
-          <p className="mt-3 max-w-4xl text-emerald-700">
+          <h2 className="section-title text-4xl font-semibold text-slate-900 md:text-5xl">Como o TumaIA funciona</h2>
+          <p className="mt-3 max-w-4xl text-slate-600">
             Simplificamos o marketing do seu comércio. Esqueça horas perdidas criando posts, nossa IA cuida de tudo
             para você.
           </p>
 
           <div className="mt-8 grid grid-cols-1 gap-4 md:mt-10 md:grid-cols-3">
             <article className="rounded-xl border border-border bg-surface p-5">
-              <h3 className="font-semibold text-emerald-900">Conexão Direta</h3>
-              <p className="mt-2 text-sm text-emerald-700">
+              <h3 className="font-semibold text-slate-900">Conexão Direta</h3>
+              <p className="mt-2 text-sm text-slate-600">
                 Integre o TumaIA diretamente ao seu WhatsApp de forma simples e rápida.
               </p>
             </article>
             <article className="rounded-xl border border-border bg-surface p-5">
-              <h3 className="font-semibold text-emerald-900">Criação com IA</h3>
-              <p className="mt-2 text-sm text-emerald-700">
+              <h3 className="font-semibold text-slate-900">Criação com IA</h3>
+              <p className="mt-2 text-sm text-slate-600">
                 Nossa inteligência artificial gera legendas persuasivas e imagens otimizadas para o seu nicho.
               </p>
             </article>
             <article className="rounded-xl border border-border bg-surface p-5">
-              <h3 className="font-semibold text-emerald-900">Postagem Automática</h3>
-              <p className="mt-2 text-sm text-emerald-700">
+              <h3 className="font-semibold text-slate-900">Postagem Automática</h3>
+              <p className="mt-2 text-sm text-slate-600">
                 Aprovação em um clique e publicação direta no seu feed ou stories do Instagram.
               </p>
             </article>
@@ -245,16 +245,16 @@ export default function Home() {
 
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
             <article className="rounded-xl border border-border bg-surface p-6">
-              <h3 className="text-xl font-semibold text-emerald-900">Automação inteligente</h3>
-              <p className="mt-2 text-sm text-emerald-700">
+              <h3 className="text-xl font-semibold text-slate-900">Automação inteligente</h3>
+              <p className="mt-2 text-sm text-slate-600">
                 Deixe a tecnologia trabalhar por você. O TumaIA aprende o tom de voz da sua marca e cria conteúdos como
                 se fosse você, liberando seu tempo para focar no que realmente importa: o seu negócio.
               </p>
             </article>
             <article className="relative overflow-visible rounded-xl border border-border bg-surface p-6">
               <div className="relative z-0 pr-44 sm:pr-56 md:pr-64 lg:pr-72 xl:pr-80">
-                <h3 className="text-xl font-semibold text-emerald-900">Fluxo de produção</h3>
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-emerald-700">
+                <h3 className="text-xl font-semibold text-slate-900">Fluxo de produção</h3>
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-600">
                   <li>Você envia um áudio ou foto no WhatsApp.</li>
                   <li>A IA processa e cria a arte + legenda.</li>
                   <li>Você recebe a prévia no próprio WhatsApp.</li>
@@ -275,34 +275,34 @@ export default function Home() {
         </section>
 
         <section id="planos" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold text-emerald-950 md:text-5xl">
+          <h2 className="section-title text-4xl font-semibold text-slate-900 md:text-5xl">
             Planos que impulsionam seu negócio
           </h2>
-          <p className="mt-3 max-w-4xl text-emerald-700">
+          <p className="mt-3 max-w-4xl text-slate-600">
             Escolha o pacote ideal para a sua necessidade, sem fidelidade ou letras miúdas.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
             <article className="rounded-xl border border-border bg-surface p-6">
-              <p className="text-sm font-medium text-emerald-700">Plano</p>
-              <h3 className="mt-1 text-2xl font-semibold text-emerald-900">Starter</h3>
-              <p className="mt-2 text-sm text-emerald-700">Ideal para quem está começando a estruturar as redes sociais.</p>
+              <p className="text-sm font-medium text-slate-500">Plano</p>
+              <h3 className="mt-1 text-2xl font-semibold text-slate-900">Starter</h3>
+              <p className="mt-2 text-sm text-slate-600">Ideal para quem está começando a estruturar as redes sociais.</p>
             </article>
             <article className="rounded-xl border-2 border-accent bg-surface-elevated p-6 shadow-[0_0_40px_-8px_rgba(57,255,20,0.35)]">
               <p className="text-sm font-medium text-accent">Plano</p>
-              <h3 className="mt-1 text-2xl font-semibold text-emerald-900">Pro</h3>
-              <p className="mt-2 text-sm text-emerald-700">Automação completa para quem quer presença digital diária.</p>
+              <h3 className="mt-1 text-2xl font-semibold text-slate-900">Pro</h3>
+              <p className="mt-2 text-sm text-slate-600">Automação completa para quem quer presença digital diária.</p>
             </article>
           </div>
           <div className="mt-6 rounded-xl border border-border bg-surface p-6">
-            <h3 className="text-xl font-semibold text-emerald-900">Comparativo de benefícios</h3>
+            <h3 className="text-xl font-semibold text-slate-900">Comparativo de benefícios</h3>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[700px] border-separate border-spacing-0 text-left text-sm">
                 <thead>
                   <tr>
-                    <th className="border-b border-border py-2 pr-4 font-semibold text-emerald-800">Recurso</th>
-                    <th className="border-b border-border py-2 pr-4 font-semibold text-emerald-800">Starter</th>
-                    <th className="border-b border-border py-2 pr-4 font-semibold text-emerald-800">Pro</th>
-                    <th className="border-b border-border py-2 font-semibold text-emerald-800">Business</th>
+                    <th className="border-b border-border py-2 pr-4 font-semibold text-slate-700">Recurso</th>
+                    <th className="border-b border-border py-2 pr-4 font-semibold text-slate-700">Starter</th>
+                    <th className="border-b border-border py-2 pr-4 font-semibold text-slate-700">Pro</th>
+                    <th className="border-b border-border py-2 font-semibold text-slate-700">Business</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -312,10 +312,10 @@ export default function Home() {
                     ["Suporte", "E-mail", "E-mail + chat prioritário", "Gerente de conta"],
                   ].map((row) => (
                     <tr key={row[0]}>
-                      <td className="border-b border-border py-2 pr-4 text-emerald-800">{row[0]}</td>
-                      <td className="border-b border-border py-2 pr-4 text-emerald-700">{row[1]}</td>
-                      <td className="border-b border-border py-2 pr-4 text-emerald-700">{row[2]}</td>
-                      <td className="border-b border-border py-2 text-emerald-700">{row[3]}</td>
+                      <td className="border-b border-border py-2 pr-4 text-slate-700">{row[0]}</td>
+                      <td className="border-b border-border py-2 pr-4 text-slate-600">{row[1]}</td>
+                      <td className="border-b border-border py-2 pr-4 text-slate-600">{row[2]}</td>
+                      <td className="border-b border-border py-2 text-slate-600">{row[3]}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -325,67 +325,67 @@ export default function Home() {
         </section>
 
         <section id="depoimentos" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold text-emerald-950 md:text-5xl">O que nossos clientes dizem</h2>
-          <p className="mt-3 max-w-4xl text-emerald-700">
+          <h2 className="section-title text-4xl font-semibold text-slate-900 md:text-5xl">O que nossos clientes dizem</h2>
+          <p className="mt-3 max-w-4xl text-slate-600">
             Veja como o TumaIA está transformando a rotina de empreendedores.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
             {depoimentos.map((d) => (
               <article key={d.nome} className="rounded-xl border border-border bg-surface p-5">
-                <p className="text-sm text-emerald-700">“{d.texto}”</p>
-                <p className="mt-3 text-sm font-medium text-emerald-900">{d.nome}</p>
-                <p className="text-xs text-emerald-600">{d.cargo}</p>
+                <p className="text-sm text-slate-600">“{d.texto}”</p>
+                <p className="mt-3 text-sm font-medium text-slate-900">{d.nome}</p>
+                <p className="text-xs text-slate-500">{d.cargo}</p>
               </article>
             ))}
           </div>
         </section>
 
         <section id="faq" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold text-emerald-950 md:text-5xl">Dúvidas Comuns</h2>
+          <h2 className="section-title text-4xl font-semibold text-slate-900 md:text-5xl">Dúvidas Comuns</h2>
           <div className="mt-6 space-y-3">
             {faqItems.map((item, idx) => (
               <details
                 key={item.q}
-                className="group rounded-xl border border-border bg-surface p-4 open:border-emerald-300"
+                className="group rounded-xl border border-border bg-surface p-4 open:border-slate-400"
               >
-                <summary className="cursor-pointer list-none font-medium text-emerald-900 marker:hidden [&::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none font-medium text-slate-900 marker:hidden [&::-webkit-details-marker]:hidden">
                   {idx + 1}. {item.q}
                 </summary>
-                <p className="mt-2 text-sm text-emerald-700">{item.a}</p>
+                <p className="mt-2 text-sm text-slate-600">{item.a}</p>
               </details>
             ))}
           </div>
         </section>
 
         <section id="quem-somos" className="landing-section mx-auto w-full max-w-6xl px-6 py-12">
-          <h2 className="section-title text-4xl font-semibold text-emerald-950 md:text-5xl">Nossa História</h2>
-          <p className="mt-3 max-w-4xl text-emerald-700">
+          <h2 className="section-title text-4xl font-semibold text-slate-900 md:text-5xl">Nossa História</h2>
+          <p className="mt-3 max-w-4xl text-slate-600">
             Nascemos para descomplicar o marketing digital para pequenos e médios empreendedores, unindo a praticidade do
             aplicativo de mensagens mais usado do Brasil com o poder da Inteligência Artificial.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
             <article className="rounded-xl border border-border bg-surface p-5">
-              <h3 className="font-semibold text-emerald-900">Missão</h3>
-              <p className="mt-2 text-sm text-emerald-700">
+              <h3 className="font-semibold text-slate-900">Missão</h3>
+              <p className="mt-2 text-sm text-slate-600">
                 Democratizar o acesso a um marketing de qualidade e automatizado.
               </p>
             </article>
             <article className="rounded-xl border border-border bg-surface p-5">
-              <h3 className="font-semibold text-emerald-900">Visão</h3>
-              <p className="mt-2 text-sm text-emerald-700">
+              <h3 className="font-semibold text-slate-900">Visão</h3>
+              <p className="mt-2 text-sm text-slate-600">
                 Ser a principal ferramenta de automação de redes sociais para o comércio local.
               </p>
             </article>
             <article className="rounded-xl border border-border bg-surface p-5">
-              <h3 className="font-semibold text-emerald-900">Valores</h3>
-              <p className="mt-2 text-sm text-emerald-700">Inovação, simplicidade e foco total no sucesso do cliente.</p>
+              <h3 className="font-semibold text-slate-900">Valores</h3>
+              <p className="mt-2 text-sm text-slate-600">Inovação, simplicidade e foco total no sucesso do cliente.</p>
             </article>
           </div>
         </section>
 
         <section className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
           <div className="rounded-2xl border border-accent/40 bg-surface-elevated p-8 shadow-[0_0_48px_-12px_rgba(57,255,20,0.25)]">
-            <h2 className="text-3xl font-semibold text-emerald-950">Pronto para revolucionar seu Instagram?</h2>
+            <h2 className="text-3xl font-semibold text-slate-900">Pronto para revolucionar seu Instagram?</h2>
             <div className="mt-5 flex flex-wrap gap-3">
               <Link
                 className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90"
