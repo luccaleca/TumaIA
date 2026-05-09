@@ -10,5 +10,7 @@ export default function PainelIndexPage() {
     router.replace("/painel/conta");
   }, [router]);
 
-  return <main className="rounded-xl border border-zinc-200 bg-white p-6">Redirecionando...</main>;
+  return (
+    <main className="rounded-xl border border-border bg-surface p-6 text-muted-foreground">Redirecionando...</main>
+  );
 }

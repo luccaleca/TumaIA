@@ -225,25 +225,27 @@ export default function EmpresaPage() {
   }
 
   if (loading) {
-    return <main className="rounded-xl border border-zinc-200 bg-white p-6">Carregando empresa...</main>;
+    return (
+      <main className="rounded-xl border border-border bg-background p-6 text-muted-foreground">Carregando empresa...</main>
+    );
   }
 
   return (
-    <main className="rounded-xl border border-zinc-200 bg-white p-6">
-      <h1 className="text-xl font-semibold text-zinc-900">Empresa</h1>
+    <main className="rounded-xl border border-border bg-background p-6">
+      <h1 className="text-xl font-semibold text-foreground">Empresa</h1>
       {hasEmpresa ? (
-        <p className="mt-1 text-xs text-zinc-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Seu cargo: <strong>{meuCargo || "membro"}</strong>
         </p>
       ) : null}
       {!canEditEmpresa && hasEmpresa ? (
-        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
           Você pode visualizar os dados da empresa, mas não pode editá-los com o cargo atual.
         </p>
       ) : null}
 
       {hasEmpresa ? (
-        <section className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+        <section className="mt-5 rounded-xl border border-border bg-background p-4">
           <div className="flex items-start justify-between gap-3">
             <button
               type="button"
@@ -251,19 +253,19 @@ export default function EmpresaPage() {
               className="flex-1 text-left"
             >
               <div>
-                <p className="text-xs uppercase tracking-wide text-zinc-500">Empresa</p>
-                <p className="text-base font-semibold text-zinc-900">{form.nome_fantasia || "Sem nome fantasia"}</p>
-                <p className="mt-1 text-sm text-zinc-600">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Empresa</p>
+                <p className="text-base font-semibold text-foreground">{form.nome_fantasia || "Sem nome fantasia"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
                   {form.segmento || "Sem segmento"} · {form.email_principal || "Sem e-mail principal"}
                 </p>
               </div>
-              <div className="text-xs text-zinc-500">{empresaDetalhesOpen ? "Ocultar detalhes" : "Ver detalhes"}</div>
+              <div className="text-xs text-muted-foreground">{empresaDetalhesOpen ? "Ocultar detalhes" : "Ver detalhes"}</div>
             </button>
             {canEditEmpresa ? (
               <button
                 type="button"
                 onClick={() => setEmpresaEditOpen((v) => !v)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-100"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm text-foreground hover:bg-muted"
                 title="Editar empresa"
                 aria-label="Editar empresa"
               >
@@ -272,13 +274,13 @@ export default function EmpresaPage() {
             ) : null}
           </div>
           {empresaDetalhesOpen ? (
-            <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 bg-white p-3 md:grid-cols-2">
-              <p className="text-sm text-zinc-700"><strong>Razão social:</strong> {form.razao_social || "—"}</p>
-              <p className="text-sm text-zinc-700"><strong>CNPJ:</strong> {form.cnpj || "—"}</p>
-              <p className="text-sm text-zinc-700"><strong>Instagram:</strong> {form.instagram_empresa || "—"}</p>
-              <p className="text-sm text-zinc-700"><strong>Telefone:</strong> {form.telefone_principal || "—"}</p>
-              <p className="text-sm text-zinc-700"><strong>Contato:</strong> {form.nome_contato_principal || "—"}</p>
-              <p className="text-sm text-zinc-700"><strong>Descrição:</strong> {form.descricao || "—"}</p>
+            <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-border bg-surface p-3 md:grid-cols-2">
+              <p className="text-sm text-foreground"><strong>Razão social:</strong> {form.razao_social || "—"}</p>
+              <p className="text-sm text-foreground"><strong>CNPJ:</strong> {form.cnpj || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Instagram:</strong> {form.instagram_empresa || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Telefone:</strong> {form.telefone_principal || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Contato:</strong> {form.nome_contato_principal || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Descrição:</strong> {form.descricao || "—"}</p>
             </div>
           ) : null}
         </section>
@@ -297,7 +299,7 @@ export default function EmpresaPage() {
           nome_contato_principal: "Nome do contato principal",
         }).map(([key, label]) => (
           <div key={key}>
-            <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor={key}>
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor={key}>
               {label}
             </label>
             <input
@@ -306,13 +308,13 @@ export default function EmpresaPage() {
               value={form[key]}
               onChange={(e) => setForm((s) => ({ ...s, [key]: e.target.value }))}
               disabled={!canEditEmpresa}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
             />
           </div>
         ))}
 
         <div className="md:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="descricao">
+          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="descricao">
             Descrição
           </label>
           <textarea
@@ -320,7 +322,7 @@ export default function EmpresaPage() {
             value={form.descricao}
             onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
             disabled={!canEditEmpresa}
-            className="min-h-24 w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+            className="min-h-24 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
           />
         </div>
 
@@ -329,7 +331,7 @@ export default function EmpresaPage() {
             <button
               type="submit"
               disabled={saving || !canEditEmpresa}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
             >
               {saving ? "Salvando..." : hasEmpresa ? "Salvar empresa" : "Cadastrar empresa"}
             </button>
@@ -337,7 +339,7 @@ export default function EmpresaPage() {
               <button
                 type="button"
                 onClick={() => setEmpresaEditOpen(false)}
-                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
@@ -348,9 +350,9 @@ export default function EmpresaPage() {
       ) : null}
 
       {hasEmpresa ? (
-        <section className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+        <section className="mt-6 rounded-xl border border-border bg-background p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-zinc-900">Membros da empresa</h2>
+            <h2 className="text-base font-semibold text-foreground">Membros da empresa</h2>
             <div className="flex items-center gap-2">
               {canManageMembros ? (
                 <button
@@ -362,30 +364,30 @@ export default function EmpresaPage() {
                     setConviteCargo("membro");
                     setConviteModalOpen(true);
                   }}
-                  className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 hover:bg-zinc-100"
+                  className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted"
                 >
                   Convidar
                 </button>
               ) : null}
             </div>
           </div>
-          {!membros.length ? <p className="text-sm text-zinc-600">Nenhum membro encontrado.</p> : null}
+          {!membros.length ? <p className="text-sm text-muted-foreground">Nenhum membro encontrado.</p> : null}
           <div className="space-y-2">
             {membros.map((m) => (
               <article
                 key={m.id_usuario}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white p-3"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted"
               >
                 <div>
-                  <p className="text-sm font-medium text-zinc-900">{m.nome || "Usuário sem nome"}</p>
-                  <p className="text-xs text-zinc-600">{m.email || "Sem e-mail"}</p>
+                  <p className="text-sm font-medium text-foreground">{m.nome || "Usuário sem nome"}</p>
+                  <p className="text-xs text-muted-foreground">{m.email || "Sem e-mail"}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <select
                     value={m.cargo || "membro"}
                     onChange={(e) => void onChangeCargo(m.id_usuario, e.target.value)}
                     disabled={!canManageMembros || savingMembroId === m.id_usuario}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-sm disabled:opacity-60"
+                    className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-sm text-foreground disabled:opacity-60"
                   >
                     <option value="membro">Membro</option>
                     <option value="editor">Editor</option>
@@ -395,7 +397,7 @@ export default function EmpresaPage() {
                     type="button"
                     onClick={() => setMembroToRemove(m)}
                     disabled={!canManageMembros || savingMembroId === m.id_usuario}
-                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60"
+                    className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-950/40 disabled:opacity-60"
                   >
                     Remover
                   </button>
@@ -409,21 +411,21 @@ export default function EmpresaPage() {
       <Modal open={Boolean(membroToRemove)} onClose={() => setMembroToRemove(null)} title="Remover membro">
         {membroToRemove ? (
           <>
-            <p className="mt-2 text-sm text-zinc-700">
+            <p className="mt-2 text-sm text-foreground">
               Deseja remover <strong>{membroToRemove.nome || membroToRemove.email || "este membro"}</strong> da empresa?
             </p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => void onRemoveMembro(membroToRemove.id_usuario)}
-                className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100"
+                className="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-sm text-red-200 hover:bg-red-950/60"
               >
                 Confirmar
               </button>
               <button
                 type="button"
                 onClick={() => setMembroToRemove(null)}
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100"
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
@@ -439,16 +441,16 @@ export default function EmpresaPage() {
         maxWidthClass="max-w-lg"
       >
         <>
-            <p className="mt-2 text-sm text-zinc-600">
+            <p className="mt-2 text-sm text-muted-foreground">
               Gere um convite com perfil de acesso e compartilhe o codigo com a pessoa.
             </p>
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-800">Cargo</label>
+                <label className="mb-1 block text-sm font-medium text-foreground">Cargo</label>
                 <select
                   value={conviteCargo}
                   onChange={(e) => setConviteCargo(e.target.value)}
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
                 >
                   <option value="membro">Membro</option>
                   <option value="editor">Editor</option>
@@ -456,12 +458,12 @@ export default function EmpresaPage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-800">E-mail (opcional)</label>
+                <label className="mb-1 block text-sm font-medium text-foreground">E-mail (opcional)</label>
                 <input
                   value={conviteEmail}
                   onChange={(e) => setConviteEmail(e.target.value)}
                   placeholder="email@exemplo.com"
-                  className="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+                  className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
                 />
               </div>
             </div>
@@ -470,22 +472,22 @@ export default function EmpresaPage() {
                 type="button"
                 onClick={() => void onCreateConvite()}
                 disabled={creatingConvite}
-                className="rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
               >
                 {creatingConvite ? "Gerando convite..." : "Gerar convite"}
               </button>
             </div>
             {conviteCodigo ? (
-              <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                <p className="text-xs uppercase tracking-wide text-zinc-500">Codigo do convite</p>
-                <p className="mt-1 font-mono text-lg font-semibold text-zinc-900">{conviteCodigo}</p>
-                <p className="mt-1 text-xs text-zinc-600">
+              <div className="mt-4 rounded-lg border border-border bg-background p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Codigo do convite</p>
+                <p className="mt-1 font-mono text-lg font-semibold text-foreground">{conviteCodigo}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Expira em: {conviteExpiraEm ? new Date(conviteExpiraEm).toLocaleString("pt-BR") : "-"}
                 </p>
                 <button
                   type="button"
                   onClick={() => void onCopyConvite()}
-                  className="mt-2 rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100"
+                  className="mt-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
                 >
                   Copiar codigo
                 </button>
@@ -496,8 +498,10 @@ export default function EmpresaPage() {
 
       {msg ? (
         <p
-          className={`mt-4 rounded-lg px-3 py-2 text-sm ${
-            msgKind === "err" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+            msgKind === "err"
+              ? "border-red-500/30 bg-red-950/30 text-red-200"
+              : "border-accent/30 bg-accent-muted text-foreground"
           }`}
         >
           {msg}

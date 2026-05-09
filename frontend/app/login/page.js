@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import {
   authApiFetch,
   formatAuthError,
@@ -12,7 +12,7 @@ import {
   saveToken,
 } from "../../lib/auth";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
@@ -55,22 +55,23 @@ export default function LoginPage() {
           "Não foi possível entrar. Verifique e-mail e senha.";
         setMsg(detail);
         setMsgKind("err");
-        saveToken(null);
+        saveToken(null, null);
         return;
       }
       const token = result.json?.access_token;
-      if (!token) {
+      const refreshToken = result.json?.refresh_token;
+      if (!token || !refreshToken) {
         setMsg("Resposta inválida do servidor.");
         setMsgKind("err");
-        saveToken(null);
+        saveToken(null, null);
         return;
       }
-      saveToken(token);
+      saveToken(token, refreshToken);
       router.push("/painel");
     } catch (err) {
       setMsg(err instanceof Error ? err.message : String(err));
       setMsgKind("err");
-      saveToken(null);
+      saveToken(null, null);
     } finally {
       setLoading(false);
     }
@@ -79,15 +80,15 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
       <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-[0_12px_36px_-20px_rgba(15,23,42,0.3)]">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Entrar no <span className="text-slate-900">Tuma</span>
+        <h1 className="text-2xl font-semibold text-foreground">
+          Entrar no <span className="text-foreground">Tuma</span>
           <span className="text-accent">IA</span>
         </h1>
-        <p className="mt-1 text-sm text-slate-600">Use sua conta para acessar a plataforma.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Use sua conta para acessar a plataforma.</p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="email">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="email">
               E-mail
             </label>
             <input
@@ -95,13 +96,13 @@ export default function LoginPage() {
               type="email"
               value={email || emailFromQuery}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="senha">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="senha">
               Senha
             </label>
             <input
@@ -109,7 +110,7 @@ export default function LoginPage() {
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
@@ -135,7 +136,7 @@ export default function LoginPage() {
           </p>
         ) : null}
 
-        <p className="mt-5 text-sm text-slate-600">
+        <p className="mt-5 text-sm text-muted-foreground">
           Ainda não tem conta?{" "}
           <Link className="font-medium text-accent underline-offset-2 hover:underline" href="/cadastro">
             Criar cadastro
@@ -143,5 +144,19 @@ export default function LoginPage() {
         </p>
       </section>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
+          <p className="w-full text-center text-sm text-muted-foreground">Carregando…</p>
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

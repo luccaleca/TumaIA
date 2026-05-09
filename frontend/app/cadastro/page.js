@@ -90,15 +90,15 @@ export default function CadastroPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
       <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-[0_12px_36px_-20px_rgba(15,23,42,0.3)]">
-        <h1 className="text-2xl font-semibold text-slate-900">
-          Criar conta no <span className="text-slate-900">Tuma</span>
+        <h1 className="text-2xl font-semibold text-foreground">
+          Criar conta no <span className="text-foreground">Tuma</span>
           <span className="text-accent">IA</span>
         </h1>
         <p className="mt-1 text-sm text-slate-600">Cadastro rápido para começar a usar.</p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="nome">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="nome">
               Nome
             </label>
             <input
@@ -106,12 +106,12 @@ export default function CadastroPage() {
               type="text"
               value={nome}
               onChange={(e) => setNome(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="email">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="email">
               E-mail
             </label>
             <input
@@ -119,12 +119,12 @@ export default function CadastroPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="telefone">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="telefone">
               Telefone (opcional)
             </label>
             <input
@@ -132,11 +132,11 @@ export default function CadastroPage() {
               type="text"
               value={telefone}
               onChange={(e) => setTelefone(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="senha">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="senha">
               Senha
             </label>
             <input
@@ -144,12 +144,12 @@ export default function CadastroPage() {
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="senhaConfirm">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="senhaConfirm">
               Confirmar senha
             </label>
             <input
@@ -157,7 +157,7 @@ export default function CadastroPage() {
               type="password"
               value={senhaConfirm}
               onChange={(e) => setSenhaConfirm(e.target.value)}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-slate-900 outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
               required
             />
           </div>

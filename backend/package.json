@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "test:gemini:text": "node ia/tests/check-gemini-text.mjs"
+    "test:gemini:text": "node ia/tests/check-gemini-text.mjs",
+    "check:replicate": "node scripts/check-replicate.mjs",
+    "test:replicate:smoke": "node scripts/run-replicate-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

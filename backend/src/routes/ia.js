@@ -20,6 +20,8 @@ const bodySchema = z.object({
     )
     .max(24)
     .optional(),
+  /** Reservado p/ multi-tenant (Python pode ignorar até termos RAG por empresa). */
+  id_empresa: z.string().uuid().optional(),
 });
 
 function runPythonChat(payload) {
@@ -66,7 +68,7 @@ function runPythonChat(payload) {
       }
     });
 
-    proc.stdin.write(JSON.stringify(payload));
+    proc.stdin.write(JSON.stringify({ question: payload.question, history: payload.history ?? [] }));
     proc.stdin.end();
   });
 }

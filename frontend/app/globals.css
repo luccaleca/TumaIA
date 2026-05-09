@@ -5,10 +5,41 @@
   --foreground: #0f172a;
   --surface: #ffffff;
   --surface-elevated: #f8fafc;
+  --muted: #eceef1;
+  --muted-foreground: #64748b;
   --border: #d1d5db;
   --accent: #00b341;
   --accent-foreground: #ffffff;
   --accent-muted: rgba(0, 179, 65, 0.12);
+}
+
+/*
+  Escuro fosco (painel). Precisamos repetir os tokens --color-* que o Tailwind v4 liga ao :root:
+  senão `bg-background` etc. continuam lendo o :root claro. Com `.dark` num ancestral, estas
+  variáveis herdam e as utilities passam a refletir o tema escuro.
+ */
+.dark {
+  --background: #1a211e;
+  --foreground: #e6ebe8;
+  --surface: #232c29;
+  --surface-elevated: #2c3733;
+  --muted: #323d39;
+  --muted-foreground: #9aa8a2;
+  --border: rgba(120, 150, 135, 0.22);
+  --accent: #2ecf6a;
+  --accent-foreground: #0a160f;
+  --accent-muted: rgba(46, 207, 106, 0.14);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-muted: var(--accent-muted);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -16,6 +47,8 @@
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-surface-elevated: var(--surface-elevated);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);

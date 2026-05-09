@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { ThemeProvider, useTheme } from "../components/ThemeProvider";
 import { clearToken, fetchMe } from "../../lib/auth";
 
-export default function PainelLayout({ children }) {
+function PainelShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [nome, setNome] = useState("...");
   const [ready, setReady] = useState(false);
+  const { theme } = useTheme();
 
   useEffect(() => {
     let active = true;
@@ -36,6 +38,7 @@ export default function PainelLayout({ children }) {
       { href: "/painel/empresa", label: "Empresa" },
       { href: "/painel/contextos", label: "Contextos" },
       { href: "/painel/midias", label: "Mídias" },
+      { href: "/painel/configuracao", label: "Configuração" },
     ],
     [],
   );
@@ -45,57 +48,69 @@ export default function PainelLayout({ children }) {
     router.replace("/");
   }
 
-  if (!ready) {
-    return <main className="p-8 text-sm text-slate-600">Carregando sessão...</main>;
-  }
-
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-          <Link href="/" className="text-lg font-bold tracking-tight">
-            <span className="text-slate-900">Tuma</span>
-            <span className="text-accent">IA</span>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-600">
-              Olá, <strong className="text-slate-900">{nome}</strong>
-            </span>
-            <button
-              type="button"
-              onClick={onLogout}
-              className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-slate-800 transition-colors hover:border-slate-400"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[220px_1fr]">
-        <aside className="rounded-xl border border-border bg-surface p-3">
-          <nav className="space-y-1">
-            {links.map((item) => {
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`block rounded-md px-3 py-1 text-sm transition-colors ${
-                    active
-                      ? "bg-accent font-medium text-accent-foreground"
-                      : "text-slate-600 hover:bg-surface-elevated hover:text-slate-900"
-                  }`}
+    <div
+      className={`min-h-screen bg-background text-foreground transition-colors duration-200 ${theme === "dark" ? "dark" : ""}`}
+    >
+      {!ready ? (
+        <main className="p-8 text-sm text-muted-foreground">Carregando sessão...</main>
+      ) : (
+        <>
+          <header className="border-b border-border bg-background/90 backdrop-blur-md">
+            <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
+              <Link href="/" className="text-lg font-bold tracking-tight">
+                <span className="text-foreground">Tuma</span>
+                <span className="text-accent">IA</span>
+              </Link>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">
+                  Olá, <strong className="text-foreground">{nome}</strong>
+                </span>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground transition-colors hover:border-foreground/25 hover:bg-surface-elevated"
                 >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-        </aside>
+                  Sair
+                </button>
+              </div>
+            </div>
+          </header>
 
-        <section>{children}</section>
-      </div>
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[220px_1fr]">
+            <aside className="rounded-xl border border-border bg-surface p-3">
+              <nav className="space-y-1">
+                {links.map((item) => {
+                  const active = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-2 rounded-md px-3 py-1 text-sm transition-colors ${
+                        active
+                          ? "bg-accent font-medium text-accent-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </aside>
+
+            <section>{children}</section>
+          </div>
+        </>
+      )}
     </div>
+  );
+}
+
+export default function PainelLayout({ children }) {
+  return (
+    <ThemeProvider>
+      <PainelShell>{children}</PainelShell>
+    </ThemeProvider>
   );
 }

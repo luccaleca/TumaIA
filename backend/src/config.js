@@ -19,6 +19,7 @@ const envSchema = z.object({
   GOOGLE_AI_API_KEY: z.preprocess(empty, z.string().optional()),
   GEMINI_DAILY_TOKEN_BUDGET: z.preprocess(empty, z.coerce.number().int().positive().optional()),
   MEDIA_BUCKET: z.preprocess(empty, z.string().optional()),
+  REPLICATE_API_TOKEN: z.preprocess(empty, z.string().min(1).optional()),
 });
 
 export const env = envSchema.parse(process.env);

@@ -239,6 +239,65 @@ r.post("/login", async (req, res) => {
 });
 
 /**
+ * Refresh: troca refresh_token por novo access_token no Supabase Auth.
+ */
+r.post("/refresh", async (req, res) => {
+  try {
+    const refreshTokenRaw = req.body?.refresh_token;
+    const refreshToken =
+      typeof refreshTokenRaw === "string" ? refreshTokenRaw.trim() : "";
+
+    if (!refreshToken) {
+      res.status(400).json({ error: "refresh_token ausente" });
+      return;
+    }
+
+    const anon = getSupabaseAnon();
+    if (!anon) {
+      res.status(503).json({
+        error:
+          "Refresh indisponível: configure SUPABASE_URL e SUPABASE_ANON_KEY no servidor",
+      });
+      return;
+    }
+
+    const { data, error } = await anon.auth.refreshSession({
+      refresh_token: refreshToken,
+    });
+
+    if (error) {
+      res.status(401).json({
+        error: error.message,
+        ...(typeof error.code === "string" && { code: error.code }),
+      });
+      return;
+    }
+
+    const s = data.session;
+    if (!s?.access_token) {
+      res.status(500).json({ error: "Auth não retornou access_token no refresh" });
+      return;
+    }
+
+    res.json({
+      access_token: s.access_token,
+      refresh_token: s.refresh_token,
+      expires_in: s.expires_in,
+      token_type: s.token_type,
+      user: s.user
+        ? { id: s.user.id, email: s.user.email }
+        : undefined,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro interno";
+    console.error("auth.refresh:", e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: msg });
+    }
+  }
+});
+
+/**
  * Perfil do usuário logado (JWT do Supabase no header Authorization).
  */
 r.get("/me", requireUserJwt, async (req, res) => {

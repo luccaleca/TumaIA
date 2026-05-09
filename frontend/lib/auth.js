@@ -1,4 +1,5 @@
 const TOKEN_KEY = "tuma_demo_access_token";
+const REFRESH_TOKEN_KEY = "tuma_demo_refresh_token";
 const API_BASE_KEY = "tuma_demo_api_base";
 const DEFAULT_FETCH_TIMEOUT_MS = 25000;
 
@@ -40,10 +41,14 @@ export function formatAuthError(json) {
   return null;
 }
 
-export function saveToken(token) {
+export function saveToken(token, refreshToken = undefined) {
   try {
     if (token) sessionStorage.setItem(TOKEN_KEY, token);
     else sessionStorage.removeItem(TOKEN_KEY);
+    if (refreshToken !== undefined) {
+      if (refreshToken) sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+      else sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+    }
   } catch {
     /* ignore */
   }
@@ -58,7 +63,52 @@ export function loadToken() {
 }
 
 export function clearToken() {
-  saveToken(null);
+  saveToken(null, null);
+}
+
+export function loadRefreshToken() {
+  try {
+    return sessionStorage.getItem(REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+let refreshInFlight = null;
+
+async function refreshAccessToken() {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    const refreshToken = loadRefreshToken();
+    if (!refreshToken) return null;
+
+    const result = await authApiFetch("/auth/refresh", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+
+    if (!result.ok || result.networkError) {
+      clearToken();
+      return null;
+    }
+
+    const nextAccess = result.json?.access_token;
+    const nextRefresh = result.json?.refresh_token;
+    if (!nextAccess) {
+      clearToken();
+      return null;
+    }
+
+    // Supabase pode rotacionar refresh token; se não vier, preserva o atual.
+    saveToken(nextAccess, nextRefresh || refreshToken);
+    return nextAccess;
+  })();
+
+  try {
+    return await refreshInFlight;
+  } finally {
+    refreshInFlight = null;
+  }
 }
 
 export async function authApiFetch(path, opts = {}) {
@@ -104,7 +154,7 @@ export async function authApiFetch(path, opts = {}) {
 }
 
 export async function authApiFetchWithToken(path, opts = {}) {
-  const token = loadToken();
+  let token = loadToken();
   if (!token) {
     return { ok: false, status: 401, json: { error: "Sessão não encontrada" } };
   }
@@ -112,7 +162,20 @@ export async function authApiFetchWithToken(path, opts = {}) {
     ...(opts.headers || {}),
     Authorization: `Bearer ${token}`,
   };
-  return authApiFetch(path, { ...opts, headers });
+
+  const first = await authApiFetch(path, { ...opts, headers });
+  if (first.status !== 401) return first;
+
+  token = await refreshAccessToken();
+  if (!token) {
+    return first;
+  }
+
+  const retryHeaders = {
+    ...(opts.headers || {}),
+    Authorization: `Bearer ${token}`,
+  };
+  return authApiFetch(path, { ...opts, headers: retryHeaders });
 }
 
 export async function fetchMe() {

@@ -386,26 +386,26 @@ export default function ContextosPage() {
 
   return (
     <main className="space-y-4">
-      <section className="rounded-xl border border-zinc-200 bg-white p-6">
+      <section className="rounded-xl border border-border bg-background p-6">
         <div className="mb-3 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-zinc-900">Contextos</h1>
+          <h1 className="text-xl font-semibold text-foreground">Contextos</h1>
           <button
             type="button"
             onClick={startCreate}
             disabled={!canManageContextos}
-            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800 disabled:opacity-60"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground disabled:opacity-60"
           >
             Novo contexto
           </button>
         </div>
         {!canManageContextos && empresaId ? (
-          <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="mb-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
             Seu cargo permite apenas visualizar contextos.
           </p>
         ) : null}
 
         {!empresaId && !loading ? (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
             Você precisa cadastrar uma empresa antes de usar contextos.
           </p>
         ) : null}
@@ -414,11 +414,11 @@ export default function ContextosPage() {
         <form className="mt-4 grid grid-cols-1 gap-4" onSubmit={saveContexto}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-800">Tipo</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">Tipo</label>
               <select
                 value={form.tipo}
                 onChange={(e) => setForm((s) => ({ ...s, tipo: e.target.value }))}
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
               >
                 {TIPOS.map((tipo) => (
                   <option key={tipo.value} value={tipo.value}>
@@ -428,21 +428,21 @@ export default function ContextosPage() {
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-zinc-800">Nome (opcional)</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">Nome (opcional)</label>
               <input
                 value={form.nome}
                 onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800">Descrição (opcional)</label>
+            <label className="mb-1 block text-sm font-medium text-foreground">Descrição (opcional)</label>
             <input
               value={form.descricao}
               onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
             />
           </div>
 
@@ -462,11 +462,11 @@ export default function ContextosPage() {
                 ["restricoes", "Restrições"],
               ].map(([field, label]) => (
                 <div key={field}>
-                  <label className="mb-1 block text-sm font-medium text-zinc-800">{label}</label>
+                  <label className="mb-1 block text-sm font-medium text-foreground">{label}</label>
                   <input
                     value={form.promocao[field]}
                     onChange={(e) => updateTipoFields("promocao", field, e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
                   />
                 </div>
               ))}
@@ -489,11 +489,11 @@ export default function ContextosPage() {
                 ["restricoes", "Restrições"],
               ].map(([field, label]) => (
                 <div key={field}>
-                  <label className="mb-1 block text-sm font-medium text-zinc-800">{label}</label>
+                  <label className="mb-1 block text-sm font-medium text-foreground">{label}</label>
                   <input
                     value={form.lancamento[field]}
                     onChange={(e) => updateTipoFields("lancamento", field, e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
                   />
                 </div>
               ))}
@@ -514,11 +514,11 @@ export default function ContextosPage() {
                 ["restricoes", "Restrições"],
               ].map(([field, label]) => (
                 <div key={field}>
-                  <label className="mb-1 block text-sm font-medium text-zinc-800">{label}</label>
+                  <label className="mb-1 block text-sm font-medium text-foreground">{label}</label>
                   <input
                     value={form.dataComemorativa[field]}
                     onChange={(e) => updateTipoFields("dataComemorativa", field, e.target.value)}
-                    className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
                   />
                 </div>
               ))}
@@ -528,7 +528,7 @@ export default function ContextosPage() {
           {form.tipo === "personalizado" ? (
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-800">Nome deste contexto</label>
+                <label className="mb-1 block text-sm font-medium text-foreground">Nome deste contexto</label>
                 <input
                   value={form.personalizado.titulo}
                   onChange={(e) =>
@@ -537,33 +537,33 @@ export default function ContextosPage() {
                       personalizado: { ...s.personalizado, titulo: e.target.value },
                     }))
                   }
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                  className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
                 />
               </div>
               {(form.personalizado.campos || []).map((campo, idx) => (
-                <div key={`campo-${idx}`} className="rounded-lg border border-zinc-200 p-3">
+                <div key={`campo-${idx}`} className="rounded-lg border border-border p-3">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-zinc-800">Nome do campo</label>
+                      <label className="mb-1 block text-sm font-medium text-foreground">Nome do campo</label>
                       <input
                         value={campo.nome}
                         onChange={(e) => updatePersonalizadoCampo(idx, "nome", e.target.value)}
-                        className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                        className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-zinc-800">Valor</label>
+                      <label className="mb-1 block text-sm font-medium text-foreground">Valor</label>
                       <input
                         value={campo.valor}
                         onChange={(e) => updatePersonalizadoCampo(idx, "valor", e.target.value)}
-                        className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                        className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
                       />
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => removePersonalizadoCampo(idx)}
-                    className="mt-2 rounded border border-zinc-300 px-2 py-1 text-xs text-zinc-700"
+                    className="mt-2 rounded border border-border px-2 py-1 text-xs text-foreground"
                   >
                     Remover campo
                   </button>
@@ -572,7 +572,7 @@ export default function ContextosPage() {
               <button
                 type="button"
                 onClick={addPersonalizadoCampo}
-                className="rounded border border-zinc-300 px-3 py-1.5 text-sm text-zinc-800"
+                className="rounded border border-border px-3 py-1.5 text-sm text-foreground"
               >
                 + Adicionar campo
               </button>
@@ -584,14 +584,14 @@ export default function ContextosPage() {
               <button
                 type="submit"
                 disabled={saving || !empresaId || !canManageContextos}
-                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
               >
                 {saving ? "Salvando..." : editingId ? "Salvar edição" : "Criar contexto"}
               </button>
               <button
                 type="button"
                 onClick={cancelEditor}
-                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
@@ -601,26 +601,29 @@ export default function ContextosPage() {
         ) : null}
       </section>
 
-      <section ref={contextosCreatedSectionRef} className="rounded-xl border border-zinc-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-zinc-900">Contextos criados</h2>
-        {loading ? <p className="mt-3 text-sm text-zinc-600">Carregando...</p> : null}
+      <section ref={contextosCreatedSectionRef} className="rounded-xl border border-border bg-background p-6">
+        <h2 className="text-lg font-semibold text-foreground">Contextos criados</h2>
+        {loading ? <p className="mt-3 text-sm text-muted-foreground">Carregando...</p> : null}
         {!loading && contextos.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-600">Nenhum contexto criado ainda.</p>
+          <p className="mt-3 text-sm text-muted-foreground">Nenhum contexto criado ainda.</p>
         ) : null}
 
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
           <ul className="space-y-2">
             {contextos.map((item) => (
-              <li key={item.id} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+              <li
+                key={item.id}
+                className="rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted"
+              >
                 <button
                   type="button"
                   onClick={() => setSelectedId(item.id)}
                   className="w-full text-left"
                 >
-                  <p className="text-xs uppercase tracking-wide text-zinc-500">{item.tipo}</p>
-                  <p className="font-medium text-zinc-900">{item.nome || "Contexto sem nome"}</p>
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.tipo}</p>
+                  <p className="font-medium text-foreground">{item.nome || "Contexto sem nome"}</p>
                   {summarizeContexto(item) ? (
-                    <p className="mt-1 text-xs text-zinc-600">{summarizeContexto(item)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{summarizeContexto(item)}</p>
                   ) : null}
                 </button>
                 <div className="mt-2 flex gap-2">
@@ -628,7 +631,7 @@ export default function ContextosPage() {
                     type="button"
                     onClick={() => startEdit(item)}
                     disabled={!canManageContextos}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-zinc-300 text-sm text-zinc-700 hover:bg-zinc-100"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm text-foreground hover:bg-muted"
                     title="Editar contexto"
                     aria-label="Editar contexto"
                   >
@@ -638,7 +641,7 @@ export default function ContextosPage() {
                     type="button"
                     onClick={() => removeContexto(item.id)}
                     disabled={!canManageContextos}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-zinc-300 text-sm font-medium text-zinc-500 hover:border-red-300 hover:text-red-600 hover:bg-red-50"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm font-medium text-muted-foreground hover:border-red-500/50 hover:text-red-300 hover:bg-red-950/40"
                     title="Remover contexto"
                     aria-label="Remover contexto"
                   >
@@ -649,14 +652,14 @@ export default function ContextosPage() {
             ))}
           </ul>
 
-          <div className="rounded-lg border border-zinc-200 p-3">
+          <div className="rounded-lg border border-border p-3">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-zinc-900">Detalhes</p>
+              <p className="text-sm font-medium text-foreground">Detalhes</p>
               {selected ? (
                 <button
                   type="button"
                   onClick={() => setSelectedId(null)}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-zinc-300 text-sm font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                   title="Minimizar detalhes"
                   aria-label="Minimizar detalhes"
                 >
@@ -667,31 +670,34 @@ export default function ContextosPage() {
             {selected ? (
               <div className="mt-2 space-y-2 text-sm">
                 <p>
-                  <span className="font-medium text-zinc-800">Tipo:</span>{" "}
-                  <span className="text-zinc-700">{selected.tipo}</span>
+                  <span className="font-medium text-foreground">Tipo:</span>{" "}
+                  <span className="text-foreground">{selected.tipo}</span>
                 </p>
                 <p>
-                  <span className="font-medium text-zinc-800">Nome:</span>{" "}
-                  <span className="text-zinc-700">{selected.nome || "—"}</span>
+                  <span className="font-medium text-foreground">Nome:</span>{" "}
+                  <span className="text-foreground">{selected.nome || "—"}</span>
                 </p>
                 <p>
-                  <span className="font-medium text-zinc-800">Descrição:</span>{" "}
-                  <span className="text-zinc-700">{selected.descricao || "—"}</span>
+                  <span className="font-medium text-foreground">Descrição:</span>{" "}
+                  <span className="text-foreground">{selected.descricao || "—"}</span>
                 </p>
                 <div>
-                  <p className="font-medium text-zinc-800">Campos:</p>
+                  <p className="font-medium text-foreground">Campos:</p>
                   <div className="mt-2 space-y-2">
                     {selectedDetailLines(selected).map(([label, value]) => (
-                      <div key={`${label}-${String(value)}`} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
-                        <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</p>
-                        <p className="mt-1 text-sm text-zinc-800">{String(value || "").trim() || "—"}</p>
+                      <div
+                        key={`${label}-${String(value)}`}
+                        className="rounded-lg border border-border bg-background px-3 py-2"
+                      >
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                        <p className="mt-1 text-sm text-foreground">{String(value || "").trim() || "—"}</p>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="mt-2 text-sm text-zinc-600">Selecione um contexto para visualizar.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Selecione um contexto para visualizar.</p>
             )}
           </div>
         </div>
@@ -700,7 +706,9 @@ export default function ContextosPage() {
       {msg ? (
         <p
           className={`rounded-lg px-3 py-2 text-sm ${
-            msgKind === "err" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+            msgKind === "err"
+              ? "border border-red-500/30 bg-red-950/30 text-red-200"
+              : "border border-accent/30 bg-accent-muted text-foreground"
           }`}
         >
           {msg}

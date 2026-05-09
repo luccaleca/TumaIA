@@ -85,17 +85,19 @@ export default function ContaPage() {
   }
 
   if (loading) {
-    return <main className="rounded-xl border border-zinc-200 bg-white p-6">Carregando conta...</main>;
+    return (
+      <main className="rounded-xl border border-border bg-background p-6 text-muted-foreground">Carregando conta...</main>
+    );
   }
 
   return (
-    <main className="rounded-xl border border-zinc-200 bg-white p-6">
-      <h1 className="text-xl font-semibold text-zinc-900">Seus dados</h1>
-      <p className="mt-1 text-sm text-zinc-600">Atualize seu perfil de acesso.</p>
+    <main className="rounded-xl border border-border bg-background p-6">
+      <h1 className="text-xl font-semibold text-foreground">Seus dados</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Atualize seu perfil de acesso.</p>
 
       <form className="mt-5 space-y-4" onSubmit={onSubmit}>
         <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="contaNome">
+          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="contaNome">
             Nome
           </label>
           <input
@@ -103,12 +105,12 @@ export default function ContaPage() {
             type="text"
             value={form.nome}
             onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+            className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="contaEmail">
+          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="contaEmail">
             E-mail
           </label>
           <input
@@ -116,12 +118,12 @@ export default function ContaPage() {
             type="email"
             value={form.email}
             onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+            className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
           />
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-800" htmlFor="contaTelefone">
+          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="contaTelefone">
             Telefone
           </label>
           <input
@@ -129,9 +131,9 @@ export default function ContaPage() {
             type="text"
             value={form.telefone}
             onChange={(e) => setForm((s) => ({ ...s, telefone: e.target.value, clearTelefone: false }))}
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-zinc-800"
+            className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
           />
-          <label className="mt-2 flex items-center gap-2 text-sm text-zinc-700">
+          <label className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
             <input
               type="checkbox"
               checked={form.clearTelefone}
@@ -144,7 +146,7 @@ export default function ContaPage() {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
         >
           {saving ? "Salvando..." : "Salvar"}
         </button>
@@ -152,8 +154,10 @@ export default function ContaPage() {
 
       {msg ? (
         <p
-          className={`mt-4 rounded-lg px-3 py-2 text-sm ${
-            msgKind === "err" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+            msgKind === "err"
+              ? "border-red-500/30 bg-red-950/30 text-red-200"
+              : "border-accent/30 bg-accent-muted text-foreground"
           }`}
         >
           {msg}

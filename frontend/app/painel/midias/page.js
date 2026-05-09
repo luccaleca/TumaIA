@@ -430,14 +430,14 @@ export default function MidiasPage() {
 
   return (
     <main className="space-y-4">
-      <section className="rounded-xl border border-zinc-200 bg-white p-4 md:p-5">
+      <section className="rounded-xl border border-border bg-background p-4 md:p-5">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-zinc-900">Mídias</h1>
+          <h1 className="text-lg font-semibold text-foreground">Mídias</h1>
           <div className="relative flex items-center gap-2">
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 text-lg text-zinc-700 hover:bg-zinc-100"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-lg text-foreground hover:bg-muted"
               title="Ações de mídia"
               aria-label="Ações de mídia"
               disabled={!empresaId || !canManageMidias}
@@ -445,21 +445,21 @@ export default function MidiasPage() {
               +
             </button>
             {menuOpen ? (
-              <div className="absolute right-0 top-10 z-20 w-44 rounded-md border border-zinc-200 bg-white p-1 shadow-md">
+              <div className="absolute right-0 top-10 z-20 w-44 rounded-md border border-border bg-background p-1 shadow-md">
                 <button
                   type="button"
                   onClick={() => {
                     setNewFolderOpen(true);
                     setMenuOpen(false);
                   }}
-                  className="w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
+                  className="w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
                 >
                   + Nova pasta
                 </button>
                 <button
                   type="button"
                   onClick={triggerUploadDialog}
-                  className="w-full rounded px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100"
+                  className="w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
                 >
                   + Upload arquivo
                 </button>
@@ -468,27 +468,27 @@ export default function MidiasPage() {
           </div>
         </div>
         {!empresaId && !loading ? (
-          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
             Você precisa cadastrar uma empresa antes de usar mídias.
           </p>
         ) : null}
         {!loading && empresaId && !canManageMidias ? (
-          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+          <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
             Seu cargo permite visualizar mídias, mas não criar, editar, mover ou remover.
           </p>
         ) : null}
 
-        <div className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+        <div className="mt-3 rounded-md border border-border bg-background p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Pasta atual</p>
-              <p className="text-sm font-medium text-zinc-800">{pastaAtualObj?.nome || "Raiz"}</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pasta atual</p>
+              <p className="text-sm font-medium text-foreground">{pastaAtualObj?.nome || "Raiz"}</p>
             </div>
             <button
               type="button"
               onClick={triggerUploadDialog}
               disabled={!empresaId || uploading || !canManageMidias}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 text-lg text-zinc-700 hover:bg-zinc-100 disabled:opacity-60"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-lg text-foreground hover:bg-muted disabled:opacity-60"
               title="Upload de arquivo na pasta atual"
               aria-label="Upload de arquivo na pasta atual"
             >
@@ -501,12 +501,12 @@ export default function MidiasPage() {
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder="Nome da nova pasta"
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm"
+                className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
               />
               <button
                 type="button"
                 onClick={() => void onCreateFolder(newFolderName)}
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
+                className="rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
               >
                 Criar
               </button>
@@ -516,7 +516,7 @@ export default function MidiasPage() {
                   setNewFolderOpen(false);
                   setNewFolderName("");
                 }}
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-100"
+                className="rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
@@ -527,7 +527,7 @@ export default function MidiasPage() {
               <button
                 type="button"
                 onClick={() => setPastaAtual("")}
-                className="rounded-md border border-zinc-300 px-2 py-1 text-zinc-700 bg-zinc-100"
+                className="rounded-md border border-border bg-background px-2 py-1 text-foreground hover:bg-muted"
               >
                 Raiz /
               </button>
@@ -549,8 +549,8 @@ export default function MidiasPage() {
                   e.preventDefault();
                   void handleDrop(null);
                 }}
-                className={`rounded-md border px-2 py-1 text-zinc-700 hover:bg-zinc-100 ${
-                  dropTarget === "bc-root" ? "border-accent/50 bg-accent-muted" : "border-zinc-300"
+                className={`rounded-md border border-border bg-background px-2 py-1 text-foreground transition-colors hover:bg-muted ${
+                  dropTarget === "bc-root" ? "border-accent/50 bg-accent-muted" : ""
                 }`}
               >
                 Raiz /
@@ -575,8 +575,8 @@ export default function MidiasPage() {
                   e.preventDefault();
                   void handleDrop(item.id_pasta);
                 }}
-                className={`rounded-md border px-2 py-1 text-zinc-700 hover:bg-zinc-100 ${
-                  dropTarget === `bc-${item.id_pasta}` ? "border-accent/50 bg-accent-muted" : "border-zinc-300"
+                className={`rounded-md border border-border bg-background px-2 py-1 text-foreground transition-colors hover:bg-muted ${
+                  dropTarget === `bc-${item.id_pasta}` ? "border-accent/50 bg-accent-muted" : ""
                 }`}
               >
                 {item.nome}
@@ -593,13 +593,13 @@ export default function MidiasPage() {
             disabled={!empresaId || uploading || !canManageMidias}
             className="hidden"
           />
-          {uploading ? <p className="mt-2 text-sm text-zinc-600">Enviando arquivos...</p> : null}
+          {uploading ? <p className="mt-2 text-sm text-muted-foreground">Enviando arquivos...</p> : null}
         </div>
 
         <div className="mt-4">
-          {loading ? <p className="mt-2 text-sm text-zinc-600">Carregando...</p> : null}
+          {loading ? <p className="mt-2 text-sm text-muted-foreground">Carregando...</p> : null}
           {!loading && pastasFilhas.length === 0 && midiasDaPastaAtual.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-600">Pasta vazia.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Pasta vazia.</p>
           ) : null}
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {pastasFilhas.map((p) => (
@@ -625,8 +625,8 @@ export default function MidiasPage() {
                   e.preventDefault();
                   void handleDrop(p.id_pasta);
                 }}
-                className={`rounded-md border bg-white p-3 hover:bg-zinc-50 ${
-                  dropTarget === `folder-${p.id_pasta}` ? "border-accent/50 ring-1 ring-accent/25" : "border-zinc-200"
+                className={`rounded-md border bg-background p-3 transition-colors hover:bg-muted ${
+                  dropTarget === `folder-${p.id_pasta}` ? "border-accent/50 ring-1 ring-accent/25" : "border-border"
                 }`}
               >
                 <button
@@ -634,8 +634,8 @@ export default function MidiasPage() {
                   onClick={() => setPastaAtual(p.id_pasta)}
                   className="w-full text-left"
                 >
-                  <p className="text-[11px] uppercase tracking-wide text-zinc-500">Pasta</p>
-                  <p className="mt-1 flex items-center gap-2 truncate font-medium text-zinc-900">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pasta</p>
+                  <p className="mt-1 flex items-center gap-2 truncate font-medium text-foreground">
                     <span aria-hidden="true" className="text-amber-500">📁</span>
                     <span className="truncate">{p.nome}</span>
                   </p>
@@ -645,7 +645,7 @@ export default function MidiasPage() {
                     type="button"
                     onClick={() => openRenameFolderDialog(p)}
                     disabled={!canManageMidias}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-100"
+                    className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
                   >
                     Renomear
                   </button>
@@ -653,7 +653,7 @@ export default function MidiasPage() {
                     type="button"
                     onClick={() => openDeleteFolderDialog(p)}
                     disabled={!canManageMidias}
-                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                    className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-950/40"
                   >
                     Excluir
                   </button>
@@ -667,14 +667,14 @@ export default function MidiasPage() {
                 onDragStart={() => setDragging({ type: "midia", id: m.id_midia })}
                 draggable={canManageMidias}
                 onDragEnd={() => setDragging(null)}
-                className="justify-self-start rounded-md border border-zinc-200 bg-white p-3 hover:bg-zinc-50"
+                className="justify-self-start rounded-md border border-border bg-background p-3 transition-colors hover:bg-muted"
                 style={{ width: "fit-content", minWidth: "170px", maxWidth: "220px" }}
               >
                 {m.url_arquivo && m.tipo_midia === "imagem" ? (
                   <button
                     type="button"
                     onClick={() => openPreview(m)}
-                    className="group mb-2 block h-20 w-20 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100"
+                    className="group mb-2 block h-20 w-20 overflow-hidden rounded-md border border-border bg-background"
                     title="Abrir visualização detalhada"
                   >
                     <Image
@@ -691,7 +691,7 @@ export default function MidiasPage() {
                   <button
                     type="button"
                     onClick={() => openPreview(m)}
-                    className="group mb-2 block h-20 w-20 overflow-hidden rounded-md border border-zinc-200 bg-zinc-100"
+                    className="group mb-2 block h-20 w-20 overflow-hidden rounded-md border border-border bg-background"
                     title="Abrir visualização detalhada"
                   >
                     <video
@@ -703,15 +703,15 @@ export default function MidiasPage() {
                     />
                   </button>
                 ) : null}
-                <p className="text-[11px] uppercase tracking-wide text-zinc-500">{m.tipo_midia}</p>
-                <p className="mt-1 max-w-[180px] truncate font-medium text-zinc-900">{m.nome_exibicao || m.nome_arquivo}</p>
-                <p className="mt-1 max-w-[180px] truncate text-xs text-zinc-600">{m.nome_arquivo}</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{m.tipo_midia}</p>
+                <p className="mt-1 max-w-[180px] truncate font-medium text-foreground">{m.nome_exibicao || m.nome_arquivo}</p>
+                <p className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">{m.nome_arquivo}</p>
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={() => openRenameMidiaDialog(m)}
                     disabled={!canManageMidias}
-                    className="rounded-md border border-zinc-300 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-100"
+                    className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
                   >
                     Renomear
                   </button>
@@ -719,7 +719,7 @@ export default function MidiasPage() {
                     type="button"
                     onClick={() => openDeleteMidiaDialog(m)}
                     disabled={!canManageMidias}
-                    className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50"
+                    className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-950/40"
                   >
                     Remover
                   </button>
@@ -736,15 +736,15 @@ export default function MidiasPage() {
           onClick={closePreview}
         >
           <section
-            className="relative w-full max-w-5xl rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-xl"
+            className="relative w-full max-w-5xl rounded-xl border border-border bg-background p-4 shadow-xl"
             onClick={(ev) => ev.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-zinc-100">
+                <p className="text-sm font-medium text-foreground">
                   {previewMidia.nome_exibicao || previewMidia.nome_arquivo}
                 </p>
-                <p className="text-xs uppercase tracking-wide text-zinc-400">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   {previewMidia.tipo_midia}
                   {previewIndex >= 0 ? ` · ${previewIndex + 1}/${previewItems.length}` : ""}
                 </p>
@@ -752,13 +752,13 @@ export default function MidiasPage() {
               <button
                 type="button"
                 onClick={closePreview}
-                className="rounded-md border border-zinc-600 px-2 py-1 text-xs text-zinc-200 hover:bg-zinc-800"
+                className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
               >
                 Fechar
               </button>
             </div>
 
-            <div className="relative flex min-h-[55vh] items-center justify-center rounded-lg border border-zinc-700 bg-black/50 p-2">
+            <div className="relative flex min-h-[55vh] items-center justify-center rounded-lg border border-border bg-black/50 p-2">
               {previewMidia.tipo_midia === "imagem" ? (
                 <Image
                   src={previewMidia.url_arquivo}
@@ -779,7 +779,7 @@ export default function MidiasPage() {
                   href={previewMidia.url_arquivo}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex rounded-md border border-zinc-500 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
+                  className="inline-flex rounded-md border border-border px-3 py-2 text-sm text-foreground hover:bg-muted"
                 >
                   Abrir arquivo
                 </a>
@@ -789,7 +789,7 @@ export default function MidiasPage() {
                 type="button"
                 onClick={previewPrev}
                 disabled={!hasPrev}
-                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-zinc-600 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-30"
+                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-background/85 px-3 py-2 text-sm text-foreground shadow-sm backdrop-blur-sm hover:bg-muted disabled:opacity-30"
                 title="Anterior"
               >
                 ‹
@@ -798,7 +798,7 @@ export default function MidiasPage() {
                 type="button"
                 onClick={previewNext}
                 disabled={!hasNext}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-zinc-600 bg-zinc-900/70 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:opacity-30"
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-border bg-background/85 px-3 py-2 text-sm text-foreground shadow-sm backdrop-blur-sm hover:bg-muted disabled:opacity-30"
                 title="Próxima"
               >
                 ›
@@ -818,20 +818,20 @@ export default function MidiasPage() {
             <input
               value={renameDialog.value}
               onChange={(e) => setRenameDialog((s) => (s ? { ...s, value: e.target.value } : s))}
-              className="mt-3 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+              className="mt-3 w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
             />
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => void submitRenameDialog()}
-                className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white"
+                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground"
               >
                 Salvar
               </button>
               <button
                 type="button"
                 onClick={() => setRenameDialog(null)}
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100"
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
@@ -847,19 +847,19 @@ export default function MidiasPage() {
       >
         {confirmDialog ? (
           <>
-            <p className="mt-2 text-sm text-zinc-700">{confirmDialog.message}</p>
+            <p className="mt-2 text-sm text-foreground">{confirmDialog.message}</p>
             <div className="mt-3 flex gap-2">
               <button
                 type="button"
                 onClick={() => void submitConfirmDialog()}
-                className="rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-sm text-red-700 hover:bg-red-100"
+                className="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-sm text-red-200 hover:bg-red-950/60"
               >
                 Confirmar
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmDialog(null)}
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100"
+                className="rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
               >
                 Cancelar
               </button>
@@ -870,8 +870,10 @@ export default function MidiasPage() {
 
       {msg ? (
         <p
-          className={`rounded-lg px-3 py-2 text-sm ${
-            msgKind === "err" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
+          className={`rounded-lg border px-3 py-2 text-sm ${
+            msgKind === "err"
+              ? "border-red-500/30 bg-red-950/30 text-red-200"
+              : "border-accent/30 bg-accent-muted text-foreground"
           }`}
         >
           {msg}
