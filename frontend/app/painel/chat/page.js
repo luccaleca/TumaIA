@@ -66,6 +66,8 @@ export default function PainelChatPage() {
   const [errMsg, setErrMsg] = useState("");
   const bottomRef = useRef(null);
   const errTimer = useRef(null);
+  const conversaDropdownRef = useRef(null);
+  const [conversaMenuOpen, setConversaMenuOpen] = useState(false);
 
   function showErr(text) {
     if (errTimer.current) clearTimeout(errTimer.current);
@@ -81,6 +83,28 @@ export default function PainelChatPage() {
       if (errTimer.current) clearTimeout(errTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!conversaMenuOpen) return;
+    function onPointerDown(ev) {
+      if (conversaDropdownRef.current && !conversaDropdownRef.current.contains(ev.target)) {
+        setConversaMenuOpen(false);
+      }
+    }
+    function onKey(ev) {
+      if (ev.key === "Escape") setConversaMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [conversaMenuOpen]);
+
+  useEffect(() => {
+    if (sending || loadingConversa) setConversaMenuOpen(false);
+  }, [sending, loadingConversa]);
 
   useEffect(() => {
     let active = true;
@@ -328,14 +352,20 @@ export default function PainelChatPage() {
     await loadListaConversas();
   }
 
-  async function onSelectConversa(ev) {
-    const v = ev.target.value;
-    if (!v) {
+  async function pickConversa(value) {
+    setConversaMenuOpen(false);
+    if (!value) {
       onNewChat();
       return;
     }
-    await loadConversa(v);
+    await loadConversa(value);
   }
+
+  const conversaTriggerLabel = useMemo(() => {
+    if (!conversaId) return "Nova conversa";
+    const c = conversas.find((x) => x.id_conversa === conversaId);
+    return c ? formatTituloLista(c) : "Conversa";
+  }, [conversaId, conversas]);
 
   function openRename() {
     if (!conversaId) return;
@@ -439,23 +469,79 @@ export default function PainelChatPage() {
             >
               + Novo
             </button>
-            <label className="sr-only" htmlFor="conversa-select">
-              Conversas
-            </label>
-            <select
-              id="conversa-select"
-              className="min-w-[180px] max-w-[min(100%,240px)] flex-1 rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground"
-              value={conversaId || ""}
-              onChange={(e) => void onSelectConversa(e)}
-              disabled={loadingList || loadingConversa || sending}
+            <div
+              ref={conversaDropdownRef}
+              className="relative min-w-[180px] max-w-[min(100%,240px)] flex-1"
             >
-              <option value="">Nova conversa</option>
-              {conversas.map((c) => (
-                <option key={c.id_conversa} value={c.id_conversa}>
-                  {formatTituloLista(c)}
-                </option>
-              ))}
-            </select>
+              <button
+                type="button"
+                id="conversa-menu-trigger"
+                className="flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5 text-left text-sm text-foreground shadow-sm transition-colors hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-haspopup="listbox"
+                aria-expanded={conversaMenuOpen}
+                aria-label="Selecionar conversa"
+                disabled={loadingList || loadingConversa || sending}
+                onClick={() => setConversaMenuOpen((o) => !o)}
+              >
+                <span className="min-w-0 truncate">{conversaTriggerLabel}</span>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${conversaMenuOpen ? "rotate-180" : ""}`}
+                  aria-hidden
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+              {conversaMenuOpen ? (
+                <ul
+                  className="absolute left-0 right-0 z-50 mt-1 max-h-[min(60vh,280px)] overflow-y-auto rounded-lg border border-border bg-background py-1 shadow-lg ring-1 ring-black/5 dark:ring-white/10"
+                  role="listbox"
+                  aria-labelledby="conversa-menu-trigger"
+                >
+                  <li role="presentation">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={!conversaId}
+                      className={`flex w-full items-center px-3 py-2 text-left text-sm transition-colors ${
+                        !conversaId
+                          ? "bg-accent/15 font-medium text-accent dark:bg-accent/25"
+                          : "text-foreground hover:bg-muted"
+                      }`}
+                      onClick={() => void pickConversa("")}
+                    >
+                      Nova conversa
+                    </button>
+                  </li>
+                  {conversas.map((c) => {
+                    const selected = c.id_conversa === conversaId;
+                    return (
+                      <li key={c.id_conversa} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={selected}
+                          className={`flex w-full items-center px-3 py-2 text-left text-sm transition-colors ${
+                            selected
+                              ? "bg-accent/15 font-medium text-accent dark:bg-accent/25"
+                              : "text-foreground hover:bg-muted"
+                          }`}
+                          onClick={() => void pickConversa(c.id_conversa)}
+                        >
+                          <span className="min-w-0 truncate">{formatTituloLista(c)}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={openRename}

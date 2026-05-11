@@ -146,7 +146,7 @@ export default function ContaPage() {
         <button
           type="submit"
           disabled={saving}
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
+          className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 ease-out will-change-transform disabled:opacity-60 enabled:hover:scale-[1.03] enabled:hover:shadow-md enabled:hover:shadow-accent/25 enabled:active:scale-[0.98]"
         >
           {saving ? "Salvando..." : "Salvar"}
         </button>
@@ -156,7 +156,7 @@ export default function ContaPage() {
         <p
           className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
             msgKind === "err"
-              ? "border-red-500/30 bg-red-950/30 text-red-200"
+              ? "border-red-300 bg-red-50 font-medium text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:font-normal dark:text-red-100"
               : "border-accent/30 bg-accent-muted text-foreground"
           }`}
         >

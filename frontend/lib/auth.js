@@ -1,9 +1,15 @@
 const TOKEN_KEY = "tuma_demo_access_token";
 const REFRESH_TOKEN_KEY = "tuma_demo_refresh_token";
 const API_BASE_KEY = "tuma_demo_api_base";
+/** Só desenvolvimento: o layout do painel ignora `fetchMe` se esta chave estiver em sessionStorage. */
+export const DEV_DASHBOARD_PREVIEW_KEY = "tuma_dev_dashboard_preview";
 const DEFAULT_FETCH_TIMEOUT_MS = 25000;
 
+/** Prefixo proxied pelo Next (`next.config.mjs`) até o backend; porta só em backend/.env. */
+const NEXT_DEV_PROXY_PREFIX = "/tumaia-backend";
+
 export function getApiBase() {
+  /* Deploy / cenário especial: URL absoluta da API. */
   const envBase = process.env.NEXT_PUBLIC_API_BASE;
   if (typeof envBase === "string" && envBase.trim()) {
     return envBase.trim().replace(/\/$/, "");
@@ -16,7 +22,12 @@ export function getApiBase() {
   } catch {
     /* ignore */
   }
-  return "http://localhost:4000";
+  /* Browser: mesmo host do site → rewrite no Next para 127.0.0.1:PORT do backend/.env */
+  if (typeof window !== "undefined") {
+    return NEXT_DEV_PROXY_PREFIX;
+  }
+  /* SSR (raro aqui): fala direto com o localhost padrão; alinhar com PORT no back em dev */
+  return "http://127.0.0.1:4000";
 }
 
 export function normalizeEmailClient(value) {
@@ -64,6 +75,15 @@ export function loadToken() {
 
 export function clearToken() {
   saveToken(null, null);
+}
+
+export function clearDevDashboardPreview() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(DEV_DASHBOARD_PREVIEW_KEY);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function loadRefreshToken() {

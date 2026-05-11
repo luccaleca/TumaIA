@@ -399,13 +399,13 @@ export default function ContextosPage() {
           </button>
         </div>
         {!canManageContextos && empresaId ? (
-          <p className="mb-2 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+          <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Seu cargo permite apenas visualizar contextos.
           </p>
         ) : null}
 
         {!empresaId && !loading ? (
-          <p className="rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Você precisa cadastrar uma empresa antes de usar contextos.
           </p>
         ) : null}
@@ -641,7 +641,7 @@ export default function ContextosPage() {
                     type="button"
                     onClick={() => removeContexto(item.id)}
                     disabled={!canManageContextos}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm font-medium text-muted-foreground hover:border-red-500/50 hover:text-red-300 hover:bg-red-950/40"
+                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm font-medium text-muted-foreground hover:border-red-400 hover:bg-red-50 hover:text-red-800 dark:hover:border-red-500/50 dark:hover:bg-red-950/40 dark:hover:text-red-300"
                     title="Remover contexto"
                     aria-label="Remover contexto"
                   >
@@ -707,7 +707,7 @@ export default function ContextosPage() {
         <p
           className={`rounded-lg px-3 py-2 text-sm ${
             msgKind === "err"
-              ? "border border-red-500/30 bg-red-950/30 text-red-200"
+              ? "border border-red-200 bg-red-50 text-red-900"
               : "border border-accent/30 bg-accent-muted text-foreground"
           }`}
         >

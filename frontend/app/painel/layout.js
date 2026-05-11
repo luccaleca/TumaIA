@@ -4,7 +4,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { ThemeProvider, useTheme } from "../components/ThemeProvider";
-import { clearToken, fetchMe } from "../../lib/auth";
+import {
+  DEV_DASHBOARD_PREVIEW_KEY,
+  clearDevDashboardPreview,
+  clearToken,
+  fetchMe,
+} from "../../lib/auth";
 
 function PainelShell({ children }) {
   const router = useRouter();
@@ -15,6 +20,17 @@ function PainelShell({ children }) {
 
   useEffect(() => {
     let active = true;
+    if (
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV === "development" &&
+      sessionStorage.getItem(DEV_DASHBOARD_PREVIEW_KEY) === "1"
+    ) {
+      setNome("Pré-visualização (sem login)");
+      setReady(true);
+      return () => {
+        active = false;
+      };
+    }
     fetchMe().then(({ ok, usuario }) => {
       if (!active) return;
       if (!ok || !usuario) {
@@ -44,6 +60,7 @@ function PainelShell({ children }) {
   );
 
   function onLogout() {
+    clearDevDashboardPreview();
     clearToken();
     router.replace("/");
   }
@@ -77,8 +94,8 @@ function PainelShell({ children }) {
             </div>
           </header>
 
-          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 px-6 py-6 md:grid-cols-[220px_1fr]">
-            <aside className="rounded-xl border border-border bg-surface p-3">
+          <div className="mx-auto flex w-full max-w-6xl flex-col items-stretch gap-6 px-6 py-6 md:flex-row md:items-start">
+            <aside className="mx-auto w-[220px] shrink-0 rounded-xl border border-border bg-surface p-3 md:mx-0">
               <nav className="space-y-1">
                 {links.map((item) => {
                   const active = pathname === item.href;
@@ -99,7 +116,7 @@ function PainelShell({ children }) {
               </nav>
             </aside>
 
-            <section>{children}</section>
+            <section className="min-w-0 flex-1">{children}</section>
           </div>
         </>
       )}

@@ -91,10 +91,17 @@ export default function CadastroPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-md items-center px-6 py-12">
       <section className="w-full rounded-2xl border border-border bg-surface p-6 shadow-[0_12px_36px_-20px_rgba(15,23,42,0.3)]">
         <h1 className="text-2xl font-semibold text-foreground">
-          Criar conta no <span className="text-foreground">Tuma</span>
-          <span className="text-accent">IA</span>
+          Criar conta no{" "}
+          <Link
+            href="/"
+            title="Voltar à página inicial"
+            className="inline rounded-sm text-inherit no-underline outline-none transition-opacity hover:opacity-90 hover:underline hover:decoration-accent/50 hover:underline-offset-4 focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <span className="text-foreground">Tuma</span>
+            <span className="text-accent">IA</span>
+          </Link>
         </h1>
-        <p className="mt-1 text-sm text-slate-600">Cadastro rápido para começar a usar.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Cadastro rápido para começar a usar.</p>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
           <div>
@@ -168,13 +175,28 @@ export default function CadastroPage() {
           >
             {loading ? "Enviando..." : "Cadastrar"}
           </button>
+
+          <div className="pt-1">
+            <Link
+              href="/"
+              className="group flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-gradient-to-b from-muted/70 to-muted/40 px-4 py-3 text-sm font-semibold text-foreground shadow-sm backdrop-blur-sm transition-[border-color,box-shadow,transform] hover:border-accent/50 hover:shadow-[0_8px_24px_-12px_rgba(0,179,65,0.35)] hover:-translate-y-px active:translate-y-0 dark:from-muted/40 dark:to-muted/20 dark:hover:shadow-[0_8px_24px_-12px_rgba(46,207,106,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            >
+              <span
+                aria-hidden
+                className="text-lg leading-none text-muted-foreground transition-colors group-hover:text-accent"
+              >
+                ←
+              </span>
+              Página inicial
+            </Link>
+          </div>
         </form>
 
         {msg ? (
           <p
             className={`mt-4 rounded-lg px-3 py-2 text-sm ${
               msgKind === "err"
-                ? "border border-red-500/30 bg-red-950/40 text-red-300"
+                ? "border border-red-300 bg-red-50 font-medium text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:font-normal dark:text-red-100"
                 : "border border-accent/30 bg-accent-muted text-[#009638]"
             }`}
           >
@@ -182,7 +204,7 @@ export default function CadastroPage() {
           </p>
         ) : null}
 
-        <p className="mt-5 text-sm text-slate-600">
+        <p className="mt-5 text-sm text-muted-foreground">
           Já tem conta?{" "}
           <Link className="font-medium text-accent underline-offset-2 hover:underline" href="/login">
             Entrar

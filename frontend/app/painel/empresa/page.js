@@ -239,7 +239,7 @@ export default function EmpresaPage() {
         </p>
       ) : null}
       {!canEditEmpresa && hasEmpresa ? (
-        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+        <p className="mt-3 rounded-lg border border-amber-600/35 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/45 dark:font-normal dark:text-amber-100">
           Você pode visualizar os dados da empresa, mas não pode editá-los com o cargo atual.
         </p>
       ) : null}
@@ -331,7 +331,7 @@ export default function EmpresaPage() {
             <button
               type="submit"
               disabled={saving || !canEditEmpresa}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 ease-out will-change-transform disabled:opacity-60 enabled:hover:scale-[1.03] enabled:hover:shadow-md enabled:hover:shadow-accent/25 enabled:active:scale-[0.98]"
             >
               {saving ? "Salvando..." : hasEmpresa ? "Salvar empresa" : "Cadastrar empresa"}
             </button>
@@ -397,7 +397,7 @@ export default function EmpresaPage() {
                     type="button"
                     onClick={() => setMembroToRemove(m)}
                     disabled={!canManageMembros || savingMembroId === m.id_usuario}
-                    className="rounded-md border border-red-500/40 px-2 py-1 text-xs text-red-300 hover:bg-red-950/40 disabled:opacity-60"
+                    className="rounded-md border border-red-400/70 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-60 dark:border-red-500/45 dark:font-normal dark:text-red-300 dark:hover:bg-red-950/45"
                   >
                     Remover
                   </button>
@@ -418,7 +418,7 @@ export default function EmpresaPage() {
               <button
                 type="button"
                 onClick={() => void onRemoveMembro(membroToRemove.id_usuario)}
-                className="rounded-md border border-red-500/40 bg-red-950/40 px-3 py-1.5 text-sm text-red-200 hover:bg-red-950/60"
+                className="rounded-md border border-red-500/60 bg-red-100 px-3 py-1.5 text-sm font-medium text-red-900 hover:bg-red-200 dark:border-red-500/40 dark:bg-red-950/45 dark:font-normal dark:text-red-100 dark:hover:bg-red-950/65"
               >
                 Confirmar
               </button>
@@ -500,7 +500,7 @@ export default function EmpresaPage() {
         <p
           className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
             msgKind === "err"
-              ? "border-red-500/30 bg-red-950/30 text-red-200"
+              ? "border-red-300 bg-red-50 font-medium text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:font-normal dark:text-red-100"
               : "border-accent/30 bg-accent-muted text-foreground"
           }`}
         >
