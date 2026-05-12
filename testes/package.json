@@ -1,0 +1,8 @@
+{
+  "name": "tumaia-testes",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "supertest": "^7.1.0"
+  }
+}

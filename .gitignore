@@ -1,3 +1,5 @@
+backend/ia/usage/*.json
+
 .next/
 node_modules/
 .turbo/

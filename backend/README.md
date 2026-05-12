@@ -9,6 +9,12 @@ API interna para o N8N (e depois o painel Next.js) acessar:
 
 As rotas em `/internal/*` são protegidas por `INTERNAL_WEBHOOK_SECRET`.
 
+- `GET /internal/replicate/ping` — valida `REPLICATE_API_TOKEN` com a API da Replicate.
+- `POST /internal/replicate/flux-schnell` — gera imagem com `black-forest-labs/flux-schnell` (body JSON: `prompt`, opcionais `aspect_ratio`, `num_outputs`, `output_format`, `output_quality`). Consome créditos na conta Replicate.
+- `GET /internal/replicate/usage` — contagem local do dia (sucessos/falhas), mesmo estilo do uso Gemini.
+
+**Segurança (sem planos comerciais):** rotas internas exigem `INTERNAL_WEBHOOK_SECRET`; geração de imagem tem **limite de rajada por minuto** (`REPLICATE_BURST_PER_MINUTE`, padrão 15) e **teto opcional de sucessos por dia** (`REPLICATE_DAILY_SUCCESS_CAP`, `0` = ilimitado). O ping tem limite próprio (`REPLICATE_PING_PER_MINUTE`, padrão 30). Uso é persistido em `backend/ia/usage/replicate-image-usage.json`.
+
 ## Setup rápido
 
 1) Copie o arquivo de exemplo:
@@ -21,6 +27,10 @@ As rotas em `/internal/*` são protegidas por `INTERNAL_WEBHOOK_SECRET`.
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY` (use no backend; **nunca** no browser)
 - `INTERNAL_WEBHOOK_SECRET`
+- `REPLICATE_API_TOKEN` (opcional; necessário para `/internal/replicate/*`)
+- `REPLICATE_BURST_PER_MINUTE` (opcional; padrão 15; `0` = sem limite por minuto)
+- `REPLICATE_PING_PER_MINUTE` (opcional; padrão 30; `0` = sem limite)
+- `REPLICATE_DAILY_SUCCESS_CAP` (opcional; padrão `0` = sem teto diário de sucessos)
 
 3) Instale e rode:
 

@@ -1,0 +1,110 @@
+/**
+ * Cliente HTTP mínimo para api.replicate.com (predictions + polling).
+ * @see https://replicate.com/docs/reference/http
+ */
+
+const BASE = "https://api.replicate.com/v1";
+
+/** @param {string} token */
+export function replicateHeaders(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+/**
+ * @param {string} token
+ * @param {string} owner
+ * @param {string} name
+ * @returns {Promise<string>} latest_version.id
+ */
+export async function getModelLatestVersionId(token, owner, name) {
+  const res = await fetch(`${BASE}/models/${owner}/${name}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    throw new Error(`Replicate GET models/${owner}/${name}: ${res.status} ${raw}`);
+  }
+  let json;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new Error("Replicate retornou corpo inválido ao buscar versão do modelo");
+  }
+  const id = json?.latest_version?.id;
+  if (!id) throw new Error("Replicate: resposta sem latest_version.id");
+  return String(id);
+}
+
+/**
+ * @param {string} token
+ * @param {{ version: string, input: Record<string, unknown> }} body
+ */
+export async function createPrediction(token, { version, input }) {
+  const res = await fetch(`${BASE}/predictions`, {
+    method: "POST",
+    headers: replicateHeaders(token),
+    body: JSON.stringify({ version, input }),
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    const err = new Error(`Replicate POST predictions: ${res.status} ${raw}`);
+    err.status = res.status;
+    err.body = raw;
+    throw err;
+  }
+  return JSON.parse(raw);
+}
+
+/**
+ * @param {string} token
+ * @param {string} getUrl urls.get da prediction criada
+ * @param {{ maxWaitMs?: number, stepMs?: number }} [opts]
+ */
+export async function waitForPrediction(token, getUrl, opts = {}) {
+  const maxWaitMs = opts.maxWaitMs ?? 120_000;
+  const stepMs = opts.stepMs ?? 1500;
+  const t0 = Date.now();
+  for (;;) {
+    const res = await fetch(getUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const raw = await res.text();
+    if (!res.ok) {
+      throw new Error(`Replicate GET prediction: ${res.status} ${raw}`);
+    }
+    const p = JSON.parse(raw);
+    const st = String(p.status || "");
+    if (st === "succeeded") return p;
+    if (st === "failed" || st === "canceled") {
+      const err = new Error(p.error ? JSON.stringify(p.error) : `Prediction ${st}`);
+      err.prediction = p;
+      throw err;
+    }
+    if (Date.now() - t0 > maxWaitMs) {
+      const err = new Error("Timeout aguardando prediction na Replicate");
+      err.prediction = p;
+      throw err;
+    }
+    await new Promise((r) => setTimeout(r, stepMs));
+  }
+}
+
+/**
+ * Confirma token (equivalente ao script check-replicate).
+ * @param {string} token
+ */
+export async function getReplicateAccount(token) {
+  const res = await fetch(`${BASE}/account`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const raw = await res.text();
+  if (!res.ok) {
+    const err = new Error(`Replicate GET account: ${res.status} ${raw}`);
+    err.status = res.status;
+    throw err;
+  }
+  return JSON.parse(raw);
+}

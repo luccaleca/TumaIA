@@ -246,3 +246,84 @@ def obter_resumo_schema_cacheado() -> tuple[str | None, str | None]:
             _schema_cache_err = err
             _schema_cache_mono = time.monotonic()
         return None, err
+
+
+def obter_empresa_cadastro_por_id(id_empresa: str) -> tuple[dict[str, object] | None, str | None]:
+    """
+    Lê uma linha de ``public.empresa`` para contexto do chat (empresa em sessão).
+
+    Retorna (dicionário com campos legíveis, None) em sucesso;
+    (None, None) se não existir ou estiver inativa;
+    (None, mensagem) em erro de conexão ou SQL.
+    """
+    import uuid as uuid_mod
+
+    raw = (id_empresa or "").strip()
+    if not raw:
+        return None, None
+    try:
+        uuid_mod.UUID(raw)
+    except ValueError:
+        return None, "id_empresa inválido"
+
+    url = obter_database_url()
+    if not url:
+        return None, None
+
+    import psycopg2
+
+    conn = None
+    try:
+        conn = psycopg2.connect(url, connect_timeout=10)
+    except Exception as e:  # noqa: BLE001
+        return None, str(e)
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id_empresa, nome_fantasia, razao_social, segmento, descricao,
+                       email_principal, telefone_principal, instagram_empresa, cnpj,
+                       nome_contato_principal, ativo
+                FROM public.empresa
+                WHERE id_empresa = %s::uuid AND ativo = true
+                LIMIT 1
+                """,
+                (raw,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None, None
+            cols = [d[0] for d in cur.description]
+            return dict(zip(cols, row)), None
+    except Exception as e:  # noqa: BLE001
+        return None, str(e)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
+def formatar_empresa_cadastro_prompt(row: dict[str, object] | None) -> str:
+    """Texto curto para o prompt do modelo (cadastro da empresa em sessão)."""
+    if not row:
+        return ""
+
+    def s(key: str) -> str:
+        v = row.get(key)
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    linhas = [
+        "[DADOS CADASTRAIS DA EMPRESA EM SESSÃO — use quando falar do negócio; não invente outros dados]",
+        f"- Nome fantasia: {s('nome_fantasia') or '—'}",
+        f"- Razão social: {s('razao_social') or '—'}",
+        f"- Segmento: {s('segmento') or '—'}",
+        f"- Descrição: {s('descricao') or '—'}",
+        f"- E-mail principal: {s('email_principal') or '—'}",
+        f"- Telefone principal: {s('telefone_principal') or '—'}",
+        f"- Instagram: {s('instagram_empresa') or '—'}",
+        f"- CNPJ: {s('cnpj') or '—'}",
+        f"- Contato principal: {s('nome_contato_principal') or '—'}",
+    ]
+    return "\n".join(linhas).strip()

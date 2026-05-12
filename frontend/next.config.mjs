@@ -1,8 +1,29 @@
 import fs from "node:fs";
+import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Pasta do app Next (`frontend/`) */
+const appRoot = path.resolve(__dirname);
+/** Raiz do monorepo (`package-lock.json` + `node_modules` hoistado pelo npm workspaces) */
+const repoRoot = path.resolve(__dirname, "..");
+const requireFromApp = createRequire(path.join(appRoot, "package.json"));
+
+function pkgRoot(name) {
+  try {
+    return path.dirname(requireFromApp.resolve(`${name}/package.json`));
+  } catch {
+    return null;
+  }
+}
+
+const tailwindRoot = pkgRoot("tailwindcss");
+const tailwindPostcssRoot = pkgRoot("@tailwindcss/postcss");
+const turbopackResolveAlias = {};
+if (tailwindRoot) turbopackResolveAlias.tailwindcss = tailwindRoot;
+if (tailwindPostcssRoot) turbopackResolveAlias["@tailwindcss/postcss"] = tailwindPostcssRoot;
 
 /**
  * Integração local: porta do backend vem só de backend/.env (PORT).
@@ -23,16 +44,51 @@ function getBackendOriginFromBackendEnvFile() {
 const BACKEND_ORIGIN = getBackendOriginFromBackendEnvFile();
 
 /**
- * LAN / outro hostname no dev: permite WebSocket do HMR (`/_next/webpack-hmr`).
- * Ajuste com TUMAIA_ALLOWED_DEV_ORIGINS=192.168.0.70,192.168.1.5 (lista separada por vírgula).
+ * LAN / Tailscale / etc.: origens extras permitidas para o dev server (inclui WebSocket do HMR).
+ * Descobre IPv4 privados/CGNAT desta máquina (ex. 100.x Tailscale) e une com TUMAIA_ALLOWED_DEV_ORIGINS.
  */
-const allowedDevOrigins = (process.env.TUMAIA_ALLOWED_DEV_ORIGINS || "192.168.0.70")
+function discoverDevHostIps() {
+  const hosts = new Set();
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const a of addrs || []) {
+      if (!a || a.family !== "IPv4" || a.internal) continue;
+      const ip = a.address;
+      if (
+        /^100\./.test(ip) ||
+        /^192\.168\./.test(ip) ||
+        /^10\./.test(ip) ||
+        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)
+      ) {
+        hosts.add(ip);
+      }
+    }
+  }
+  return [...hosts];
+}
+
+const fromEnv = (process.env.TUMAIA_ALLOWED_DEV_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
+const allowedDevOrigins = [
+  ...new Set(["127.0.0.1", "localhost", "192.168.0.70", ...discoverDevHostIps(), ...fromEnv]),
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /**
+   * Monorepo (npm workspaces): o lockfile fica na raiz do repo; o Next e o Tailwind ficam em
+   * `../node_modules`. O Turbopack precisa usar essa raiz para resolver pacotes; senão infere
+   * diretório errado (ex.: `frontend/app`) e falha ao achar `next` ou `tailwindcss`.
+   */
+  turbopack: {
+    root: repoRoot,
+    ...(Object.keys(turbopackResolveAlias).length > 0 && {
+      resolveAlias: turbopackResolveAlias,
+    }),
+  },
+
   allowedDevOrigins,
 
   async rewrites() {

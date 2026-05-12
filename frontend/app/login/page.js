@@ -35,9 +35,17 @@ function LoginForm() {
     };
   }, [router]);
 
+  /** Preenche o estado a partir da URL (ex.: redirect do cadastro); senão o input “mostra” o e-mail mas o submit ia com `email` vazio. */
+  useEffect(() => {
+    if (!emailFromQuery) return;
+    const next = normalizeEmailClient(emailFromQuery);
+    if (!next) return;
+    setEmail((prev) => (prev.trim() ? prev : next));
+  }, [emailFromQuery]);
+
   async function onSubmit(event) {
     event.preventDefault();
-    const normalizedEmail = normalizeEmailClient(email);
+    const normalizedEmail = normalizeEmailClient(email || emailFromQuery);
     const normalizedSenha = normalizeSenhaClient(senha);
     setEmail(normalizedEmail);
     setLoading(true);

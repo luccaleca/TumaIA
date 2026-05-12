@@ -4,6 +4,18 @@ import { env } from "../config.js";
 import { requireInternalSecret } from "../middleware/internalAuth.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { getGeminiTextUsage, recordGeminiTextCall } from "../services/geminiUsage.js";
+import {
+  createPrediction,
+  getModelLatestVersionId,
+  getReplicateAccount,
+  waitForPrediction,
+} from "../services/replicateClient.js";
+import {
+  assertReplicateBurst,
+  assertReplicateDailySuccessCap,
+  getReplicateImageUsage,
+  recordReplicateImageOutcome,
+} from "../services/replicateUsage.js";
 
 const r = Router();
 r.use(requireInternalSecret);
@@ -29,6 +41,27 @@ r.get("/supabase/ping", async (_req, res) => {
 
 const contextBody = z.object({
   userId: z.string().min(1),
+});
+
+const fluxSchnellBody = z.object({
+  prompt: z.string().min(3).max(2000),
+  num_outputs: z.coerce.number().int().min(1).max(4).optional().default(1),
+  aspect_ratio: z
+    .enum([
+      "1:1",
+      "16:9",
+      "21:9",
+      "2:3",
+      "3:2",
+      "4:5",
+      "5:4",
+      "9:16",
+      "9:21",
+    ])
+    .optional()
+    .default("1:1"),
+  output_format: z.enum(["webp", "jpg", "png"]).optional().default("png"),
+  output_quality: z.coerce.number().int().min(1).max(100).optional().default(80),
 });
 
 const gerarConteudoBody = z.object({
@@ -171,6 +204,153 @@ Regras:
       model: err?.geminiModel,
     });
     res.status(500).json({ error: message });
+  }
+});
+
+/** Confirma `REPLICATE_API_TOKEN` (mesma ideia do `npm run check:replicate`). */
+r.get("/replicate/ping", async (_req, res) => {
+  const pingLimit = env.REPLICATE_PING_PER_MINUTE ?? 30;
+  const burst = assertReplicateBurst("ping", pingLimit);
+  if (!burst.ok) {
+    res
+      .status(429)
+      .set("Retry-After", String(Math.max(1, burst.retryAfterSec ?? 60)))
+      .json({ error: "Muitas verificações Replicate; aguarde um instante." });
+    return;
+  }
+
+  const token = env.REPLICATE_API_TOKEN;
+  if (!token) {
+    res.status(503).json({ error: "REPLICATE_API_TOKEN não configurado" });
+    return;
+  }
+  try {
+    const account = await getReplicateAccount(token);
+    res.json({
+      ok: true,
+      type: account?.type ?? null,
+      username: account?.username ?? null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro Replicate";
+    const status = err?.status && Number(err.status) >= 400 ? Number(err.status) : 500;
+    res.status(status).json({ error: message });
+  }
+});
+
+/**
+ * Gera imagem com `black-forest-labs/flux-schnell` (custo por imagem na conta Replicate).
+ * Chame com header `x-internal-secret` (igual às demais rotas `/internal/*`).
+ */
+r.post("/replicate/flux-schnell", async (req, res) => {
+  const dailyCap = env.REPLICATE_DAILY_SUCCESS_CAP ?? 0;
+  const capCheck = await assertReplicateDailySuccessCap(dailyCap);
+  if (!capCheck.ok) {
+    res.status(429).json({
+      error: "Limite diário de gerações Replicate atingido (sucessos). Ajuste REPLICATE_DAILY_SUCCESS_CAP ou aguarde o próximo dia.",
+      successes: capCheck.successes,
+      cap: capCheck.cap,
+    });
+    return;
+  }
+
+  const postBurstLimit = env.REPLICATE_BURST_PER_MINUTE ?? 15;
+  const burst = assertReplicateBurst("post", postBurstLimit);
+  if (!burst.ok) {
+    res
+      .status(429)
+      .set("Retry-After", String(Math.max(1, burst.retryAfterSec ?? 60)))
+      .json({ error: "Muitas gerações por minuto; aguarde ou reduza a frequência." });
+    return;
+  }
+
+  const token = env.REPLICATE_API_TOKEN;
+  if (!token) {
+    res.status(503).json({ error: "REPLICATE_API_TOKEN não configurado" });
+    return;
+  }
+
+  const parsed = fluxSchnellBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const owner = "black-forest-labs";
+  const model = "flux-schnell";
+
+  try {
+    const version = await getModelLatestVersionId(token, owner, model);
+    const created = await createPrediction(token, {
+      version,
+      input: {
+        prompt: parsed.data.prompt,
+        num_outputs: parsed.data.num_outputs,
+        aspect_ratio: parsed.data.aspect_ratio,
+        output_format: parsed.data.output_format,
+        output_quality: parsed.data.output_quality,
+      },
+    });
+    const getUrl = created?.urls?.get;
+    if (!getUrl || typeof getUrl !== "string") {
+      await recordReplicateImageOutcome({
+        ok: false,
+        status: 502,
+        model: `${owner}/${model}`,
+        prediction_id: created?.id ?? null,
+      });
+      res.status(502).json({ error: "Replicate não retornou urls.get", raw: created });
+      return;
+    }
+    const final = await waitForPrediction(token, getUrl);
+    await recordReplicateImageOutcome({
+      ok: true,
+      status: 200,
+      model: `${owner}/${model}`,
+      prediction_id: final.id ?? null,
+    });
+    res.json({
+      prediction_id: final.id,
+      status: final.status,
+      output: final.output,
+      model: `${owner}/${model}`,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Erro ao gerar imagem";
+    const httpStatus =
+      err?.status === 402
+        ? 402
+        : err?.status && Number(err.status) >= 400 && Number(err.status) < 600
+          ? Number(err.status)
+          : 500;
+    await recordReplicateImageOutcome({
+      ok: false,
+      status: httpStatus,
+      model: `${owner}/${model}`,
+      prediction_id: err?.prediction?.id ?? null,
+    });
+    res.status(httpStatus).json({ error: message });
+  }
+});
+
+/** Uso local de gerações Replicate (arquivo em `ia/usage/`, como o Gemini). */
+r.get("/replicate/usage", async (_req, res) => {
+  try {
+    const usage = await getReplicateImageUsage();
+    const cap = Number(env.REPLICATE_DAILY_SUCCESS_CAP ?? 0);
+    const successes = Number(usage?.today?.successes || 0);
+    res.json({
+      ...usage,
+      budget: {
+        daily_success_cap: cap > 0 ? cap : null,
+        successes_today: successes,
+        remaining_successes_today: cap > 0 ? Math.max(0, cap - successes) : null,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Erro ao ler uso Replicate",
+    });
   }
 });
 

@@ -32,8 +32,13 @@ def main() -> int:
     if not isinstance(history, list):
         history = []
 
+    id_raw = payload.get("id_empresa")
+    id_empresa = id_raw.strip() if isinstance(id_raw, str) and id_raw.strip() else None
+
     vector_store = construir_vetor_store()
-    resposta = responder_mensagem(vector_store, question, history=history)
+    resposta = responder_mensagem(
+        vector_store, question, history=history, id_empresa=id_empresa
+    )
 
     docs = []
     for d in resposta.get("source_documents") or []:

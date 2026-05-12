@@ -44,6 +44,7 @@ export default function MidiasPage() {
   const [renameDialog, setRenameDialog] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const fileInputRef = useRef(null);
+  const [uploadZoneHover, setUploadZoneHover] = useState(false);
 
   const isRoot = !pastaAtual;
   const pastasFilhas = useMemo(() => {
@@ -175,12 +176,12 @@ export default function MidiasPage() {
     await loadData();
   }
 
-  async function onUploadFiles(event) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length || !empresaId || !canManageMidias) return;
+  async function uploadFilesList(files) {
+    const list = Array.isArray(files) ? files : Array.from(files || []);
+    if (!list.length || !empresaId || !canManageMidias) return;
     setUploading(true);
     try {
-      for (const file of files) {
+      for (const file of list) {
         const base64 = await toBase64WithoutPrefix(file);
         const payload = {
           id_pasta: pastaAtual || pastaUploadRaiz || null,
@@ -207,8 +208,51 @@ export default function MidiasPage() {
       await loadData();
     } finally {
       setUploading(false);
-      event.target.value = "";
     }
+  }
+
+  async function onUploadFiles(event) {
+    const files = Array.from(event.target.files || []);
+    await uploadFilesList(files);
+    event.target.value = "";
+  }
+
+  function onUploadZoneDragEnter(e) {
+    if (!empresaId || !canManageMidias || uploading) return;
+    const types = [...(e.dataTransfer?.types || [])];
+    if (!types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setUploadZoneHover(true);
+  }
+
+  function onUploadZoneDragLeave(e) {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setUploadZoneHover(false);
+  }
+
+  function onUploadZoneDragOver(e) {
+    if (!empresaId || !canManageMidias || uploading) return;
+    const types = [...(e.dataTransfer?.types || [])];
+    if (!types.includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }
+
+  async function onUploadZoneDrop(e) {
+    if (!empresaId || !canManageMidias || uploading) return;
+    setUploadZoneHover(false);
+    const raw = Array.from(e.dataTransfer?.files || []);
+    const files = raw.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+    if (!raw.length) return;
+    e.preventDefault();
+    if (!files.length) {
+      setMsg("Solte apenas imagens ou vídeos nesta área.");
+      setMsgKind("err");
+      return;
+    }
+    await uploadFilesList(files);
   }
 
   function triggerUploadDialog() {
@@ -589,10 +633,36 @@ export default function MidiasPage() {
             type="file"
             multiple
             accept="image/*,video/*"
-            onChange={onUploadFiles}
+            onChange={(e) => void onUploadFiles(e)}
             disabled={!empresaId || uploading || !canManageMidias}
             className="hidden"
           />
+          {empresaId && canManageMidias ? (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              onDragEnter={onUploadZoneDragEnter}
+              onDragLeave={onUploadZoneDragLeave}
+              onDragOver={onUploadZoneDragOver}
+              onDrop={(e) => void onUploadZoneDrop(e)}
+              disabled={uploading}
+              className={`mt-3 flex w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
+                uploadZoneHover
+                  ? "border-accent bg-accent-muted/60 text-foreground"
+                  : "border-border bg-muted/20 text-muted-foreground hover:border-accent/50 hover:bg-muted/40"
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              <span className="text-2xl" aria-hidden>
+                ⬆
+              </span>
+              <span className="text-sm font-medium text-foreground">
+                Arraste imagens ou vídeos e solte aqui
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Ou clique para escolher arquivos · envia para a pasta atual ({pastaAtualObj?.nome || "Raiz"})
+              </span>
+            </button>
+          ) : null}
           {uploading ? <p className="mt-2 text-sm text-muted-foreground">Enviando arquivos...</p> : null}
         </div>
 

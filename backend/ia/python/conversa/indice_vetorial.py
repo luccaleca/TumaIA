@@ -34,7 +34,7 @@ def criar_ou_carregar_indice(pasta_docs: Path, pasta_indice: Path) -> Chroma:
         glob="**/*.*",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"},
-        show_progress=True,
+        show_progress=False,
         use_multithreading=True,
     )
     documentos = loader.load()

@@ -35,6 +35,33 @@ function toApiMensagens(messages) {
   }));
 }
 
+/** Bolha “digitando…” estilo WhatsApp (lado da IA). */
+function AssistantTypingBubble() {
+  return (
+    <article
+      className="flex items-start gap-3"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label="Tuma IA está digitando"
+    >
+      <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border bg-background">
+        <Image
+          src="/imagens/TUMA_CROPPED.png"
+          alt=""
+          fill
+          className="object-contain p-0.5"
+          sizes="40px"
+        />
+      </div>
+      <div className="flex min-h-[44px] min-w-[52px] items-center justify-center gap-1 rounded-2xl border border-border bg-muted/55 px-4 py-3 shadow-sm dark:bg-muted/35">
+        <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-muted-foreground/75 [animation-duration:0.55s] [animation-delay:0ms]" />
+        <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-muted-foreground/75 [animation-duration:0.55s] [animation-delay:0.12s]" />
+        <span className="inline-block h-2 w-2 animate-bounce rounded-full bg-muted-foreground/75 [animation-duration:0.55s] [animation-delay:0.24s]" />
+      </div>
+    </article>
+  );
+}
+
 function formatTituloLista(c) {
   const t = c?.titulo && String(c.titulo).trim();
   if (t) return t.length > 48 ? `${t.slice(0, 48)}…` : t;
@@ -393,10 +420,10 @@ export default function PainelChatPage() {
   }
 
   return (
-    <main className="flex h-[calc(100vh-180px)] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-border bg-background">
-      <header className="border-b border-border bg-background px-6 py-4">
+    <main className="flex h-[calc(100dvh-9rem)] min-h-[380px] flex-col overflow-hidden rounded-2xl border border-border bg-background md:h-[calc(100dvh-8rem)]">
+      <header className="shrink-0 border-b border-border bg-background px-4 py-3 md:px-6 md:py-4">
         <div className="flex items-center gap-0">
-          <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-background">
+          <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-background md:h-24 md:w-24">
             <Image
               src="/imagens/TUMA_CROPPED.png"
               alt="Tuma mascote oficial"
@@ -407,7 +434,7 @@ export default function PainelChatPage() {
             />
           </div>
           <div className="min-w-0 py-1">
-            <h1 className="text-3xl font-black tracking-tight text-foreground">
+            <h1 className="text-2xl font-black tracking-tight text-foreground md:text-3xl">
               Tuma <span className="text-accent">IA</span>
             </h1>
           </div>
@@ -415,15 +442,15 @@ export default function PainelChatPage() {
       </header>
 
       {!empresaReady ? (
-        <p className="px-6 py-3 text-sm text-slate-600">Carregando…</p>
+        <p className="shrink-0 px-4 py-2 text-sm text-slate-600 md:px-6">Carregando…</p>
       ) : !empresaId ? (
-        <p className="mx-6 my-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p className="mx-4 my-2 shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 md:mx-6">
           Sua conta precisa estar ligada a um negócio para usar o chat.
         </p>
       ) : null}
 
       {errMsg ? (
-        <p className="mx-6 mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">{errMsg}</p>
+        <p className="mx-4 mt-1 shrink-0 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900 md:mx-6">{errMsg}</p>
       ) : null}
 
       <Modal open={renameOpen} onClose={() => !renameSaving && setRenameOpen(false)} title="Nome da conversa">
@@ -458,9 +485,9 @@ export default function PainelChatPage() {
         </div>
       </Modal>
 
-      <section className="flex-1 p-4">
-        <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-background">
-          <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+      <section className="flex min-h-0 flex-1 flex-col p-3 md:p-4">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-background">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
             <button
               type="button"
               onClick={onNewChat}
@@ -576,7 +603,7 @@ export default function PainelChatPage() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto px-4 py-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 md:px-4 md:py-4">
             <div className="space-y-4">
               {messages.length === 0 && empresaId ? (
                 <p className="text-center text-sm text-muted-foreground">Digite abaixo para começar.</p>
@@ -624,18 +651,13 @@ export default function PainelChatPage() {
                   </article>
                 );
               })}
-              {sending ? (
-                <p className="flex items-center gap-2 text-sm text-slate-500">
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-                  Respondendo…
-                </p>
-              ) : null}
+              {sending ? <AssistantTypingBubble /> : null}
               <div ref={bottomRef} />
             </div>
           </div>
 
-          <footer className="border-t border-border bg-surface-elevated/70 p-3">
-            <form className="flex items-center gap-2" onSubmit={onSubmit}>
+          <footer className="shrink-0 border-t border-border bg-surface-elevated/90 p-2 backdrop-blur-sm md:p-3">
+            <form className="flex items-end gap-2" onSubmit={onSubmit}>
               <button
                 type="button"
                 disabled
@@ -656,7 +678,7 @@ export default function PainelChatPage() {
                   }
                 }}
                 disabled={sending || !empresaId}
-                className="min-h-[48px] flex-1 resize-none rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground outline-none focus:border-accent/70 disabled:bg-muted"
+                className="min-h-[44px] max-h-36 flex-1 resize-y overflow-y-auto rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground outline-none focus:border-accent/70 disabled:bg-muted"
               />
               <button
                 type="submit"

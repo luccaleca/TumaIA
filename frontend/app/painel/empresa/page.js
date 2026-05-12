@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import Modal from "../../components/Modal";
 
@@ -16,11 +16,17 @@ const emptyEmpresa = {
   nome_contato_principal: "",
 };
 
+function empresaRowFromList(list, idEmpresa) {
+  if (!idEmpresa || !Array.isArray(list)) return null;
+  return list.find((row) => row?.empresa?.id_empresa === idEmpresa) || null;
+}
+
 export default function EmpresaPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [msgKind, setMsgKind] = useState("ok");
+  const [empresasMinhas, setEmpresasMinhas] = useState([]);
   const [empresaId, setEmpresaId] = useState(null);
   const [form, setForm] = useState(emptyEmpresa);
   const [membros, setMembros] = useState([]);
@@ -28,6 +34,7 @@ export default function EmpresaPage() {
   const [savingMembroId, setSavingMembroId] = useState("");
   const [empresaDetalhesOpen, setEmpresaDetalhesOpen] = useState(false);
   const [empresaEditOpen, setEmpresaEditOpen] = useState(false);
+  const [criandoNovaEmpresa, setCriandoNovaEmpresa] = useState(false);
   const [conviteCodigo, setConviteCodigo] = useState("");
   const [conviteExpiraEm, setConviteExpiraEm] = useState("");
   const [creatingConvite, setCreatingConvite] = useState(false);
@@ -35,43 +42,91 @@ export default function EmpresaPage() {
   const [conviteCargo, setConviteCargo] = useState("membro");
   const [conviteEmail, setConviteEmail] = useState("");
   const [membroToRemove, setMembroToRemove] = useState(null);
+  const empresaIdRef = useRef(null);
 
   const hasEmpresa = useMemo(() => Boolean(empresaId), [empresaId]);
-  const canEditEmpresa = useMemo(
-    () => meuCargo === "administrador" || meuCargo === "editor",
-    [meuCargo],
-  );
+  const podeAdicionarOutraEmpresa = useMemo(() => empresasMinhas.length >= 1, [empresasMinhas.length]);
+
+  const canEditEmpresa = useMemo(() => {
+    if (criandoNovaEmpresa) return true;
+    if (!hasEmpresa) return true;
+    return meuCargo === "administrador" || meuCargo === "editor";
+  }, [criandoNovaEmpresa, hasEmpresa, meuCargo]);
+
   const canManageMembros = useMemo(() => meuCargo === "administrador", [meuCargo]);
+
+  const aplicarLinhaSelecionada = useCallback((list, idEmpresa) => {
+    const row = empresaRowFromList(list, idEmpresa);
+    const empresa = row?.empresa || null;
+    setMeuCargo(row?.papel || "");
+    if (empresa?.id_empresa) {
+      setEmpresaId(empresa.id_empresa);
+      setForm({
+        nome_fantasia: empresa.nome_fantasia || "",
+        razao_social: empresa.razao_social || "",
+        descricao: empresa.descricao || "",
+        instagram_empresa: empresa.instagram_empresa || "",
+        telefone_principal: empresa.telefone_principal || "",
+        segmento: empresa.segmento || "",
+        cnpj: empresa.cnpj || "",
+        email_principal: empresa.email_principal || "",
+        nome_contato_principal: empresa.nome_contato_principal || "",
+      });
+    } else {
+      setEmpresaId(null);
+      setForm(emptyEmpresa);
+    }
+  }, []);
+
+  useEffect(() => {
+    empresaIdRef.current = empresaId;
+  }, [empresaId]);
+
+  const applyMinhasPayload = useCallback(
+    (json, options = {}) => {
+      const list = Array.isArray(json?.empresas) ? json.empresas : [];
+      setEmpresasMinhas(list);
+      const ids = list.map((row) => row?.empresa?.id_empresa).filter(Boolean);
+      const fromForce = options.forceEmpresaId;
+      const atual =
+        options.empresaIdAtual !== undefined ? options.empresaIdAtual : empresaIdRef.current;
+      const selectedId =
+        (fromForce && ids.includes(fromForce) ? fromForce : null) ||
+        (atual && ids.includes(atual) ? atual : null) ||
+        ids[0] ||
+        null;
+      aplicarLinhaSelecionada(list, selectedId);
+    },
+    [aplicarLinhaSelecionada],
+  );
 
   useEffect(() => {
     let active = true;
     authApiFetchWithToken("/empresas/minhas").then((result) => {
       if (!active) return;
       if (result.ok) {
-        const primeira = Array.isArray(result.json?.empresas) ? result.json.empresas[0] : null;
-        const empresa = primeira?.empresa || null;
-        setMeuCargo(primeira?.papel || "");
-        if (empresa?.id_empresa) {
-          setEmpresaId(empresa.id_empresa);
-          setForm({
-            nome_fantasia: empresa.nome_fantasia || "",
-            razao_social: empresa.razao_social || "",
-            descricao: empresa.descricao || "",
-            instagram_empresa: empresa.instagram_empresa || "",
-            telefone_principal: empresa.telefone_principal || "",
-            segmento: empresa.segmento || "",
-            cnpj: empresa.cnpj || "",
-            email_principal: empresa.email_principal || "",
-            nome_contato_principal: empresa.nome_contato_principal || "",
-          });
+        applyMinhasPayload(result.json);
+        const vazia = !Array.isArray(result.json?.empresas) || result.json.empresas.length === 0;
+        if (vazia) {
+          setMsg(
+            "Nenhuma empresa vinculada a este usuário. Cadastre abaixo ou confira no banco se o vínculo em usuario_empresa está ativo (ativo = true).",
+          );
+          setMsgKind("err");
         }
+      } else {
+        setMsg(
+          result.networkError?.message ||
+            formatAuthError(result.json) ||
+            "Não foi possível carregar suas empresas.",
+        );
+        setMsgKind("err");
       }
       setLoading(false);
     });
     return () => {
       active = false;
     };
-  }, []);
+  }, [applyMinhasPayload]);
 
   useEffect(() => {
     if (!empresaId) return;
@@ -85,6 +140,44 @@ export default function EmpresaPage() {
       active = false;
     };
   }, [empresaId]);
+
+  function onSelectEmpresa(id) {
+    if (!id) return;
+    aplicarLinhaSelecionada(empresasMinhas, id);
+    setEmpresaEditOpen(false);
+    setCriandoNovaEmpresa(false);
+    setEmpresaDetalhesOpen(false);
+  }
+
+  function onNovaEmpresa() {
+    setCriandoNovaEmpresa(true);
+    setEmpresaEditOpen(true);
+    setForm({ ...emptyEmpresa });
+    setMsg("Preencha os dados da nova empresa. A empresa em que você trabalha no painel continua selecionada no menu acima até salvar a nova.");
+    setMsgKind("ok");
+  }
+
+  function onCancelarFormulario() {
+    setEmpresaEditOpen(false);
+    setCriandoNovaEmpresa(false);
+    if (empresaId) {
+      const row = empresaRowFromList(empresasMinhas, empresaId);
+      const empresa = row?.empresa;
+      if (empresa) {
+        setForm({
+          nome_fantasia: empresa.nome_fantasia || "",
+          razao_social: empresa.razao_social || "",
+          descricao: empresa.descricao || "",
+          instagram_empresa: empresa.instagram_empresa || "",
+          telefone_principal: empresa.telefone_principal || "",
+          segmento: empresa.segmento || "",
+          cnpj: empresa.cnpj || "",
+          email_principal: empresa.email_principal || "",
+          nome_contato_principal: empresa.nome_contato_principal || "",
+        });
+      }
+    }
+  }
 
   async function onSubmit(event) {
     event.preventDefault();
@@ -100,8 +193,9 @@ export default function EmpresaPage() {
       return;
     }
 
+    const postNova = criandoNovaEmpresa || !hasEmpresa;
     setSaving(true);
-    setMsg(hasEmpresa ? "Salvando empresa..." : "Criando empresa...");
+    setMsg(postNova ? "Criando empresa..." : "Salvando empresa...");
     setMsgKind("ok");
 
     const body = {
@@ -116,8 +210,8 @@ export default function EmpresaPage() {
       nome_contato_principal: form.nome_contato_principal.trim() || null,
     };
 
-    const path = hasEmpresa ? `/empresas/${empresaId}` : "/empresas";
-    const method = hasEmpresa ? "PATCH" : "POST";
+    const path = postNova ? "/empresas" : `/empresas/${empresaId}`;
+    const method = postNova ? "POST" : "PATCH";
 
     try {
       const result = await authApiFetchWithToken(path, {
@@ -134,12 +228,17 @@ export default function EmpresaPage() {
         return;
       }
       const empresa = result.json?.empresa;
-      if (empresa?.id_empresa) {
-        setEmpresaId(empresa.id_empresa);
-      }
-      setMsg(hasEmpresa ? "Empresa atualizada." : "Empresa criada com sucesso.");
+      setMsg(postNova ? "Empresa criada com sucesso." : "Empresa atualizada.");
       setMsgKind("ok");
       setEmpresaEditOpen(false);
+      setCriandoNovaEmpresa(false);
+
+      const minhas = await authApiFetchWithToken("/empresas/minhas");
+      if (minhas.ok) {
+        applyMinhasPayload(minhas.json, {
+          forceEmpresaId: postNova && empresa?.id_empresa ? empresa.id_empresa : undefined,
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -224,6 +323,25 @@ export default function EmpresaPage() {
     }
   }
 
+  const mostrarFormulario = !hasEmpresa || empresaEditOpen || criandoNovaEmpresa;
+
+  const dadosResumoCard = useMemo(() => {
+    if (criandoNovaEmpresa && empresaId) {
+      return empresaRowFromList(empresasMinhas, empresaId)?.empresa || null;
+    }
+    return {
+      nome_fantasia: form.nome_fantasia,
+      segmento: form.segmento,
+      email_principal: form.email_principal,
+      razao_social: form.razao_social,
+      cnpj: form.cnpj,
+      instagram_empresa: form.instagram_empresa,
+      telefone_principal: form.telefone_principal,
+      nome_contato_principal: form.nome_contato_principal,
+      descricao: form.descricao,
+    };
+  }, [criandoNovaEmpresa, empresasMinhas, empresaId, form]);
+
   if (loading) {
     return (
       <main className="rounded-xl border border-border bg-background p-6 text-muted-foreground">Carregando empresa...</main>
@@ -232,10 +350,44 @@ export default function EmpresaPage() {
 
   return (
     <main className="rounded-xl border border-border bg-background p-6">
-      <h1 className="text-xl font-semibold text-foreground">Empresa</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <h1 className="text-xl font-semibold text-foreground">Empresa</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          {empresasMinhas.length > 1 ? (
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <span className="text-muted-foreground">Trabalhar em:</span>
+              <select
+                value={empresaId || ""}
+                onChange={(e) => onSelectEmpresa(e.target.value)}
+                className="max-w-[220px] rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm text-foreground"
+              >
+                {empresasMinhas.map((row) => {
+                  const e = row?.empresa;
+                  if (!e?.id_empresa) return null;
+                  return (
+                    <option key={e.id_empresa} value={e.id_empresa}>
+                      {e.nome_fantasia || "Sem nome"}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          ) : null}
+          {podeAdicionarOutraEmpresa ? (
+            <button
+              type="button"
+              onClick={() => onNovaEmpresa()}
+              className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              Nova empresa
+            </button>
+          ) : null}
+        </div>
+      </div>
+
       {hasEmpresa ? (
         <p className="mt-1 text-xs text-muted-foreground">
-          Seu cargo: <strong>{meuCargo || "membro"}</strong>
+          Seu cargo nesta empresa: <strong>{meuCargo || "—"}</strong>
         </p>
       ) : null}
       {!canEditEmpresa && hasEmpresa ? (
@@ -253,10 +405,13 @@ export default function EmpresaPage() {
               className="flex-1 text-left"
             >
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Empresa</p>
-                <p className="text-base font-semibold text-foreground">{form.nome_fantasia || "Sem nome fantasia"}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Empresa ativa</p>
+                <p className="text-base font-semibold text-foreground">
+                  {dadosResumoCard?.nome_fantasia || "Sem nome fantasia"}
+                </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {form.segmento || "Sem segmento"} · {form.email_principal || "Sem e-mail principal"}
+                  {dadosResumoCard?.segmento || "Sem segmento"} ·{" "}
+                  {dadosResumoCard?.email_principal || "Sem e-mail principal"}
                 </p>
               </div>
               <div className="text-xs text-muted-foreground">{empresaDetalhesOpen ? "Ocultar detalhes" : "Ver detalhes"}</div>
@@ -264,7 +419,10 @@ export default function EmpresaPage() {
             {canEditEmpresa ? (
               <button
                 type="button"
-                onClick={() => setEmpresaEditOpen((v) => !v)}
+                onClick={() => {
+                  setCriandoNovaEmpresa(false);
+                  setEmpresaEditOpen(true);
+                }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm text-foreground hover:bg-muted"
                 title="Editar empresa"
                 aria-label="Editar empresa"
@@ -275,81 +433,88 @@ export default function EmpresaPage() {
           </div>
           {empresaDetalhesOpen ? (
             <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-border bg-surface p-3 md:grid-cols-2">
-              <p className="text-sm text-foreground"><strong>Razão social:</strong> {form.razao_social || "—"}</p>
-              <p className="text-sm text-foreground"><strong>CNPJ:</strong> {form.cnpj || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Instagram:</strong> {form.instagram_empresa || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Telefone:</strong> {form.telefone_principal || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Contato:</strong> {form.nome_contato_principal || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Descrição:</strong> {form.descricao || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Razão social:</strong> {dadosResumoCard?.razao_social || "—"}</p>
+              <p className="text-sm text-foreground"><strong>CNPJ:</strong> {dadosResumoCard?.cnpj || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Instagram:</strong> {dadosResumoCard?.instagram_empresa || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Telefone:</strong> {dadosResumoCard?.telefone_principal || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Contato:</strong> {dadosResumoCard?.nome_contato_principal || "—"}</p>
+              <p className="text-sm text-foreground"><strong>Descrição:</strong> {dadosResumoCard?.descricao || "—"}</p>
             </div>
           ) : null}
         </section>
       ) : null}
 
-      {!hasEmpresa || empresaEditOpen ? (
-      <form className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2" onSubmit={onSubmit}>
-        {Object.entries({
-          nome_fantasia: "Nome fantasia",
-          razao_social: "Razão social",
-          instagram_empresa: "Instagram",
-          telefone_principal: "Telefone principal",
-          segmento: "Segmento",
-          cnpj: "CNPJ",
-          email_principal: "E-mail principal",
-          nome_contato_principal: "Nome do contato principal",
-        }).map(([key, label]) => (
-          <div key={key}>
-            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor={key}>
-              {label}
+      {mostrarFormulario ? (
+        <form className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2" onSubmit={onSubmit}>
+          {criandoNovaEmpresa ? (
+            <p className="md:col-span-2 text-sm font-medium text-foreground">Nova empresa</p>
+          ) : null}
+          {Object.entries({
+            nome_fantasia: "Nome fantasia",
+            razao_social: "Razão social",
+            instagram_empresa: "Instagram",
+            telefone_principal: "Telefone principal",
+            segmento: "Segmento",
+            cnpj: "CNPJ",
+            email_principal: "E-mail principal",
+            nome_contato_principal: "Nome do contato principal",
+          }).map(([key, label]) => (
+            <div key={key}>
+              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor={key}>
+                {label}
+              </label>
+              <input
+                id={key}
+                type="text"
+                value={form[key]}
+                onChange={(e) => setForm((s) => ({ ...s, [key]: e.target.value }))}
+                disabled={!canEditEmpresa}
+                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
+              />
+            </div>
+          ))}
+
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="descricao">
+              Descrição
             </label>
-            <input
-              id={key}
-              type="text"
-              value={form[key]}
-              onChange={(e) => setForm((s) => ({ ...s, [key]: e.target.value }))}
+            <textarea
+              id="descricao"
+              value={form.descricao}
+              onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
               disabled={!canEditEmpresa}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
+              className="min-h-24 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
             />
           </div>
-        ))}
 
-        <div className="md:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="descricao">
-            Descrição
-          </label>
-          <textarea
-            id="descricao"
-            value={form.descricao}
-            onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
-            disabled={!canEditEmpresa}
-            className="min-h-24 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
-          />
-        </div>
-
-        <div className="md:col-span-2">
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={saving || !canEditEmpresa}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 ease-out will-change-transform disabled:opacity-60 enabled:hover:scale-[1.03] enabled:hover:shadow-md enabled:hover:shadow-accent/25 enabled:active:scale-[0.98]"
-            >
-              {saving ? "Salvando..." : hasEmpresa ? "Salvar empresa" : "Cadastrar empresa"}
-            </button>
-            {hasEmpresa ? (
+          <div className="md:col-span-2">
+            <div className="flex flex-wrap gap-2">
               <button
-                type="button"
-                onClick={() => setEmpresaEditOpen(false)}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                type="submit"
+                disabled={saving || !canEditEmpresa}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 ease-out will-change-transform disabled:opacity-60 enabled:hover:scale-[1.03] enabled:hover:shadow-md enabled:hover:shadow-accent/25 enabled:active:scale-[0.98]"
               >
-                Cancelar
+                {saving
+                  ? "Salvando..."
+                  : criandoNovaEmpresa || !hasEmpresa
+                    ? "Cadastrar empresa"
+                    : "Salvar empresa"}
               </button>
-            ) : null}
+              {hasEmpresa && (empresaEditOpen || criandoNovaEmpresa) ? (
+                <button
+                  type="button"
+                  onClick={() => onCancelarFormulario()}
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                >
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
       ) : null}
 
-      {hasEmpresa ? (
+      {hasEmpresa && !criandoNovaEmpresa ? (
         <section className="mt-6 rounded-xl border border-border bg-background p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-base font-semibold text-foreground">Membros da empresa</h2>
@@ -441,58 +606,58 @@ export default function EmpresaPage() {
         maxWidthClass="max-w-lg"
       >
         <>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Gere um convite com perfil de acesso e compartilhe o codigo com a pessoa.
-            </p>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">Cargo</label>
-                <select
-                  value={conviteCargo}
-                  onChange={(e) => setConviteCargo(e.target.value)}
-                  className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="membro">Membro</option>
-                  <option value="editor">Editor</option>
-                  <option value="administrador">Administrador</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">E-mail (opcional)</label>
-                <input
-                  value={conviteEmail}
-                  onChange={(e) => setConviteEmail(e.target.value)}
-                  placeholder="email@exemplo.com"
-                  className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
-                />
-              </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Gere um convite com perfil de acesso e compartilhe o codigo com a pessoa.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">Cargo</label>
+              <select
+                value={conviteCargo}
+                onChange={(e) => setConviteCargo(e.target.value)}
+                className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
+              >
+                <option value="membro">Membro</option>
+                <option value="editor">Editor</option>
+                <option value="administrador">Administrador</option>
+              </select>
             </div>
-            <div className="mt-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-foreground">E-mail (opcional)</label>
+              <input
+                value={conviteEmail}
+                onChange={(e) => setConviteEmail(e.target.value)}
+                placeholder="email@exemplo.com"
+                className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
+              />
+            </div>
+          </div>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => void onCreateConvite()}
+              disabled={creatingConvite}
+              className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
+            >
+              {creatingConvite ? "Gerando convite..." : "Gerar convite"}
+            </button>
+          </div>
+          {conviteCodigo ? (
+            <div className="mt-4 rounded-lg border border-border bg-background p-3">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Codigo do convite</p>
+              <p className="mt-1 font-mono text-lg font-semibold text-foreground">{conviteCodigo}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Expira em: {conviteExpiraEm ? new Date(conviteExpiraEm).toLocaleString("pt-BR") : "-"}
+              </p>
               <button
                 type="button"
-                onClick={() => void onCreateConvite()}
-                disabled={creatingConvite}
-                className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
+                onClick={() => void onCopyConvite()}
+                className="mt-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
               >
-                {creatingConvite ? "Gerando convite..." : "Gerar convite"}
+                Copiar codigo
               </button>
             </div>
-            {conviteCodigo ? (
-              <div className="mt-4 rounded-lg border border-border bg-background p-3">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Codigo do convite</p>
-                <p className="mt-1 font-mono text-lg font-semibold text-foreground">{conviteCodigo}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Expira em: {conviteExpiraEm ? new Date(conviteExpiraEm).toLocaleString("pt-BR") : "-"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => void onCopyConvite()}
-                  className="mt-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
-                >
-                  Copiar codigo
-                </button>
-              </div>
-            ) : null}
+          ) : null}
         </>
       </Modal>
 

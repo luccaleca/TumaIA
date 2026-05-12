@@ -1,12 +1,21 @@
 {
   "name": "tumaia-workspace",
   "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "testes"
+  ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
-    "dev:backend": "npm run dev --prefix backend",
-    "dev:frontend": "npm run dev --prefix frontend",
-    "check:replicate": "npm run check:replicate --prefix backend",
-    "test:replicate:smoke": "npm run test:replicate:smoke --prefix backend"
+    "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
+    "dev:backend": "npm run dev -w tumaia-backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "test": "node testes/run-backend.mjs",
+    "test:backend": "node testes/run-backend.mjs",
+    "test:frontend": "node testes/run-frontend.mjs",
+    "test:all": "node testes/run-backend.mjs && node testes/run-frontend.mjs",
+    "check:replicate": "npm run check:replicate -w tumaia-backend",
+    "test:replicate:smoke": "npm run test:replicate:smoke -w tumaia-backend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

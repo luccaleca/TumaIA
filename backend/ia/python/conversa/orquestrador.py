@@ -39,6 +39,7 @@ def responder_mensagem(
     vetor_store: Chroma,
     pergunta: str,
     history: list[dict] | None = None,
+    id_empresa: str | None = None,
 ) -> dict:
     """
     Responde à pergunta. Só preenche source_documents quando trechos do índice
@@ -46,6 +47,9 @@ def responder_mensagem(
 
     Perguntas sobre SQL/banco disparam leitura do schema Postgres (cache TTL),
     sem precisar atualizar arquivos em contextos/.
+
+    Se ``id_empresa`` for informado (UUID da empresa em sessão), lê ``public.empresa``
+    no Postgres e injeta o cadastro no prompt para o modelo usar dados reais.
     """
     q = pergunta.strip()
     historico = normalizar_historico(history)
@@ -84,6 +88,16 @@ def responder_mensagem(
     bloco_historico = formatar_historico_prompt(historico)
     bloco_fatos = bloco_fatos_identidade_para_prompt(historico, q)
 
+    bloco_empresa = ""
+    if id_empresa:
+        empresa_row, emp_err = schema_supabase.obter_empresa_cadastro_por_id(str(id_empresa).strip())
+        if empresa_row:
+            bloco_empresa = schema_supabase.formatar_empresa_cadastro_prompt(empresa_row)
+        elif emp_err:
+            bloco_empresa = (
+                "[AVISO: não foi possível carregar o cadastro da empresa em sessão]\n" + emp_err
+            )
+
     bloco_schema = ""
     if quer_pg:
         if schema_text:
@@ -108,6 +122,7 @@ def responder_mensagem(
                 "Você é o assistente TumaCore, amigável, em português.\n"
                 + f"{SEM_META_RESPOSTA}\n"
                 + f"{ESTILO_CONVERSA}\n"
+                + (f"{bloco_empresa}\n\n" if bloco_empresa else "")
                 + (f"{bloco_fatos}\n" if bloco_fatos else "")
                 + f"{SQL_SELECT_FOCUS}\n\n"
                 + f"{SCHEMA_INSTR_SQL}\n\n"
@@ -122,6 +137,7 @@ def responder_mensagem(
                 "Você é o assistente TumaCore, amigável, em português. "
                 + f"{SEM_META_RESPOSTA}\n"
                 + f"{ESTILO_CONVERSA}\n"
+                + (f"{bloco_empresa}\n\n" if bloco_empresa else "")
                 + (f"{bloco_fatos}\n" if bloco_fatos else "")
                 + (f"{bloco_historico}\n" if bloco_historico else "")
                 + "Responda à mensagem do usuário de forma natural. "
@@ -152,7 +168,12 @@ def responder_mensagem(
             + context
         )
 
-    prefixo = f"{bloco_fatos}\n\n" if bloco_fatos else ""
+    prefixo_parts: list[str] = []
+    if bloco_empresa:
+        prefixo_parts.append(bloco_empresa)
+    if bloco_fatos:
+        prefixo_parts.append(bloco_fatos)
+    prefixo = "\n\n---\n\n".join(prefixo_parts) + ("\n\n" if prefixo_parts else "")
     prompt_text = prefixo + PROMPT_RAG.format(context=context, question=q)
     msg = modelo.invoke(prompt_text)
     text = msg.content if hasattr(msg, "content") else str(msg)

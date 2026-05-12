@@ -1,61 +1,16 @@
 import { Router } from "express";
 import { randomUUID } from "crypto";
-import { z } from "zod";
+import {
+  loginBody,
+  patchMeBody,
+  registerBody,
+} from "../modules/auth/registerPayload.schema.js";
 import { env } from "../config.js";
 import { getSupabaseAdmin, getSupabaseAnon } from "../supabaseAdmin.js";
 import { requireUserJwt } from "../middleware/requireUserJwt.js";
+import { loadUsuarioParaMe } from "../modules/auth/usuarioMeService.js";
 
 const r = Router();
-
-/** Mesmo formato que o Supabase costuma guardar (evita falha de login por maiúsculas). */
-const emailNorm = z
-  .string()
-  .email()
-  .max(150)
-  .transform((s) => s.trim().toLowerCase());
-
-/**
- * Espaços no início/fim e variações Unicode comuns ao colar senha.
- * Cadastro e login usam a mesma regra — precisa bater com o que vai para o Supabase.
- */
-function normalizeSenhaInput(raw) {
-  if (typeof raw !== "string") return raw;
-  return raw.normalize("NFC").trim();
-}
-
-const senhaRegister = z.preprocess(
-  (v) => normalizeSenhaInput(v),
-  z.string().min(8).max(128),
-);
-
-const senhaLogin = z.preprocess(
-  (v) => normalizeSenhaInput(v),
-  z.string().min(1).max(128),
-);
-
-const registerBody = z.object({
-  nome: z.string().min(1).max(150),
-  email: emailNorm,
-  senha: senhaRegister,
-  telefone: z.string().max(20).optional().nullable(),
-});
-
-const loginBody = z.object({
-  email: emailNorm,
-  senha: senhaLogin,
-});
-
-/** Atualização parcial do perfil (PATCH /me). Pelo menos um campo. */
-const patchMeBody = z
-  .object({
-    nome: z.string().min(1).max(150).optional(),
-    telefone: z.union([z.string().max(20), z.null()]).optional(),
-    email: emailNorm.optional(),
-  })
-  .strict()
-  .refine((o) => Object.keys(o).length > 0, {
-    message: "Envie ao menos um campo: nome, telefone ou email",
-  });
 
 /**
  * Cadastro: cria usuário no Supabase Auth e linha em public.usuarios.
@@ -308,69 +263,12 @@ r.get("/me", requireUserJwt, async (req, res) => {
       return;
     }
 
-    const { data, error } = await db
-      .from("usuario")
-      .select("*")
-      .eq("auth_user_id", req.authUserId)
-      .maybeSingle();
-
-    if (error) {
-      res.status(500).json({ error: error.message });
+    const out = await loadUsuarioParaMe(db, req.authUserId);
+    if (!out.ok) {
+      res.status(out.status).json({ error: out.error });
       return;
     }
-
-    if (!data) {
-      const { data: authUserRes, error: authErr } = await db.auth.admin.getUserById(req.authUserId);
-      if (authErr || !authUserRes?.user) {
-        res.status(404).json({ error: "Perfil não encontrado para este usuário" });
-        return;
-      }
-
-      const authUser = authUserRes.user;
-      const nomeMeta =
-        typeof authUser.user_metadata?.nome === "string"
-          ? authUser.user_metadata.nome.trim()
-          : "";
-      const emailAuth = typeof authUser.email === "string" ? authUser.email.trim().toLowerCase() : "";
-      const fallbackNome = nomeMeta || (emailAuth ? emailAuth.split("@")[0] : "Usuário");
-
-      const { data: created, error: createErr } = await db
-        .from("usuario")
-        .insert({
-          id_usuario: randomUUID(),
-          auth_user_id: req.authUserId,
-          nome: fallbackNome,
-          email: emailAuth || null,
-          telefone: null,
-          ativo: true,
-        })
-        .select("*")
-        .maybeSingle();
-
-      if (createErr || !created) {
-        const msg = String(createErr?.message || "");
-        if (/duplicate|unique/i.test(msg)) {
-          const { data: retried, error: retryErr } = await db
-            .from("usuario")
-            .select("*")
-            .eq("auth_user_id", req.authUserId)
-            .maybeSingle();
-          if (retryErr || !retried) {
-            res.status(500).json({ error: retryErr?.message || "Falha ao recuperar perfil" });
-            return;
-          }
-          res.json({ usuario: retried });
-          return;
-        }
-        res.status(500).json({ error: createErr?.message || "Falha ao criar perfil" });
-        return;
-      }
-
-      res.json({ usuario: created });
-      return;
-    }
-
-    res.json({ usuario: data });
+    res.json({ usuario: out.usuario });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro interno";
     console.error("auth.me:", e);
