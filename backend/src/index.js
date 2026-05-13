@@ -2,6 +2,18 @@ import { createApp } from "./app.js";
 import { env } from "./config.js";
 
 const app = createApp();
+
+if (env.REPLICATE_API_TOKEN && !env.REPLICATE_ALLOW_BILLING) {
+  console.warn(
+    "[replicate] REPLICATE_API_TOKEN está definido, mas REPLICATE_ALLOW_BILLING não está ativo — nenhuma rota de imagem debitará até você definir REPLICATE_ALLOW_BILLING=true.",
+  );
+}
+if (env.REPLICATE_ALLOW_BILLING && env.REPLICATE_DAILY_SUCCESS_CAP === 0) {
+  console.warn(
+    "[replicate] REPLICATE_DAILY_SUCCESS_CAP=0 — sem teto diário de gerações com sucesso; monitore o painel da Replicate.",
+  );
+}
+
 const server = app.listen(env.PORT, () => {
   const baseUrl = `http://localhost:${env.PORT}`;
   console.log(`tumaia-backend ${baseUrl}`);

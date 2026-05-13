@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 
 const TIPOS = [
@@ -9,6 +9,94 @@ const TIPOS = [
   { value: "data_comemorativa", label: "Data comemorativa" },
   { value: "personalizado", label: "Personalizado" },
 ];
+
+/** Label + texto da dica (painel ao passar o mouse ou focar no ?) */
+const PROMOCAO_FIELD_ROWS = [
+  ["nome", "Nome", "Como chamar essa campanha? Ex.: Black Friday 2026, Semana do Cliente"],
+  ["produto", "Produto", "O que entra na oferta? Ex.: kit cafés especiais, assinatura anual"],
+  ["beneficio", "Benefício", "O que o cliente ganha? Ex.: 30% off, frete grátis, brinde"],
+  ["tipo", "Tipo", "Que tipo de ação é? Ex.: desconto %, leve 3 pague 2, cashback"],
+  ["detalhe", "Detalhe", "Algo importante para a IA saber? Ex.: só no app, só primeira compra"],
+  ["precoOferta", "Preço / oferta", "Valores ou condição? Ex.: de R$ 199 por R$ 149"],
+  ["validade", "Validade", "Até quando vale? Ex.: até 30/11, enquanto durar o estoque"],
+  ["onde", "Onde", "Onde vale a promoção? Ex.: site, loja física, marketplaces"],
+  ["publico", "Público", "Para quem é? Ex.: clientes VIP, novos cadastros, região Sul"],
+  ["cta", "CTA", "Chamada para ação? Ex.: compre agora, use o cupom X, saiba mais no link"],
+  ["restricoes", "Restrições", "Limites ou regras? Ex.: não cumulativo, máx. 2 unidades por CPF"],
+];
+
+const LANCAMENTO_FIELD_ROWS = [
+  ["nome", "Nome", "Como chamar o lançamento? Ex.: linha Verão 2026, app Tuma 2.0"],
+  ["oQue", "O que está sendo lançado", "O que é novo? Ex.: coleção cápsulas, plano Pro"],
+  ["problema", "Problema que resolve", "Qual dor resolve? Ex.: falta de tempo para postar"],
+  ["novidades", "O que há de novo", "Novidades em relação ao anterior? Ex.: checkout em 1 clique"],
+  ["diferencial", "Diferencial", "Por que escolher vocês? Ex.: único com garantia 90 dias"],
+  ["publico", "Público", "Quem é o público-alvo? Ex.: PMEs de beleza, baristas iniciantes"],
+  ["disponibilidade", "Disponibilidade", "Onde ou como compra? Ex.: pré-venda site, lojas parceiras"],
+  ["dataMomento", "Data / momento", "Quando acontece? Ex.: live 15/05 às 19h, pré-venda até domingo"],
+  ["tom", "Tom", "Tom de voz? Ex.: inspirador, técnico, descontraído"],
+  ["cta", "CTA", "O que pedir ao público? Ex.: cadastre-se na lista, reserve sua vaga"],
+  ["restricoes", "Restrições", "Avisos legais ou limites? Ex.: imagens meramente ilustrativas"],
+];
+
+const DATA_COMEMORATIVA_FIELD_ROWS = [
+  ["nome", "Nome / tema", "Título do conteúdo? Ex.: Natal em família, Dia das Mães 2026"],
+  ["ocasiao", "Ocasião", "Qual data ou celebração? Ex.: Páscoa, aniversário da marca"],
+  ["periodo", "Data / período", "Quando veicular? Ex.: 01–15/03, semana do Dia da Mulher"],
+  ["mensagem", "Mensagem central", "Qual mensagem principal? Ex.: gratidão, união, desconto especial"],
+  ["tom", "Tom", "Como falar? Ex.: emotivo, festivo, elegante"],
+  ["publico", "Público", "Para quem fala? Ex.: mães, jovens 18–25, B2B"],
+  ["conexaoMarca", "Conexão com a marca", "Como a marca entra na data? Ex.: produto como presente, causas"],
+  ["cta", "CTA", "O que pedir? Ex.: presenteie quem ama, aproveite o kit comemorativo"],
+  ["restricoes", "Restrições", "Cuidados? Ex.: sem menção a concorrentes, evitar termos religiosos"],
+];
+
+const HINT_FORM_TIPO =
+  "Promoção: ofertas e descontos. Lançamento: novidade ou produto novo. Data comemorativa: datas sazonais. Personalizado: campos livres que você define.";
+const HINT_FORM_NOME =
+  "Nome interno no painel (opcional). Ex.: Campanha Instagram março, Black Friday loja centro.";
+const HINT_FORM_DESCRICAO =
+  "Notas para a equipe (opcional). Ex.: foco em stories, não mencionar preço cheio, usar tom descontraído.";
+const HINT_PERSONAL_TITULO =
+  "Título deste bloco de informações livres. Ex.: Tom de voz, Persona do cliente, Restrições legais.";
+const HINT_PERSONAL_CAMPO_NOME =
+  "Nome do dado que a IA deve considerar. Ex.: Instagram da marca, Proibido mencionar, Público-alvo.";
+const HINT_PERSONAL_CAMPO_VALOR =
+  "Conteúdo desse dado. Ex.: @minha_loja, concorrentes X e Y, mulheres 25–40 anos na Grande SP.";
+
+/** Inputs/select do formulário (alinhado ao painel: superfície, borda, foco accent). */
+const CTX_CTRL_CLASS =
+  "w-full rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] focus:border-accent/55 focus:ring-2 focus:ring-accent/15 dark:focus:ring-accent/25";
+
+/** Label + ajuda: botão discreto e painel de dica no estilo do site (hover ou foco no botão). */
+function LabelWithHint({ id, label, hint }) {
+  const hintId = useId();
+  return (
+    <div className="mb-1.5 flex flex-wrap items-center gap-2">
+      <label htmlFor={id} className="text-sm font-medium text-foreground">
+        {label}
+      </label>
+      <div className="group/hint relative inline-flex shrink-0 align-middle">
+        <button
+          type="button"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-surface text-xs font-bold text-muted-foreground shadow-sm outline-none transition-[color,background-color,border-color,box-shadow] hover:border-accent/45 hover:bg-accent-muted hover:text-accent dark:hover:text-emerald-200 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
+          aria-describedby={hintId}
+          aria-label={`Ajuda: ${label}`}
+        >
+          ?
+        </button>
+        <div
+          id={hintId}
+          role="tooltip"
+          className="pointer-events-none invisible absolute left-0 top-full z-[70] mt-2 w-[min(22rem,calc(100vw-2.5rem))] overflow-hidden rounded-xl border border-border bg-surface text-left opacity-0 shadow-lg ring-1 ring-black/5 transition-[opacity,visibility] duration-200 dark:bg-surface dark:ring-white/10 group-hover/hint:visible group-hover/hint:opacity-100 group-hover/hint:pointer-events-auto group-focus-within/hint:visible group-focus-within/hint:opacity-100 group-focus-within/hint:pointer-events-auto"
+        >
+          <div className="h-1 bg-gradient-to-r from-accent/70 via-accent to-accent/80" aria-hidden />
+          <p className="px-3.5 py-3 text-sm leading-relaxed text-foreground">{hint}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function emptyForm() {
   return {
@@ -167,6 +255,17 @@ export default function ContextosPage() {
     document.addEventListener("click", handleOutsideClick);
     return () => document.removeEventListener("click", handleOutsideClick);
   }, [selectedId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || loading || !contextos.length) return;
+    const wanted = new URL(window.location.href).searchParams.get("contexto")?.trim();
+    if (!wanted) return;
+    if (!contextos.some((c) => c.id === wanted)) return;
+    setSelectedId(wanted);
+    requestAnimationFrame(() => {
+      document.getElementById(`ctx-row-${wanted}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, [loading, contextos]);
 
   function selectedDetailLines(item) {
     if (!item) return [];
@@ -414,11 +513,12 @@ export default function ContextosPage() {
         <form className="mt-4 grid grid-cols-1 gap-4" onSubmit={saveContexto}>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Tipo</label>
+              <LabelWithHint id="ctx-form-tipo" label="Tipo" hint={HINT_FORM_TIPO} />
               <select
+                id="ctx-form-tipo"
                 value={form.tipo}
                 onChange={(e) => setForm((s) => ({ ...s, tipo: e.target.value }))}
-                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
+                className={`${CTX_CTRL_CLASS} cursor-pointer`}
               >
                 {TIPOS.map((tipo) => (
                   <option key={tipo.value} value={tipo.value}>
@@ -428,108 +528,89 @@ export default function ContextosPage() {
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-foreground">Nome (opcional)</label>
+              <LabelWithHint id="ctx-form-nome" label="Nome (opcional)" hint={HINT_FORM_NOME} />
               <input
+                id="ctx-form-nome"
                 value={form.nome}
                 onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
-                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
+                className={CTX_CTRL_CLASS}
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-foreground">Descrição (opcional)</label>
+            <LabelWithHint id="ctx-form-descricao" label="Descrição (opcional)" hint={HINT_FORM_DESCRICAO} />
             <input
+              id="ctx-form-descricao"
               value={form.descricao}
               onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
-              className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
+              className={CTX_CTRL_CLASS}
             />
           </div>
 
           {form.tipo === "promocao" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {[
-                ["nome", "Nome"],
-                ["produto", "Produto"],
-                ["beneficio", "Benefício"],
-                ["tipo", "Tipo"],
-                ["detalhe", "Detalhe"],
-                ["precoOferta", "Preço / oferta"],
-                ["validade", "Validade"],
-                ["onde", "Onde"],
-                ["publico", "Público"],
-                ["cta", "CTA"],
-                ["restricoes", "Restrições"],
-              ].map(([field, label]) => (
-                <div key={field}>
-                  <label className="mb-1 block text-sm font-medium text-foreground">{label}</label>
-                  <input
-                    value={form.promocao[field]}
-                    onChange={(e) => updateTipoFields("promocao", field, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
-                  />
-                </div>
-              ))}
+              {PROMOCAO_FIELD_ROWS.map(([field, label, hint]) => {
+                const fid = `ctx-promo-${field}`;
+                return (
+                  <div key={field}>
+                    <LabelWithHint id={fid} label={label} hint={hint} />
+                    <input
+                      id={fid}
+                      value={form.promocao[field]}
+                      onChange={(e) => updateTipoFields("promocao", field, e.target.value)}
+                      className={CTX_CTRL_CLASS}
+                    />
+                  </div>
+                );
+              })}
             </div>
           ) : null}
 
           {form.tipo === "lancamento" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {[
-                ["nome", "Nome"],
-                ["oQue", "O que está sendo lançado"],
-                ["problema", "Problema que resolve"],
-                ["novidades", "O que há de novo"],
-                ["diferencial", "Diferencial"],
-                ["publico", "Público"],
-                ["disponibilidade", "Disponibilidade"],
-                ["dataMomento", "Data / momento"],
-                ["tom", "Tom"],
-                ["cta", "CTA"],
-                ["restricoes", "Restrições"],
-              ].map(([field, label]) => (
-                <div key={field}>
-                  <label className="mb-1 block text-sm font-medium text-foreground">{label}</label>
-                  <input
-                    value={form.lancamento[field]}
-                    onChange={(e) => updateTipoFields("lancamento", field, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
-                  />
-                </div>
-              ))}
+              {LANCAMENTO_FIELD_ROWS.map(([field, label, hint]) => {
+                const fid = `ctx-lanc-${field}`;
+                return (
+                  <div key={field}>
+                    <LabelWithHint id={fid} label={label} hint={hint} />
+                    <input
+                      id={fid}
+                      value={form.lancamento[field]}
+                      onChange={(e) => updateTipoFields("lancamento", field, e.target.value)}
+                      className={CTX_CTRL_CLASS}
+                    />
+                  </div>
+                );
+              })}
             </div>
           ) : null}
 
           {form.tipo === "data_comemorativa" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {[
-                ["nome", "Nome / tema"],
-                ["ocasiao", "Ocasião"],
-                ["periodo", "Data / período"],
-                ["mensagem", "Mensagem central"],
-                ["tom", "Tom"],
-                ["publico", "Público"],
-                ["conexaoMarca", "Conexão com a marca"],
-                ["cta", "CTA"],
-                ["restricoes", "Restrições"],
-              ].map(([field, label]) => (
-                <div key={field}>
-                  <label className="mb-1 block text-sm font-medium text-foreground">{label}</label>
-                  <input
-                    value={form.dataComemorativa[field]}
-                    onChange={(e) => updateTipoFields("dataComemorativa", field, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
-                  />
-                </div>
-              ))}
+              {DATA_COMEMORATIVA_FIELD_ROWS.map(([field, label, hint]) => {
+                const fid = `ctx-data-${field}`;
+                return (
+                  <div key={field}>
+                    <LabelWithHint id={fid} label={label} hint={hint} />
+                    <input
+                      id={fid}
+                      value={form.dataComemorativa[field]}
+                      onChange={(e) => updateTipoFields("dataComemorativa", field, e.target.value)}
+                      className={CTX_CTRL_CLASS}
+                    />
+                  </div>
+                );
+              })}
             </div>
           ) : null}
 
           {form.tipo === "personalizado" ? (
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-foreground">Nome deste contexto</label>
+                <LabelWithHint id="ctx-personal-titulo" label="Nome deste contexto" hint={HINT_PERSONAL_TITULO} />
                 <input
+                  id="ctx-personal-titulo"
                   value={form.personalizado.titulo}
                   onChange={(e) =>
                     setForm((s) => ({
@@ -537,26 +618,36 @@ export default function ContextosPage() {
                       personalizado: { ...s.personalizado, titulo: e.target.value },
                     }))
                   }
-                  className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
+                  className={CTX_CTRL_CLASS}
                 />
               </div>
               {(form.personalizado.campos || []).map((campo, idx) => (
-                <div key={`campo-${idx}`} className="rounded-lg border border-border p-3">
+                <div key={`campo-${idx}`} className="rounded-xl border border-border bg-surface-elevated/50 p-3 dark:bg-surface-elevated/30">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-foreground">Nome do campo</label>
+                      <LabelWithHint
+                        id={`ctx-personal-${idx}-nome`}
+                        label="Nome do campo"
+                        hint={HINT_PERSONAL_CAMPO_NOME}
+                      />
                       <input
+                        id={`ctx-personal-${idx}-nome`}
                         value={campo.nome}
                         onChange={(e) => updatePersonalizadoCampo(idx, "nome", e.target.value)}
-                        className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
+                        className={CTX_CTRL_CLASS}
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-sm font-medium text-foreground">Valor</label>
+                      <LabelWithHint
+                        id={`ctx-personal-${idx}-valor`}
+                        label="Valor"
+                        hint={HINT_PERSONAL_CAMPO_VALOR}
+                      />
                       <input
+                        id={`ctx-personal-${idx}-valor`}
                         value={campo.valor}
                         onChange={(e) => updatePersonalizadoCampo(idx, "valor", e.target.value)}
-                        className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground"
+                        className={CTX_CTRL_CLASS}
                       />
                     </div>
                   </div>
@@ -613,6 +704,7 @@ export default function ContextosPage() {
             {contextos.map((item) => (
               <li
                 key={item.id}
+                id={item.id ? `ctx-row-${item.id}` : undefined}
                 className="rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted"
               >
                 <button

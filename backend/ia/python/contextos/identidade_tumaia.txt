@@ -40,9 +40,9 @@ Arquitetura funcional resumida:
 
 Stack de IA prevista no projeto:
 - MVP/Beta: Ollama (Llama) para interpretação/raciocínio.
-- Versão final: Gemini 2.5 Pro para interpretação (visão + raciocínio).
+- Versão final: Llama (Ollama ou serviço compatível) para interpretação e texto.
 - Imagem/edição: Photoroom.
-- Versão otimizada: Gemini 2.5 Pro + FLUX/SDXL + Photoroom.
+- Versão otimizada: Llama + FLUX/SDXL + Photoroom.
 
 Diretrizes para respostas:
 - Quando a pergunta for sobre o projeto, priorize estes fatos.

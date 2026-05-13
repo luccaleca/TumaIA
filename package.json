@@ -14,6 +14,7 @@
     "test:backend": "node testes/run-backend.mjs",
     "test:frontend": "node testes/run-frontend.mjs",
     "test:all": "node testes/run-backend.mjs && node testes/run-frontend.mjs",
+    "test:post-supplement": "node --test testes/backend/post-supplement-flow.test.js",
     "check:replicate": "npm run check:replicate -w tumaia-backend",
     "test:replicate:smoke": "npm run test:replicate:smoke -w tumaia-backend"
   },

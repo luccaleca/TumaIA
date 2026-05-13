@@ -124,7 +124,7 @@ CREATE TABLE public.contexto_empresa (
     criado_por_usuario_id uuid NOT NULL,
     nome character varying NOT NULL,
     descricao text NOT NULL,
-    origem character varying NOT NULL,
+    origem character varying NOT NULL DEFAULT 'manual'::character varying,
     schema_json jsonb NOT NULL,
     dados_json jsonb NOT NULL,
     ativo boolean NOT NULL,

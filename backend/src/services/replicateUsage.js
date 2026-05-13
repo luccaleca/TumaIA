@@ -1,6 +1,7 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { env } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../ia/usage");
@@ -43,6 +44,22 @@ function pruneWindow(timestamps, windowMs) {
  * @param {"post" | "ping"} kind
  * @param {number} maxPerMinute 0 = desliga o limite
  */
+/**
+ * Fail-closed: sem isto em `true`, rotas que debitam na Replicate retornam 503
+ * mesmo com token válido.
+ */
+export function assertReplicateBillingAllowed() {
+  if (!env.REPLICATE_ALLOW_BILLING) {
+    return {
+      ok: false,
+      status: 503,
+      error:
+        "Geração de imagens (Replicate) desligada. Defina REPLICATE_ALLOW_BILLING=true no backend apenas quando quiser permitir débito de créditos. Ajuste REPLICATE_DAILY_SUCCESS_CAP conforme o orçamento (0 = ilimitado).",
+    };
+  }
+  return { ok: true };
+}
+
 export function assertReplicateBurst(kind, maxPerMinute) {
   if (!maxPerMinute || maxPerMinute <= 0) {
     return { ok: true };
@@ -118,6 +135,16 @@ export async function recordReplicateImageOutcome(row) {
 
   usage[key] = day;
   await writeUsage(usage);
+
+  if (row.ok) {
+    const cap = env.REPLICATE_DAILY_SUCCESS_CAP;
+    const extra =
+      cap > 0
+        ? ` successes_today=${day.successes} daily_cap=${cap} remaining=${Math.max(0, cap - day.successes)}`
+        : " successes_today=" + day.successes + " (sem teto diário: REPLICATE_DAILY_SUCCESS_CAP=0)";
+    console.warn(`[replicate][billing] generation ok model=${row.model ?? ""} prediction_id=${row.prediction_id ?? ""}${extra}`);
+  }
+
   return day;
 }
 

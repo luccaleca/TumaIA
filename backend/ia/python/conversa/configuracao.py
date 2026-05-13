@@ -59,15 +59,13 @@ def garantir_ambiente_llm(root_dir: Path) -> None:
         return (os.getenv(chave) or "").strip()
 
     or_key = _prioridade("OPENROUTER_API_KEY")
-    google_api_key = _prioridade("GOOGLE_API_KEY")
-    gemini_api_key = _prioridade("GEMINI_API_KEY")
-    google = google_api_key or gemini_api_key
-    ollama_chat = _prioridade("OLLAMA_CHAT_MODEL")
+    ollama_chat = (_prioridade("OLLAMA_CHAT_MODEL") or _prioridade("LLAMA_MODEL")).strip()
 
-    if not or_key and not google and not ollama_chat:
+    if not or_key and not ollama_chat:
         raise RuntimeError(
-            "Defina OLLAMA_CHAT_MODEL (Ollama local), OPENROUTER_API_KEY, "
-            "ou GOOGLE_API_KEY / GEMINI_API_KEY em config/.env."
+            "Defina OLLAMA_CHAT_MODEL ou LLAMA_MODEL (Ollama local, ex. llama3.2:3b) "
+            "ou OPENROUTER_API_KEY em backend/.env."
         )
-    if google:
-        os.environ["GOOGLE_API_KEY"] = google
+    # Mesmo modelo que o Node usa para JSON: o worker Python lê OLLAMA_CHAT_MODEL.
+    if ollama_chat and not (os.getenv("OLLAMA_CHAT_MODEL") or "").strip():
+        os.environ["OLLAMA_CHAT_MODEL"] = ollama_chat

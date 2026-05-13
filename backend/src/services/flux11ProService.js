@@ -3,29 +3,32 @@ import { recordReplicateImageOutcome } from "./replicateUsage.js";
 import { z } from "zod";
 
 const OWNER = "black-forest-labs";
-const MODEL = "flux-schnell";
+const MODEL = "flux-1.1-pro";
 const MODEL_PATH = `${OWNER}/${MODEL}`;
 
-/** Uma geração por vez evita rajadas paralelas (duplo clique / n8n) somando custo. */
-let generationChain = Promise.resolve();
-
-export const fluxSchnellInputSchema = z.object({
-  prompt: z.string().min(3).max(2000),
-  num_outputs: z.coerce.number().int().min(1).max(4).optional().default(1),
+/** Mesmos aspectos usados no Schnell; Pro aceita "custom" com width/height — não usamos aqui. */
+export const flux11ProInputSchema = z.object({
+  prompt: z.string().min(3).max(4000),
+  /** URL http(s) acessível pela Replicate (ex.: signed URL do Supabase). */
+  image_prompt: z.string().url(),
   aspect_ratio: z
     .enum(["1:1", "16:9", "21:9", "2:3", "3:2", "4:5", "5:4", "9:16", "9:21"])
     .optional()
     .default("1:1"),
   output_format: z.enum(["webp", "jpg", "png"]).optional().default("png"),
-  output_quality: z.coerce.number().int().min(1).max(100).optional().default(80),
+  output_quality: z.coerce.number().int().min(1).max(100).optional().default(85),
+  safety_tolerance: z.coerce.number().int().min(1).max(6).optional().default(2),
+  prompt_upsampling: z.coerce.boolean().optional().default(false),
 });
 
+let generationChain = Promise.resolve();
+
 /**
- * Uma geração FLUX Schnell; registra sucesso/falha em `replicateUsage`.
+ * FLUX 1.1 Pro com `image_prompt` (Redux) — referência visual + texto.
  * @param {string} token
- * @param {z.infer<typeof fluxSchnellInputSchema>} data — já validado
+ * @param {z.infer<typeof flux11ProInputSchema>} data
  */
-export async function executeFluxSchnell(token, data) {
+export async function executeFlux11Pro(token, data) {
   const prev = generationChain;
   let release;
   generationChain = new Promise((resolve) => {
@@ -33,7 +36,7 @@ export async function executeFluxSchnell(token, data) {
   });
   await prev.catch(() => {});
   try {
-    return await executeFluxSchnellOnce(token, data);
+    return await executeFlux11ProOnce(token, data);
   } finally {
     release();
   }
@@ -41,19 +44,21 @@ export async function executeFluxSchnell(token, data) {
 
 /**
  * @param {string} token
- * @param {z.infer<typeof fluxSchnellInputSchema>} data
+ * @param {z.infer<typeof flux11ProInputSchema>} data
  */
-async function executeFluxSchnellOnce(token, data) {
+async function executeFlux11ProOnce(token, data) {
   try {
     const version = await getModelLatestVersionId(token, OWNER, MODEL);
     const created = await createPrediction(token, {
       version,
       input: {
         prompt: data.prompt,
-        num_outputs: data.num_outputs,
+        image_prompt: data.image_prompt,
         aspect_ratio: data.aspect_ratio,
         output_format: data.output_format,
         output_quality: data.output_quality,
+        safety_tolerance: data.safety_tolerance,
+        prompt_upsampling: data.prompt_upsampling,
       },
     });
     const getUrl = created?.urls?.get;
@@ -66,7 +71,7 @@ async function executeFluxSchnellOnce(token, data) {
       });
       return { ok: false, status: 502, error: "Replicate não retornou urls.get", raw: created };
     }
-    const final = await waitForPrediction(token, getUrl);
+    const final = await waitForPrediction(token, getUrl, { maxWaitMs: 180_000, stepMs: 2000 });
     await recordReplicateImageOutcome({
       ok: true,
       status: 200,
@@ -96,7 +101,7 @@ async function executeFluxSchnellOnce(token, data) {
     return {
       ok: false,
       status: httpStatus,
-      error: err instanceof Error ? err.message : "Erro ao gerar imagem",
+      error: err instanceof Error ? err.message : "Erro ao gerar imagem (FLUX 1.1 Pro)",
     };
   }
 }

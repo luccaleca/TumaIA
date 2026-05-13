@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, "../../ia/usage");
-const DATA_FILE = path.join(DATA_DIR, "gemini-text-usage.json");
+const DATA_FILE = path.join(DATA_DIR, "llama-text-usage.json");
 
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
@@ -26,7 +26,7 @@ async function writeUsage(data) {
   await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
 }
 
-export async function recordGeminiTextCall({
+export async function recordLlamaTextCall({
   ok,
   status,
   inputTokens = 0,
@@ -85,7 +85,7 @@ export async function recordGeminiTextCall({
   return day;
 }
 
-export async function getGeminiTextUsage() {
+export async function getLlamaTextUsage() {
   const usage = await readUsage();
   const key = todayKey();
   const today = usage[key] || {
@@ -107,4 +107,3 @@ export async function getGeminiTextUsage() {
     history: usage,
   };
 }
-

@@ -153,6 +153,24 @@ export default function MidiasPage() {
     return () => clearTimeout(tid);
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || loading || !midias.length) return;
+    const wanted = new URL(window.location.href).searchParams.get("midia")?.trim();
+    if (!wanted) return;
+    const m = midias.find((x) => x.id_midia === wanted);
+    if (!m) return;
+    const targetPasta = m.id_pasta ?? "";
+    const pastaNorm = pastaAtual || "";
+    if (String(targetPasta || "") !== String(pastaNorm || "")) {
+      setPastaAtual(targetPasta || "");
+      return;
+    }
+    requestAnimationFrame(() => {
+      document.getElementById(`midia-tile-${wanted}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      if (m.url_arquivo) setPreviewMidia(m);
+    });
+  }, [loading, midias, pastaAtual]);
+
   async function onCreateFolder(nameIn) {
     if (!empresaId || !canManageMidias) return;
     const nome = String(nameIn || "").trim();
@@ -734,6 +752,7 @@ export default function MidiasPage() {
             {midiasDaPastaAtual.map((m) => (
               <article
                 key={m.id_midia}
+                id={m.id_midia ? `midia-tile-${m.id_midia}` : undefined}
                 onDragStart={() => setDragging({ type: "midia", id: m.id_midia })}
                 draggable={canManageMidias}
                 onDragEnd={() => setDragging(null)}

@@ -7,7 +7,7 @@
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
     "test": "node ../testes/run-backend.mjs",
-    "test:gemini:text": "node ia/tests/check-gemini-text.mjs",
+    "test:llama:text": "node ia/tests/check-llama-text.mjs",
     "check:replicate": "node scripts/check-replicate.mjs",
     "test:replicate:smoke": "node scripts/run-replicate-smoke.mjs"
   },

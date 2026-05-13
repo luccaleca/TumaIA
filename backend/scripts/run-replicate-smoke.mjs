@@ -15,6 +15,14 @@ if (!TOKEN) {
   process.exit(1);
 }
 
+const smokeOk = (process.env.REPLICATE_CONFIRM_SMOKE || "").trim().toLowerCase();
+if (!["1", "true", "yes", "on"].includes(smokeOk)) {
+  console.error(
+    "Este script cria uma prediction paga na Replicate. Para confirmar, defina no .env:\n  REPLICATE_CONFIRM_SMOKE=1",
+  );
+  process.exit(1);
+}
+
 const BASE = "https://api.replicate.com/v1";
 const headers = {
   Authorization: `Bearer ${TOKEN}`,
@@ -101,3 +109,4 @@ if (Array.isArray(out)) {
 }
 
 console.error("\nOK — pode abrir a URL acima no navegador. Isso debita uso na sua conta Replicate.");
+console.error("Nota: a API do backend só gera imagem com REPLICATE_ALLOW_BILLING=true; este script chama a Replicate direto.");

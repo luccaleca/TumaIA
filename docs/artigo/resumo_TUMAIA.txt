@@ -72,8 +72,7 @@ Resumo em 1 frase:
 Recebe pedido -> checa limite -> cria texto e imagem -> conta gasto -> entrega -> mostra consumo do dia.
 
 
-Gemini 2.5 Flash (principal de texto): escreve a legenda, descrição e hashtags do post.
-Groq (Llama 3.3) (reserva de texto): entra só se o Gemini falhar, para não parar o fluxo.
+Llama (principal de texto, via Ollama ou OpenRouter): escreve a legenda, descrição e hashtags do post.
 Remove.bg (principal de recorte): remove o fundo da foto do produto quando precisar.
 Photoroom API (reserva de imagem/recorte): substitui Remove.bg ou ajuda na parte visual se houver falha.
 FLUX (fal.ai) (principal de geração de cenário): cria o fundo/cenário novo da arte final.

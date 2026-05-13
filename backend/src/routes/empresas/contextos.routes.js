@@ -104,7 +104,6 @@ export function registerContextosRoutes(r) {
           criado_por_usuario_id: req.usuario.id_usuario,
           nome: payload.nome || `${resolved.nomeTipoContexto} ${new Date().toLocaleDateString("pt-BR")}`,
           descricao: payload.descricao,
-          origem: "manual",
           schema_json: {
             tipo: payload.tipo,
             versao: 1,

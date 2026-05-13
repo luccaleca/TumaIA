@@ -5,11 +5,25 @@ import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { requireUsuario } from "../middleware/requireUsuario.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { runChatSerialized } from "../services/chatPythonWorker.js";
-import { DELIVERY_UI_ACTIONS, shouldOfferDeliveryButtons } from "../services/chatDeliveryUi.js";
+import { shouldOfferDeliveryButtons } from "../services/chatDeliveryUi.js";
+import { executeFlux11Pro, flux11ProInputSchema } from "../services/flux11ProService.js";
 import { executeFluxSchnell, fluxSchnellInputSchema } from "../services/fluxSchnellService.js";
-import { assertReplicateBurst, assertReplicateDailySuccessCap } from "../services/replicateUsage.js";
+import {
+  FLUX_IMAGE_PROMPT_MAX,
+  buildFluxImagePrompt,
+  buildImagePreviewContextMeta,
+  loadContextosEmpresaAtivos,
+  loadEmpresaResumoParaImagem,
+} from "../services/imagePreviewPrompt.js";
+import { REFERENCE_MIDIA_MAX, resolveReferenceMidiasForReplicate } from "../services/referenceMidiaUrls.js";
+import { generatePostContextProposal } from "../services/postContextProposalService.js";
+import { assertReplicateBillingAllowed, assertReplicateBurst, assertReplicateDailySuccessCap } from "../services/replicateUsage.js";
 
 const r = Router();
+
+const CONFIRM_IMAGE_UI = [
+  { id: "confirm_generate_image", label: "Confirmar e gerar prévia da imagem (Replicate / créditos)" },
+];
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(4000),
@@ -65,11 +79,39 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
     }
     const answer = String(result.result || "");
     const source_documents = Array.isArray(result.source_documents) ? result.source_documents : [];
-    const ui_actions = shouldOfferDeliveryButtons(parsed.data.question) ? DELIVERY_UI_ACTIONS : undefined;
+
+    let post_supplement;
+    let ui_actions;
+    if (shouldOfferDeliveryButtons(parsed.data.question) && parsed.data.id_empresa) {
+      const db = getSupabaseAdmin();
+      const llamaPostContextOk = Boolean(env.LLAMA_BASE_URL?.trim() || env.LLAMA_MODEL?.trim());
+      if (db && llamaPostContextOk) {
+        try {
+          const historyForProposal = [
+            ...(parsed.data.history || []),
+            { role: "user", content: parsed.data.question },
+          ];
+          const out = await generatePostContextProposal({
+            history: historyForProposal,
+            idEmpresa: parsed.data.id_empresa,
+            db,
+          });
+          post_supplement = {
+            confirmation_message: out.confirmation_message,
+            links: out.links,
+            post_context_proposal: out.post_context_proposal,
+          };
+          ui_actions = CONFIRM_IMAGE_UI;
+        } catch (e) {
+          console.warn("[ia/chat] post_supplement omitido:", e instanceof Error ? e.message : e);
+        }
+      }
+    }
+
     res.json({
       answer,
       source_documents,
-      ...(ui_actions ? { ui_actions } : {}),
+      ...(post_supplement ? { post_supplement, ui_actions } : {}),
     });
   } catch (err) {
     res.status(500).json({
@@ -87,9 +129,30 @@ const imagePreviewSchema = z.object({
       }),
     )
     .min(1)
-    .max(30),
-  id_empresa: z.string().uuid().optional(),
+    .max(36),
+  /** Obrigatório: contextos e cadastro vêm desta empresa (vínculo validado). */
+  id_empresa: z.string().uuid(),
   aspect_ratio: fluxSchnellInputSchema.shape.aspect_ratio.optional(),
+  /** Preenchido pelo painel após o passo "Confirmar contexto" (alinha imagem ao que foi combinado). */
+  post_context_proposal: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * Mídias de imagem do acervo (UUID) para referência visual na Replicate.
+   * A primeira vira `image_prompt` no FLUX 1.1 Pro (composição); a segunda entra como texto no prompt.
+   */
+  reference_midia_ids: z.array(z.string().uuid()).max(3).optional(),
+});
+
+const postContextProposalBodySchema = z.object({
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().trim().min(1).max(8000),
+      }),
+    )
+    .min(1)
+    .max(36),
+  id_empresa: z.string().uuid(),
 });
 
 function normalizeFluxOutputUrls(output) {
@@ -99,17 +162,50 @@ function normalizeFluxOutputUrls(output) {
   return [];
 }
 
-function buildImagePromptFromHistory(history) {
-  const tail = history.slice(-10);
-  const block = tail
-    .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${String(m.content).slice(0, 700)}`)
-    .join("\n")
-    .slice(0, 1700);
-  return `Professional marketing key visual for social media (single image). Brazilian Portuguese brand context. Clean composition, high quality, avoid unreadable small text overlays.\n\nConversation context:\n${block}`;
-}
+/**
+ * Llama (API OpenAI-compatível) + Supabase: mensagem de confirmação do tipo de post alinhada a `contexto_empresa` e referências de `midia`.
+ */
+r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res) => {
+  const parsed = postContextProposalBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+
+  try {
+    const out = await generatePostContextProposal({
+      history: parsed.data.history,
+      idEmpresa: parsed.data.id_empresa,
+      db,
+    });
+    res.json({
+      confirmation_message: out.confirmation_message,
+      links: out.links,
+      post_context_proposal: out.post_context_proposal,
+      meta: out._meta,
+      ui_actions: CONFIRM_IMAGE_UI,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao montar confirmação de contexto";
+    const status = err?.status && Number(err.status) >= 400 && Number(err.status) < 600 ? Number(err.status) : 500;
+    res.status(status).json({ error: msg });
+  }
+});
 
 /**
- * Prévia FLUX autenticada (JWT). Mesmos limites de rajada/dia que `/internal/replicate/flux-schnell`.
+ * Prévia FLUX autenticada (JWT). Exige `id_empresa`, carrega `contexto_empresa` ativo + resumo de `empresa` no Supabase e injeta no prompt (além do `history`). Exige `REPLICATE_ALLOW_BILLING=true` e token; mesmos limites que `/internal/replicate/flux-schnell`.
  */
 r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
   const parsed = imagePreviewSchema.safeParse(req.body);
@@ -124,7 +220,13 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     return;
   }
 
-  const dailyCap = env.REPLICATE_DAILY_SUCCESS_CAP ?? 0;
+  const billing = assertReplicateBillingAllowed();
+  if (!billing.ok) {
+    res.status(billing.status).json({ error: billing.error });
+    return;
+  }
+
+  const dailyCap = env.REPLICATE_DAILY_SUCCESS_CAP;
   const capCheck = await assertReplicateDailySuccessCap(dailyCap);
   if (!capCheck.ok) {
     res.status(429).json({
@@ -136,7 +238,75 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     return;
   }
 
-  const postBurstLimit = env.REPLICATE_BURST_PER_MINUTE ?? 15;
+  const token = env.REPLICATE_API_TOKEN;
+  if (!token) {
+    res.status(503).json({ error: "Geração de imagem não configurada no servidor (REPLICATE_API_TOKEN)." });
+    return;
+  }
+
+  const idEmpresa = parsed.data.id_empresa;
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+
+  let empresaRow;
+  let contextoRows;
+  try {
+    [empresaRow, contextoRows] = await Promise.all([
+      loadEmpresaResumoParaImagem(db, idEmpresa),
+      loadContextosEmpresaAtivos(db, idEmpresa),
+    ]);
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Erro ao carregar contextos da empresa",
+    });
+    return;
+  }
+
+  let prompt = buildFluxImagePrompt({
+    history: parsed.data.history,
+    empresaRow,
+    contextoRows,
+    postContextProposal: parsed.data.post_context_proposal,
+  });
+
+  const refIds = [...new Set((parsed.data.reference_midia_ids || []).map((x) => String(x).trim()))].slice(
+    0,
+    REFERENCE_MIDIA_MAX,
+  );
+  let referenceMeta = null;
+  /** @type {string | null} */
+  let primaryRefUrl = null;
+
+  if (refIds.length) {
+    try {
+      const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds);
+      primaryRefUrl = resolved.primaryUrl;
+      if (primaryRefUrl) {
+        if (resolved.auxiliaryReferenceText) {
+          const add = `\n\n=== Mídias de referência adicionais (acervo — composição textual) ===\n${resolved.auxiliaryReferenceText}`;
+          prompt = (prompt + add).slice(0, FLUX_IMAGE_PROMPT_MAX);
+        }
+        referenceMeta = {
+          mode: "flux-1.1-pro-reference",
+          reference_midia_ids: resolved.usedIds,
+        };
+      }
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Referência de mídia inválida",
+      });
+      return;
+    }
+  }
+
+  if (env.IMAGE_PREVIEW_LOG_PROMPT) {
+    console.info("[ia/image-preview] prompt length=", prompt.length, "\n", prompt);
+  }
+
+  const postBurstLimit = env.REPLICATE_BURST_PER_MINUTE;
   const burst = assertReplicateBurst("post", postBurstLimit);
   if (!burst.ok) {
     res
@@ -146,33 +316,43 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     return;
   }
 
-  const token = env.REPLICATE_API_TOKEN;
-  if (!token) {
-    res.status(503).json({ error: "Geração de imagem não configurada no servidor (REPLICATE_API_TOKEN)." });
-    return;
+  const aspect = parsed.data.aspect_ratio ?? "1:1";
+  let out;
+
+  if (primaryRefUrl) {
+    const fluxProInput = flux11ProInputSchema.parse({
+      prompt,
+      image_prompt: primaryRefUrl,
+      aspect_ratio: aspect,
+      output_format: "png",
+      output_quality: 85,
+    });
+    out = await executeFlux11Pro(token, fluxProInput);
+  } else {
+    const fluxInput = fluxSchnellInputSchema.parse({
+      prompt,
+      aspect_ratio: aspect,
+      num_outputs: 1,
+      output_format: "png",
+      output_quality: 80,
+    });
+    out = await executeFluxSchnell(token, fluxInput);
   }
 
-  const prompt = buildImagePromptFromHistory(parsed.data.history);
-  const fluxInput = fluxSchnellInputSchema.parse({
-    prompt,
-    aspect_ratio: parsed.data.aspect_ratio,
-    num_outputs: 1,
-    output_format: "png",
-    output_quality: 80,
-  });
-
-  const out = await executeFluxSchnell(token, fluxInput);
   if (!out.ok) {
     res.status(out.status || 500).json({ error: out.error || "Falha na geração", raw: out.raw });
     return;
   }
 
   const image_urls = normalizeFluxOutputUrls(out.output);
+  const contexto_geracao = buildImagePreviewContextMeta(idEmpresa, empresaRow, contextoRows);
   res.json({
     prediction_id: out.prediction_id,
     status: out.status,
     model: out.model,
     image_urls,
+    contexto_geracao,
+    ...(referenceMeta ? { image_generation: referenceMeta } : {}),
   });
 });
 

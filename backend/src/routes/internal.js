@@ -3,10 +3,12 @@ import { z } from "zod";
 import { env } from "../config.js";
 import { requireInternalSecret } from "../middleware/internalAuth.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
-import { getGeminiTextUsage, recordGeminiTextCall } from "../services/geminiUsage.js";
+import { getLlamaTextUsage, recordLlamaTextCall } from "../services/llamaUsage.js";
+import { llamaChatCompletionJson } from "../services/llamaOpenAiClient.js";
 import { getReplicateAccount } from "../services/replicateClient.js";
 import { executeFluxSchnell, fluxSchnellInputSchema } from "../services/fluxSchnellService.js";
 import {
+  assertReplicateBillingAllowed,
   assertReplicateBurst,
   assertReplicateDailySuccessCap,
   getReplicateImageUsage,
@@ -46,61 +48,11 @@ const gerarConteudoBody = z.object({
   limiteHashtags: z.coerce.number().int().min(1).max(30).optional(),
 });
 
-async function gerarTextoGemini(prompt) {
-  const apiKey = env.GEMINI_API_KEY || env.GOOGLE_AI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Configure GEMINI_API_KEY (ou GOOGLE_AI_API_KEY)");
+async function gerarTextoLlamaJson(prompt) {
+  if (!(env.LLAMA_BASE_URL?.trim() || env.LLAMA_MODEL?.trim())) {
+    throw new Error("Configure LLAMA_BASE_URL e/ou LLAMA_MODEL (API OpenAI-compatível, ex. Ollama).");
   }
-
-  const model = "gemini-2.5-flash";
-  const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
-    `?key=${encodeURIComponent(apiKey)}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.8,
-        responseMimeType: "application/json",
-      },
-    }),
-  });
-
-  const payload = await response.json();
-  if (!response.ok) {
-    const detail = payload?.error?.message || `Falha HTTP ${response.status}`;
-    throw new Error(detail);
-  }
-
-  const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error("Resposta vazia do Gemini");
-
-  const usageMetadata = payload?.usageMetadata || {};
-  const usage = {
-    inputTokens: Number(usageMetadata.promptTokenCount || 0),
-    outputTokens: Number(usageMetadata.candidatesTokenCount || 0),
-    totalTokens: Number(usageMetadata.totalTokenCount || 0),
-  };
-  const resolvedModel = payload?.modelVersion || model;
-
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch (error) {
-    const parseError = new Error("Gemini retornou JSON inválido");
-    parseError.geminiUsage = usage;
-    parseError.geminiModel = resolvedModel;
-    throw parseError;
-  }
-
-  return {
-    parsed,
-    usage,
-    model: resolvedModel,
-  };
+  return llamaChatCompletionJson(prompt, { temperature: 0.8 });
 }
 
 /**
@@ -135,18 +87,18 @@ Regras:
 5) "hashtags": array com até ${limiteHashtags} hashtags, sem espaços e iniciando com #.
 `;
 
-    const result = await gerarTextoGemini(prompt);
+    const result = await gerarTextoLlamaJson(prompt);
     const normalized = {
       copy: String(result?.parsed?.copy || "").trim(),
       descricao: String(result?.parsed?.descricao || "").trim(),
       hashtags: Array.isArray(result?.parsed?.hashtags)
         ? result.parsed.hashtags.map((h) => String(h).trim()).filter(Boolean).slice(0, limiteHashtags)
         : [],
-      model: result?.model || "gemini-2.5-flash",
+      model: result?.model || env.LLAMA_MODEL || "llama3.2:3b",
     };
 
     if (!normalized.copy || !normalized.descricao) {
-      await recordGeminiTextCall({
+      await recordLlamaTextCall({
         ok: false,
         status: 502,
         inputTokens: result?.usage?.inputTokens,
@@ -154,11 +106,11 @@ Regras:
         totalTokens: result?.usage?.totalTokens,
         model: normalized.model,
       });
-      res.status(502).json({ error: "Resposta incompleta do Gemini", raw: result?.parsed });
+      res.status(502).json({ error: "Resposta incompleta do modelo", raw: result?.parsed });
       return;
     }
 
-    await recordGeminiTextCall({
+    await recordLlamaTextCall({
       ok: true,
       status: 200,
       inputTokens: result?.usage?.inputTokens,
@@ -169,13 +121,13 @@ Regras:
     res.json(normalized);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro ao gerar conteúdo";
-    await recordGeminiTextCall({
+    await recordLlamaTextCall({
       ok: false,
       status: 500,
-      inputTokens: err?.geminiUsage?.inputTokens,
-      outputTokens: err?.geminiUsage?.outputTokens,
-      totalTokens: err?.geminiUsage?.totalTokens,
-      model: err?.geminiModel,
+      inputTokens: err?.llmUsage?.inputTokens,
+      outputTokens: err?.llmUsage?.outputTokens,
+      totalTokens: err?.llmUsage?.totalTokens,
+      model: err?.llmModel,
     });
     res.status(500).json({ error: message });
   }
@@ -183,7 +135,7 @@ Regras:
 
 /** Confirma `REPLICATE_API_TOKEN` (mesma ideia do `npm run check:replicate`). */
 r.get("/replicate/ping", async (_req, res) => {
-  const pingLimit = env.REPLICATE_PING_PER_MINUTE ?? 30;
+  const pingLimit = env.REPLICATE_PING_PER_MINUTE;
   const burst = assertReplicateBurst("ping", pingLimit);
   if (!burst.ok) {
     res
@@ -217,7 +169,13 @@ r.get("/replicate/ping", async (_req, res) => {
  * Chame com header `x-internal-secret` (igual às demais rotas `/internal/*`).
  */
 r.post("/replicate/flux-schnell", async (req, res) => {
-  const dailyCap = env.REPLICATE_DAILY_SUCCESS_CAP ?? 0;
+  const billing = assertReplicateBillingAllowed();
+  if (!billing.ok) {
+    res.status(billing.status).json({ error: billing.error });
+    return;
+  }
+
+  const dailyCap = env.REPLICATE_DAILY_SUCCESS_CAP;
   const capCheck = await assertReplicateDailySuccessCap(dailyCap);
   if (!capCheck.ok) {
     res.status(429).json({
@@ -228,7 +186,7 @@ r.post("/replicate/flux-schnell", async (req, res) => {
     return;
   }
 
-  const postBurstLimit = env.REPLICATE_BURST_PER_MINUTE ?? 15;
+  const postBurstLimit = env.REPLICATE_BURST_PER_MINUTE;
   const burst = assertReplicateBurst("post", postBurstLimit);
   if (!burst.ok) {
     res
@@ -266,11 +224,11 @@ r.post("/replicate/flux-schnell", async (req, res) => {
   });
 });
 
-/** Uso local de gerações Replicate (arquivo em `ia/usage/`, como o Gemini). */
+/** Uso local de gerações Replicate (arquivo em `ia/usage/`). */
 r.get("/replicate/usage", async (_req, res) => {
   try {
     const usage = await getReplicateImageUsage();
-    const cap = Number(env.REPLICATE_DAILY_SUCCESS_CAP ?? 0);
+    const cap = env.REPLICATE_DAILY_SUCCESS_CAP;
     const successes = Number(usage?.today?.successes || 0);
     res.json({
       ...usage,
@@ -287,11 +245,11 @@ r.get("/replicate/usage", async (_req, res) => {
   }
 });
 
-/** Contador local de uso diário do Gemini texto (rota interna para observabilidade). */
+/** Contador local de uso diário de texto (Llama / API compatível) para observabilidade. */
 r.get("/social-content/usage", async (_req, res) => {
   try {
-    const usage = await getGeminiTextUsage();
-    const budget = Number(env.GEMINI_DAILY_TOKEN_BUDGET || 0);
+    const usage = await getLlamaTextUsage();
+    const budget = Number(env.LLAMA_DAILY_TOKEN_BUDGET || 0);
     const used = Number(usage?.today?.total_tokens || 0);
     const remaining = budget > 0 ? Math.max(0, budget - used) : null;
     res.json({
@@ -304,7 +262,7 @@ r.get("/social-content/usage", async (_req, res) => {
     });
   } catch (err) {
     res.status(500).json({
-      error: err instanceof Error ? err.message : "Erro ao ler uso Gemini",
+      error: err instanceof Error ? err.message : "Erro ao ler uso de texto (Llama)",
     });
   }
 });

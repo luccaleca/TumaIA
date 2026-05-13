@@ -5,7 +5,7 @@ Esta pasta contém a base técnica de IA (RAG + roteamento de provedores) portad
 - Índice vetorial com Chroma em `conversa/indice_vetorial.py`
 - Recuperação de contexto em `conversa/recuperacao_contexto.py`
 - Orquestração de prompt + histórico em `conversa/orquestrador.py`
-- Provedores LLM/embeddings (Ollama/OpenRouter/Gemini) em `conversa/provedores.py`
+- Provedores LLM/embeddings (Ollama / OpenRouter) em `conversa/provedores.py`
 - Leitura de schema SQL no Postgres em `schema_supabase.py`
 
 ## Importante
@@ -36,7 +36,7 @@ Defina no `.env` (raiz do projeto ou `config/.env`):
 
 ```env
 OLLAMA_HOST=http://127.0.0.1:11434
-OLLAMA_CHAT_MODEL=llama3.2
+OLLAMA_CHAT_MODEL=llama3.2:3b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 ```
 

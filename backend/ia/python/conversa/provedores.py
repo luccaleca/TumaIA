@@ -1,31 +1,11 @@
-"""LLM de chat e função de embedding (Ollama, OpenRouter, Gemini)."""
+"""LLM de chat e função de embedding (Ollama / OpenRouter)."""
 
 import os
 import threading
 
-from langchain_core.embeddings import Embeddings
 from langchain_community.embeddings import OllamaEmbeddings
-from langchain_google_genai import (
-    ChatGoogleGenerativeAI,
-    GoogleGenerativeAIEmbeddings,
-)
+from langchain_core.embeddings import Embeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-
-
-class _SerialGoogleEmbeddings(Embeddings):
-    """gemini-embedding-2-preview com vários textos na mesma chamada devolve um só vetor."""
-
-    def __init__(self, inner: GoogleGenerativeAIEmbeddings) -> None:
-        self._inner = inner
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        out: list[list[float]] = []
-        for t in texts:
-            out.extend(self._inner.embed_documents([t]))
-        return out
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._inner.embed_query(text)
 
 
 def ollama_host() -> str:
@@ -55,8 +35,9 @@ def openrouter_base_url() -> str:
 
 def embedding_function() -> Embeddings:
     """
-    RAG: Google (padrão se houver chave), OpenRouter, ou Ollama (local).
-    TUMACORE_USE_OLLAMA_EMBEDDINGS=true força embeddings no Ollama mesmo com Google.
+    RAG: Ollama (local) ou OpenRouter.
+    TUMACORE_USE_OLLAMA_EMBEDDINGS=true força embeddings no Ollama mesmo com OpenRouter.
+    Com OLLAMA_CHAT_MODEL definido, embeddings locais (nomic) alinham ao stack Llama.
     Trocar de provedor de embedding exige apagar backend/indice_contextos e subir a API de novo.
     """
     host = ollama_host()
@@ -75,8 +56,13 @@ def embedding_function() -> Embeddings:
             base_url=host,
         )
 
+    if ollama_chat:
+        return OllamaEmbeddings(
+            model="nomic-embed-text",
+            base_url=host,
+        )
+
     or_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
-    google_key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
     force_or = (os.getenv("TUMACORE_USE_OPENROUTER_EMBEDDINGS") or "").strip().lower() in (
         "1",
         "true",
@@ -86,7 +72,7 @@ def embedding_function() -> Embeddings:
     base = openrouter_base_url()
     hdr = openrouter_headers()
 
-    if or_key and (force_or or not google_key):
+    if or_key and force_or:
         model = (os.getenv("OPENROUTER_EMBEDDING_MODEL") or "openai/text-embedding-3-small").strip()
         return OpenAIEmbeddings(
             model=model,
@@ -94,18 +80,17 @@ def embedding_function() -> Embeddings:
             base_url=base,
             default_headers=hdr,
         )
-    if google_key:
-        return _SerialGoogleEmbeddings(
-            GoogleGenerativeAIEmbeddings(model="gemini-embedding-2-preview")
+    if or_key:
+        model = (os.getenv("OPENROUTER_EMBEDDING_MODEL") or "openai/text-embedding-3-small").strip()
+        return OpenAIEmbeddings(
+            model=model,
+            api_key=or_key,
+            base_url=base,
+            default_headers=hdr,
         )
-    if ollama_chat:
-        return OllamaEmbeddings(
-            model="nomic-embed-text",
-            base_url=host,
-        )
-    raise RuntimeError(
-        "Defina GOOGLE_API_KEY (embeddings Gemini), OPENROUTER_API_KEY, "
-        "ou OLLAMA_CHAT_MODEL / OLLAMA_EMBEDDING_MODEL (Ollama local) — ver .env.example."
+    return OllamaEmbeddings(
+        model=ollama_embed or "nomic-embed-text",
+        base_url=host,
     )
 
 
@@ -145,7 +130,7 @@ def _criar_llm(prefer_sql_model: bool = False):
 
     or_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
     if or_key:
-        model = (os.getenv("OPENROUTER_CHAT_MODEL") or "google/gemma-2-9b-it:free").strip()
+        model = (os.getenv("OPENROUTER_CHAT_MODEL") or "meta-llama/llama-3.3-70b-instruct:free").strip()
         if prefer_sql_model:
             model = (os.getenv("OPENROUTER_SQL_CHAT_MODEL") or model).strip()
         temp_raw = (os.getenv("OPENROUTER_TEMPERATURE") or "0.4").strip().replace(",", ".")
@@ -162,27 +147,8 @@ def _criar_llm(prefer_sql_model: bool = False):
             max_tokens=max_tokens,
             default_headers=openrouter_headers(),
         )
-    google_key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
-    if not google_key:
-        raise RuntimeError(
-            "Defina OLLAMA_CHAT_MODEL (Ollama local), OPENROUTER_API_KEY, "
-            "ou GOOGLE_API_KEY / GEMINI_API_KEY em config/.env."
-        )
-    gemini_model = (
-        (os.getenv("GEMINI_CHAT_MODEL") or os.getenv("GOOGLE_CHAT_MODEL") or "gemini-2.5-flash")
-        .strip()
-    )
-    if prefer_sql_model:
-        gemini_model = (os.getenv("GEMINI_SQL_CHAT_MODEL") or gemini_model).strip()
-    temp_raw = (os.getenv("GEMINI_TEMPERATURE") or "0.4").strip().replace(",", ".")
-    try:
-        gemini_temp = float(temp_raw)
-    except ValueError:
-        gemini_temp = 0.4
-    return ChatGoogleGenerativeAI(
-        model=gemini_model,
-        temperature=gemini_temp,
-        max_output_tokens=max_chat_output_tokens(),
+    raise RuntimeError(
+        "Defina OLLAMA_CHAT_MODEL (Ollama local, ex. llama3.2:3b) ou OPENROUTER_API_KEY em config/.env."
     )
 
 
@@ -202,7 +168,6 @@ def llm_para_contexto(sql_context: bool = False):
     Variáveis opcionais:
     - OLLAMA_SQL_CHAT_MODEL
     - OPENROUTER_SQL_CHAT_MODEL
-    - GEMINI_SQL_CHAT_MODEL
     """
     global _llm_singleton, _llm_sql_singleton
     if not sql_context:
