@@ -7,6 +7,11 @@ API interna para o N8N (e depois o painel Next.js) acessar:
 - contexto de marca no Supabase
 - (geração com IA pode ser integrada depois neste backend ou no orquestrador)
 
+**Painel (JWT, usuário logado)** — `src/routes/ia.js`:
+
+- `POST /ia/chat` — worker Python (texto). Em pedidos que parecem post/campanha social, a resposta pode incluir `ui_actions` (dois botões no front: legenda primeiro vs. imagem primeiro).
+- `POST /ia/image-preview` — prévia com `black-forest-labs/flux-schnell` a partir do `history` (JSON: `history`, opcional `id_empresa`, `aspect_ratio`). Mesmos limites de rajada/dia da Replicate que a rota interna abaixo.
+
 As rotas em `/internal/*` são protegidas por `INTERNAL_WEBHOOK_SECRET`.
 
 - `GET /internal/replicate/ping` — valida `REPLICATE_API_TOKEN` com a API da Replicate.

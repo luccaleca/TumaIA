@@ -19,20 +19,44 @@ function fromApiMensagem(m) {
     meta && typeof meta === "object" && Array.isArray(meta.sources)
       ? meta.sources.filter((s) => typeof s === "string" && s.trim())
       : [];
+  const ui_actions =
+    meta && typeof meta === "object" && Array.isArray(meta.ui_actions)
+      ? meta.ui_actions.filter(
+          (a) =>
+            a &&
+            typeof a === "object" &&
+            typeof a.id === "string" &&
+            a.id.trim() &&
+            typeof a.label === "string" &&
+            a.label.trim(),
+        )
+      : [];
+  const image_urls =
+    meta && typeof meta === "object" && Array.isArray(meta.image_urls)
+      ? meta.image_urls.filter((u) => typeof u === "string" && u.trim())
+      : [];
   return {
     id: typeof m.id_mensagem === "string" ? m.id_mensagem : crypto.randomUUID(),
     role: papel,
     content: conteudo,
     sources,
+    ui_actions: ui_actions.length ? ui_actions : undefined,
+    image_urls: image_urls.length ? image_urls : undefined,
   };
 }
 
 function toApiMensagens(messages) {
-  return messages.map((m) => ({
-    papel: m.role,
-    conteudo: m.content,
-    metadados_json: m.sources && m.sources.length ? { sources: m.sources } : null,
-  }));
+  return messages.map((m) => {
+    const meta = {};
+    if (m.sources && m.sources.length) meta.sources = m.sources;
+    if (m.ui_actions && m.ui_actions.length) meta.ui_actions = m.ui_actions;
+    if (m.image_urls && m.image_urls.length) meta.image_urls = m.image_urls;
+    return {
+      papel: m.role,
+      conteudo: m.content,
+      metadados_json: Object.keys(meta).length ? meta : null,
+    };
+  });
 }
 
 /** Bolha “digitando…” estilo WhatsApp (lado da IA). */
@@ -95,6 +119,13 @@ export default function PainelChatPage() {
   const errTimer = useRef(null);
   const conversaDropdownRef = useRef(null);
   const [conversaMenuOpen, setConversaMenuOpen] = useState(false);
+  /** `assistantMessageId:actionId` enquanto processa clique em botão de entrega */
+  const [actionBusy, setActionBusy] = useState(null);
+  const messagesRef = useRef(messages);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   function showErr(text) {
     if (errTimer.current) clearTimeout(errTimer.current);
@@ -244,6 +275,126 @@ export default function PainelChatPage() {
     [loadListaConversas],
   );
 
+  const runDeliveryAction = useCallback(
+    async function runDeliveryActionFn(fromAssistantMessageId, actionId) {
+      const idChat = conversaId;
+      if (!idChat || !empresaId || sending || actionBusy) return;
+      const userLine =
+        actionId === "text_first"
+          ? "Gerar legenda e hashtags primeiro."
+          : actionId === "image_first"
+            ? "Gerar prévia da imagem primeiro."
+            : "";
+      if (!userLine) return;
+
+      setActionBusy(`${fromAssistantMessageId}:${actionId}`);
+      const prev = messagesRef.current;
+      const cleared = prev.map((m) =>
+        m.id === fromAssistantMessageId ? { ...m, ui_actions: undefined } : m,
+      );
+      const userMsg = { id: crypto.randomUUID(), role: "user", content: userLine };
+      const msgsWithUser = [...cleared, userMsg];
+      setMessages(msgsWithUser);
+
+      const okSync1 = await syncMensagens(idChat, msgsWithUser);
+      if (!okSync1) {
+        setActionBusy(null);
+        return;
+      }
+
+      const historyTail = msgsWithUser.slice(0, -1).map((m) => ({ role: m.role, content: m.content }));
+
+      try {
+        if (actionId === "text_first") {
+          const question =
+            "O usuário escolheu priorizar TEXTO (legenda e hashtags) para o pedido de post/campanha já discutido no histórico. Entregue: (1) legenda pronta para redes sociais em português do Brasil; (2) bloco de hashtags sugeridas (cada uma com #); (3) opcionalmente uma linha de CTA. Seja direto. Não descreva geração de imagem nem layout.";
+          const result = await authApiFetchWithToken("/ia/chat", {
+            method: "POST",
+            body: JSON.stringify({
+              question,
+              history: historyTail,
+              id_empresa: empresaId,
+            }),
+            timeoutMs: 90000,
+          });
+          if (!result.ok || result.networkError) {
+            const msg =
+              result.networkError?.message ||
+              result.json?.error ||
+              "Não foi possível gerar a legenda agora.";
+            const errText = typeof msg === "string" ? msg : formatAuthError(result.json) || "Erro desconhecido.";
+            const errBubble = { id: crypto.randomUUID(), role: "assistant", content: String(errText), sources: [] };
+            const comErro = [...msgsWithUser, errBubble];
+            setMessages(comErro);
+            await syncMensagens(idChat, comErro);
+            return;
+          }
+          const answer = String(result.json?.answer ?? "Sem resposta no momento.");
+          const rawSources = result.json?.source_documents;
+          const sources = Array.isArray(rawSources)
+            ? [
+                ...new Set(
+                  rawSources
+                    .map((d) => (d && typeof d.source === "string" ? d.source.trim() : ""))
+                    .filter(Boolean),
+                ),
+              ]
+            : [];
+          const assistantFollowUp = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: answer,
+            sources,
+          };
+          const finalMsgs = [...msgsWithUser, assistantFollowUp];
+          setMessages(finalMsgs);
+          await syncMensagens(idChat, finalMsgs);
+          return;
+        }
+
+        if (actionId === "image_first") {
+          const result = await authApiFetchWithToken("/ia/image-preview", {
+            method: "POST",
+            body: JSON.stringify({
+              history: msgsWithUser.map((m) => ({ role: m.role, content: m.content })),
+              id_empresa: empresaId,
+            }),
+            timeoutMs: 120000,
+          });
+          if (!result.ok || result.networkError) {
+            const msg =
+              result.networkError?.message ||
+              result.json?.error ||
+              "Não foi possível gerar a prévia agora.";
+            const errText = typeof msg === "string" ? msg : formatAuthError(result.json) || "Erro desconhecido.";
+            const errBubble = { id: crypto.randomUUID(), role: "assistant", content: String(errText), sources: [] };
+            const comErro = [...msgsWithUser, errBubble];
+            setMessages(comErro);
+            await syncMensagens(idChat, comErro);
+            return;
+          }
+          const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
+          const assistantFollowUp = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content:
+              urls.length > 0
+                ? "Prévia gerada (o link da imagem pode expirar na hospedagem da Replicate):"
+                : "A geração retornou sem URLs de imagem.",
+            sources: [],
+            image_urls: urls.length ? urls : undefined,
+          };
+          const finalMsgs = [...msgsWithUser, assistantFollowUp];
+          setMessages(finalMsgs);
+          await syncMensagens(idChat, finalMsgs);
+        }
+      } finally {
+        setActionBusy(null);
+      }
+    },
+    [conversaId, empresaId, sending, actionBusy, syncMensagens],
+  );
+
   const onSubmit = useCallback(
     async function onSubmit(event) {
       event.preventDefault();
@@ -328,11 +479,24 @@ export default function PainelChatPage() {
           ]
         : [];
 
+      const rawUi = result.json?.ui_actions;
+      const ui_actions = Array.isArray(rawUi)
+        ? rawUi.filter(
+            (a) =>
+              a &&
+              typeof a === "object" &&
+              typeof a.id === "string" &&
+              a.id.trim() &&
+              typeof a.label === "string" &&
+              a.label.trim(),
+          )
+        : [];
       const assistantMsg = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: answer,
         sources,
+        ui_actions: ui_actions.length ? ui_actions : undefined,
       };
       const finalMsgs = [...msgsComUsuario, assistantMsg];
       setMessages(finalMsgs);
@@ -343,7 +507,7 @@ export default function PainelChatPage() {
   );
 
   function onNewChat() {
-    if (sending || deleting || loadingConversa) return;
+    if (sending || deleting || loadingConversa || actionBusy) return;
     setConversaId(null);
     setMessages([]);
     try {
@@ -507,7 +671,7 @@ export default function PainelChatPage() {
                 aria-haspopup="listbox"
                 aria-expanded={conversaMenuOpen}
                 aria-label="Selecionar conversa"
-                disabled={loadingList || loadingConversa || sending}
+                disabled={loadingList || loadingConversa || sending || !!actionBusy}
                 onClick={() => setConversaMenuOpen((o) => !o)}
               >
                 <span className="min-w-0 truncate">{conversaTriggerLabel}</span>
@@ -621,6 +785,8 @@ export default function PainelChatPage() {
                 }
 
                 const hasSources = Array.isArray(message.sources) && message.sources.length > 0;
+                const hasUiActions = Array.isArray(message.ui_actions) && message.ui_actions.length > 0;
+                const hasImages = Array.isArray(message.image_urls) && message.image_urls.length > 0;
 
                 return (
                   <article key={message.id} className="flex items-start gap-3">
@@ -635,6 +801,36 @@ export default function PainelChatPage() {
                     </div>
                     <div className="min-w-0 max-w-[85%] rounded-2xl border border-border bg-background px-4 py-3 text-foreground shadow-sm md:max-w-[70%]">
                       <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{message.content}</p>
+                      {hasImages ? (
+                        <div className="mt-3 space-y-2">
+                          {message.image_urls.map((url) => (
+                            <a
+                              key={url}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block overflow-hidden rounded-xl border border-border bg-muted/30"
+                            >
+                              <img src={url} alt="Prévia gerada" className="max-h-72 w-full object-contain" />
+                            </a>
+                          ))}
+                        </div>
+                      ) : null}
+                      {hasUiActions ? (
+                        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                          {message.ui_actions.map((a) => (
+                            <button
+                              key={a.id}
+                              type="button"
+                              disabled={!!actionBusy || sending}
+                              onClick={() => void runDeliveryAction(message.id, a.id)}
+                              className="rounded-xl border border-accent/40 bg-accent-muted px-3 py-2.5 text-left text-sm font-semibold text-[#009638] shadow-sm transition-[transform,box-shadow] hover:border-accent/60 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-100"
+                            >
+                              {a.label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       {hasSources ? (
                         <details className="mt-2 rounded-lg border border-border bg-background px-2 py-1.5 text-xs">
                           <summary className="cursor-pointer text-muted-foreground">Mais detalhes ({message.sources.length})</summary>

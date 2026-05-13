@@ -233,7 +233,7 @@ export default function ContaPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 ease-out will-change-transform disabled:opacity-60 enabled:hover:scale-[1.03] enabled:hover:shadow-md enabled:hover:shadow-accent/25 enabled:active:scale-[0.98]"
               >
                 {saving ? "Salvando…" : "Salvar alterações"}
               </button>
