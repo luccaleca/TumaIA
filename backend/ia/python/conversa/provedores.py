@@ -38,7 +38,7 @@ def embedding_function() -> Embeddings:
     RAG: Ollama (local) ou OpenRouter.
     TUMACORE_USE_OLLAMA_EMBEDDINGS=true força embeddings no Ollama mesmo com OpenRouter.
     Com OLLAMA_CHAT_MODEL definido, embeddings locais (nomic) alinham ao stack Llama.
-    Trocar de provedor de embedding exige apagar backend/indice_contextos e subir a API de novo.
+    Trocar de provedor de embedding exige apagar `backend/ia/indice_contextos` **ou** deixar o servidor recriar o índice quando a **dimensão** do vetor mudar (ex.: 3072 OpenRouter → 768 Ollama/nomic); um arquivo `.tumacore_embedding_dim` guarda a dimensão usada na última indexação.
     """
     host = ollama_host()
     ollama_embed = (os.getenv("OLLAMA_EMBEDDING_MODEL") or "").strip()

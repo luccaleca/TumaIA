@@ -4,7 +4,7 @@ import { env } from "../config.js";
 import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { requireUsuario } from "../middleware/requireUsuario.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
-import { runChatSerialized } from "../services/chatPythonWorker.js";
+import { ensureChatWorkerReady, runChatSerialized } from "../services/chatPythonWorker.js";
 import { shouldOfferDeliveryButtons } from "../services/chatDeliveryUi.js";
 import { executeFlux11Pro, flux11ProInputSchema } from "../services/flux11ProService.js";
 import { executeFluxSchnell, fluxSchnellInputSchema } from "../services/fluxSchnellService.js";
@@ -65,14 +65,55 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
     return;
   }
 
-  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  let v;
+  try {
+    const out = await Promise.all([
+      assertEmpresaVinculo(req, parsed.data.id_empresa),
+      ensureChatWorkerReady(),
+    ]);
+    v = out[0];
+  } catch (err) {
+    console.error("[ia/chat] worker não subiu:", err instanceof Error ? err.message : err);
+    res.status(503).json({
+      error:
+        err instanceof Error
+          ? err.message
+          : "IA indisponível. Se mudou o modelo de embedding, apague backend/ia/indice_contextos e reinicie.",
+    });
+    return;
+  }
   if (!v.ok) {
     res.status(v.status).json({ error: v.error });
     return;
   }
 
   try {
-    const result = await runChatSerialized(parsed.data);
+    const db = getSupabaseAdmin();
+    const llamaPostContextOk = Boolean(env.LLAMA_BASE_URL?.trim() || env.LLAMA_MODEL?.trim());
+    const needsPostSupplement =
+      shouldOfferDeliveryButtons(parsed.data.question) &&
+      Boolean(parsed.data.id_empresa) &&
+      Boolean(db) &&
+      llamaPostContextOk;
+
+    const historyForProposal = [
+      ...(parsed.data.history || []),
+      { role: "user", content: parsed.data.question },
+    ];
+
+    const proposalPromise = needsPostSupplement
+      ? generatePostContextProposal({
+          history: historyForProposal,
+          idEmpresa: parsed.data.id_empresa,
+          db,
+        }).catch((e) => {
+          console.warn("[ia/chat] post_supplement omitido:", e instanceof Error ? e.message : e);
+          return null;
+        })
+      : Promise.resolve(null);
+
+    const [result, proposalOut] = await Promise.all([runChatSerialized(parsed.data), proposalPromise]);
+
     if (!result?.ok) {
       res.status(502).json({ error: result?.error || "Falha na IA" });
       return;
@@ -82,30 +123,13 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
 
     let post_supplement;
     let ui_actions;
-    if (shouldOfferDeliveryButtons(parsed.data.question) && parsed.data.id_empresa) {
-      const db = getSupabaseAdmin();
-      const llamaPostContextOk = Boolean(env.LLAMA_BASE_URL?.trim() || env.LLAMA_MODEL?.trim());
-      if (db && llamaPostContextOk) {
-        try {
-          const historyForProposal = [
-            ...(parsed.data.history || []),
-            { role: "user", content: parsed.data.question },
-          ];
-          const out = await generatePostContextProposal({
-            history: historyForProposal,
-            idEmpresa: parsed.data.id_empresa,
-            db,
-          });
-          post_supplement = {
-            confirmation_message: out.confirmation_message,
-            links: out.links,
-            post_context_proposal: out.post_context_proposal,
-          };
-          ui_actions = CONFIRM_IMAGE_UI;
-        } catch (e) {
-          console.warn("[ia/chat] post_supplement omitido:", e instanceof Error ? e.message : e);
-        }
-      }
+    if (proposalOut) {
+      post_supplement = {
+        confirmation_message: proposalOut.confirmation_message,
+        links: proposalOut.links,
+        post_context_proposal: proposalOut.post_context_proposal,
+      };
+      ui_actions = CONFIRM_IMAGE_UI;
     }
 
     res.json({

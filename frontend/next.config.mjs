@@ -78,6 +78,15 @@ const allowedDevOrigins = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   /**
+   * Requisições longas via rewrite (`/tumaia-backend/*`) — ex. POST /ia/chat, /ia/image-preview —
+   * excedem o timeout padrão do proxy do Next (~30s) e o dev server registra ECONNRESET / socket hang up.
+   * Alinhar com `timeoutMs` em `frontend/lib/auth.js` e nas chamadas do painel de chat.
+   */
+  experimental: {
+    proxyTimeout: 180_000,
+  },
+
+  /**
    * Monorepo (npm workspaces): o lockfile fica na raiz do repo; o Next e o Tailwind ficam em
    * `../node_modules`. O Turbopack precisa usar essa raiz para resolver pacotes; senão infere
    * diretório errado (ex.: `frontend/app`) e falha ao achar `next` ou `tailwindcss`.

@@ -42,7 +42,9 @@ export async function loadEmpresaResumoParaImagem(db, idEmpresa) {
 export async function loadMidiasEmpresaResumo(db, idEmpresa, limit = 48) {
   const { data, error } = await db
     .from("midia")
-    .select("id_midia, nome_exibicao, descricao, alt_text, tipo_midia, mime_type, data_criacao")
+    .select(
+      "id_midia, nome_exibicao, nome_arquivo, descricao, alt_text, tipo_midia, formato_arquivo, data_criacao",
+    )
     .eq("id_empresa", idEmpresa)
     .eq("ativo", true)
     .order("data_criacao", { ascending: false })

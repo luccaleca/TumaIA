@@ -25,13 +25,21 @@ function logStderr(chunk) {
   if (t) console.error("[chat-worker]", t);
 }
 
-function killChild() {
+/**
+ * @param {{ force?: boolean }} [opts] — `force`: encerramento do servidor (mata subprocesso mais agressivo no Windows).
+ */
+function killChild(opts = {}) {
+  const force = opts.force === true;
   if (!child) {
     stdoutBuf = "";
     return;
   }
   try {
-    child.kill("SIGTERM");
+    if (force && process.platform === "win32") {
+      child.kill("SIGKILL");
+    } else {
+      child.kill("SIGTERM");
+    }
   } catch {
     /* ignore */
   }
@@ -40,11 +48,20 @@ function killChild() {
   stdoutBuf = "";
   bootPromise = null;
   chain = Promise.resolve();
+  if (bootWait) {
+    bootWait.reject(new Error("Worker do chat encerrado."));
+    bootWait = null;
+  }
   if (pending) {
     clearTimeout(pending.timer);
     pending.reject(new Error("Worker do chat encerrado."));
     pending = null;
   }
+}
+
+/** Chama no SIGINT/SIGTERM para liberar porta e processo Python. */
+export function shutdownChatWorker() {
+  killChild({ force: true });
 }
 
 function handleStdoutLine(line) {
@@ -162,7 +179,7 @@ export function ensureChatWorkerReady() {
         killChild();
         bootPromise = null;
       }
-    }, 120000).unref();
+    }, 180000).unref();
   });
 
   return bootPromise;
@@ -173,7 +190,7 @@ export function ensureChatWorkerReady() {
  * @param {{ timeoutMs?: number }} [opts]
  */
 export function runChatPythonWorker(payload, opts = {}) {
-  const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 90000;
+  const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 180000;
 
   return new Promise((resolve, reject) => {
     if (!child?.stdin || !booted) {

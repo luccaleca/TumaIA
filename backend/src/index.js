@@ -1,5 +1,6 @@
 import { createApp } from "./app.js";
 import { env } from "./config.js";
+import { ensureChatWorkerReady, shutdownChatWorker } from "./services/chatPythonWorker.js";
 
 const app = createApp();
 
@@ -17,6 +18,10 @@ if (env.REPLICATE_ALLOW_BILLING && env.REPLICATE_DAILY_SUCCESS_CAP === 0) {
 const server = app.listen(env.PORT, () => {
   const baseUrl = `http://localhost:${env.PORT}`;
   console.log(`tumaia-backend ${baseUrl}`);
+  // Primeira mensagem do chat não paga sozinha o boot do Python + Chroma.
+  ensureChatWorkerReady().catch((err) =>
+    console.warn("[chat-worker] warm-up (subirá na 1ª mensagem):", err instanceof Error ? err.message : err),
+  );
 });
 
 server.on("error", (err) => {
@@ -40,6 +45,7 @@ function shutdown(signal) {
   }
   shuttingDown = true;
   console.log(`\n${signal}, encerrando servidor...`);
+  shutdownChatWorker();
   // Encerra sockets abertos de uma vez (libera a porta mais rápido no Windows).
   if (typeof server.closeAllConnections === "function") {
     server.closeAllConnections();

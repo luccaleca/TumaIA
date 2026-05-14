@@ -9,8 +9,18 @@ from dotenv import dotenv_values, load_dotenv
 # Ajuste com TUMACORE_MIN_RELEVANCE no .env (ex.: 0.42).
 MIN_RELEVANCIA_PADRAO = 0.42
 
-# Quantos trechos no máximo mandar ao modelo quando há contexto.
-K_CONTEXTO = 4
+# Quantos trechos no máximo mandar ao modelo quando há contexto (padrão 4).
+# Reduza com TUMACORE_K_CONTEXTO=2 no .env para menos latência em troca de menos RAG.
+
+
+def k_contexto() -> int:
+    raw = (os.getenv("TUMACORE_K_CONTEXTO") or "").strip()
+    if not raw:
+        return 4
+    try:
+        return max(1, min(12, int(raw)))
+    except ValueError:
+        return 4
 
 
 def min_relevancia() -> float:

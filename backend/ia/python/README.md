@@ -41,3 +41,12 @@ OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 ```
 
 Com `OLLAMA_CHAT_MODEL` preenchido, o fluxo prioriza Ollama para chat.
+
+## Latência (opcional)
+
+- `TUMACORE_K_CONTEXTO` — quantos trechos o RAG busca no Chroma (padrão **4**; valores **2** ou **3** reduzem custo de embedding + prompt).
+- `TUMACORE_SKIP_RAG_ON_SQL=true` — em perguntas SQL/banco, pula a busca vetorial (menos latência nesse caso).
+
+## Índice Chroma e dimensão de embedding
+
+Se você trocou de OpenRouter (ex.: vetores 3072) para Ollama `nomic-embed-text` (768), o Chroma antigo quebra com erro de dimensão. O carregador em `indice_vetorial.py` compara a dimensão atual com a gravada em `indice_contextos/.tumacore_embedding_dim` e **recria** a pasta quando não bate. Também pode usar `TUMACORE_FORCE_REINDEX=true` para forçar reindexação.

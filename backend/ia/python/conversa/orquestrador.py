@@ -2,7 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 try:
     from .. import schema_supabase

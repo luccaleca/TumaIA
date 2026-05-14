@@ -610,7 +610,7 @@ export default function PainelChatPage() {
       const result = await authApiFetchWithToken("/ia/chat", {
         method: "POST",
         body: JSON.stringify(body),
-        timeoutMs: 90000,
+        timeoutMs: 180000,
       });
 
       if (!result.ok || result.networkError) {
