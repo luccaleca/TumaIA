@@ -772,6 +772,7 @@ export default function MidiasPage() {
                       width={80}
                       height={80}
                       unoptimized
+                      style={{ width: "auto", height: "auto" }}
                       className="h-20 w-20 object-cover transition-transform duration-200 group-hover:scale-[1.04]"
                     />
                   </button>
@@ -855,6 +856,7 @@ export default function MidiasPage() {
                   width={1400}
                   height={1000}
                   unoptimized
+                  style={{ width: "auto", height: "auto" }}
                   className="max-h-[70vh] w-auto rounded-md"
                 />
               ) : previewMidia.tipo_midia === "video" ? (

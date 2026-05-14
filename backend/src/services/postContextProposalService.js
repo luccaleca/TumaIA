@@ -92,10 +92,13 @@ function formatMidiasForLlm(rows) {
     .map((r, i) => {
       const id = r.id_midia ?? `m-${i}`;
       const nome = String(r.nome_exibicao ?? "").trim() || "(sem nome)";
+      const arquivo = String(r.nome_arquivo ?? "").trim();
       const desc = String(r.descricao ?? "").trim();
       const alt = String(r.alt_text ?? "").trim();
       const tipo = String(r.tipo_midia ?? "").trim();
-      return `### midia_id=${id}\nnome_exibicao: ${nome}\ntipo: ${tipo}\ndescricao: ${desc.slice(0, 400)}\nalt_text: ${alt.slice(0, 300)}`;
+      const linhaArquivo =
+        arquivo && arquivo !== nome ? `nome_arquivo: ${arquivo.slice(0, 200)}` : "";
+      return `### midia_id=${id}\nnome_exibicao: ${nome}\n${linhaArquivo ? `${linhaArquivo}\n` : ""}tipo: ${tipo}\ndescricao: ${desc.slice(0, 400)}\nalt_text: ${alt.slice(0, 300)}`;
     })
     .join("\n\n");
 }
@@ -165,6 +168,12 @@ Regras:
 - matched_contexto.id_contexto_empresa DEVE ser um dos ids listados em "### contexto_id=" ou null se nenhum encaixar bem.
 - Cada links[].id DEVE ser exatamente um id listado em "### contexto_id=" (se kind=contexto) ou "### midia_id=" (se kind=midia). NUNCA invente UUID.
 - midias_referenced só pode citar ids listados em "### midia_id=".
+- Interpretação do acervo (mídias) — o cliente pode citar nome de arquivo, apelido ou descrição imprecisa:
+  - Compare o pedido com nome_exibicao, nome_arquivo, descricao e alt_text de cada mídia (não exija texto idêntico).
+  - Trate como equivalentes: maiúsculas/minúsculas; underscore, hífen e espaço (ex.: "oculos_reto", "oculos-reto", "óculos reto"); pequenas variações de grafia ou singular/plural.
+  - Use sobreposição de palavras-chave ou trechos: se o cliente disser "óculos reto" e existir arquivo "imagem-oculos-reto.jfif" ou nome_exibicao parecido, associe essa mídia.
+  - Se houver várias candidatas, escolha a mais específica ao que foi pedido; na 1ª posição de midias_referenced coloque a principal para composição visual; em "why" explique brevemente o vínculo (ex.: "nome_arquivo contém oculos-reto como o cliente pediu").
+  - Se nenhuma mídia for claramente relacionada, deixe midias_referenced vazio ou só contextos em links — não force UUID.
 - facts_for_image: pares curtos (ex.: seguidores_alvo, ocasiao, tom).
 - Tom profissional e cordial. Sem markdown na confirmation_message.`;
 
