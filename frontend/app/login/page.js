@@ -166,12 +166,22 @@ function LoginForm() {
           </p>
         ) : null}
 
-        <p className="mt-5 text-sm text-muted-foreground">
-          Ainda não tem conta?{" "}
-          <Link className="font-medium text-accent underline-offset-2 hover:underline" href="/cadastro">
-            Criar cadastro
-          </Link>
-        </p>
+        <div className="mt-5 space-y-2 text-sm text-muted-foreground">
+          <p>
+            Ainda não tem conta?{" "}
+            <Link className="font-medium text-accent underline-offset-2 hover:underline" href="/cadastro">
+              Criar cadastro
+            </Link>
+          </p>
+          <p>
+            <button
+              type="button"
+              className="font-medium text-accent underline-offset-2 hover:underline"
+            >
+              Esqueceu a senha?
+            </button>
+          </p>
+        </div>
       </section>
     </main>
   );
