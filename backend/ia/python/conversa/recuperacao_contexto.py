@@ -2,7 +2,7 @@
 
 import re
 
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 try:
     from .. import schema_supabase
@@ -78,6 +78,17 @@ def deve_pular_rag_para_sql(pergunta: str) -> bool:
     )
 
 
+def _distancia_para_similaridade_unit(dist: float) -> float:
+    """
+    Chroma + Ollama devolve distância L2 (>= 0, menor = mais parecido).
+    LangChain ``similarity_search_with_relevance_scores`` espera score em [0, 1] (cosine);
+    por isso surgia UserWarning com valores ~ -230. Aqui mapeamos distância → (0, 1].
+    """
+    if dist < 0 or dist != dist:  # NaN
+        return 0.5
+    return 1.0 / (1.0 + dist)
+
+
 def recuperar_documentos_para_resposta(vetor_store: Chroma, pergunta: str) -> list:
     """
     Devolve trechos só quando faz sentido usar contexto:
@@ -88,12 +99,11 @@ def recuperar_documentos_para_resposta(vetor_store: Chroma, pergunta: str) -> li
     if len(texto) <= 24 and not pergunta_indica_dados_tuma(texto):
         return []
 
-    pairs = vetor_store.similarity_search_with_relevance_scores(
-        pergunta, k=configuracao.K_CONTEXTO
-    )
-    if not pairs:
+    raw = vetor_store.similarity_search_with_score(pergunta, k=configuracao.k_contexto())
+    if not raw:
         return []
 
+    pairs = [(doc, _distancia_para_similaridade_unit(float(dist))) for doc, dist in raw]
     top_score = float(pairs[0][1])
     min_rel = configuracao.min_relevancia()
     força_contexto = pergunta_indica_dados_tuma(pergunta)
