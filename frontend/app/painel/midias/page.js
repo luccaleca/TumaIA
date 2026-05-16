@@ -293,23 +293,35 @@ export default function MidiasPage() {
     await loadData();
   }
 
-  async function onRenameFolder(folder) {
-    if (!empresaId || !folder?.id_pasta || !canManageMidias) return;
-    const novoNome = String(renameDialog?.value || "");
-    if (!novoNome || novoNome.trim() === folder.nome) return;
+  async function onRenameFolder(folder, novoNomeIn) {
+    if (!empresaId || !folder?.id_pasta || !canManageMidias) return false;
+    const novoNome = String(novoNomeIn ?? renameDialog?.value ?? "").trim();
+    if (!novoNome) {
+      setMsg("Informe um nome para a pasta.");
+      setMsgKind("err");
+      return false;
+    }
+    if (novoNome === String(folder.nome || "").trim()) {
+      setMsg("O nome é igual ao atual.");
+      setMsgKind("err");
+      return false;
+    }
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/pastas/${folder.id_pasta}`, {
       method: "PATCH",
       body: JSON.stringify({
-        nome: novoNome.trim(),
+        nome: novoNome,
         id_pasta_pai: folder.id_pasta_pai ?? null,
       }),
     });
     if (!result.ok || result.networkError) {
       setMsg(result.networkError?.message || formatAuthError(result.json) || "Falha ao renomear pasta.");
       setMsgKind("err");
-      return;
+      return false;
     }
+    setMsg("Pasta renomeada.");
+    setMsgKind("ok");
     await loadData();
+    return true;
   }
 
   async function onDeleteFolder(folder) {
@@ -326,20 +338,33 @@ export default function MidiasPage() {
     await loadData();
   }
 
-  async function onRenameMidia(midia) {
-    if (!empresaId || !midia?.id_midia || !canManageMidias) return;
-    const novoNome = String(renameDialog?.value || "");
-    if (!novoNome || novoNome.trim() === midia.nome_exibicao) return;
+  async function onRenameMidia(midia, novoNomeIn) {
+    if (!empresaId || !midia?.id_midia || !canManageMidias) return false;
+    const novoNome = String(novoNomeIn ?? renameDialog?.value ?? "").trim();
+    const nomeAtual = String(midia.nome_exibicao || midia.nome_arquivo || "").trim();
+    if (!novoNome) {
+      setMsg("Informe um nome para a mídia.");
+      setMsgKind("err");
+      return false;
+    }
+    if (novoNome === nomeAtual) {
+      setMsg("O nome é igual ao atual.");
+      setMsgKind("err");
+      return false;
+    }
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/midias/${midia.id_midia}`, {
       method: "PATCH",
-      body: JSON.stringify({ nome_exibicao: novoNome.trim() }),
+      body: JSON.stringify({ nome_exibicao: novoNome }),
     });
     if (!result.ok || result.networkError) {
       setMsg(result.networkError?.message || formatAuthError(result.json) || "Falha ao renomear mídia.");
       setMsgKind("err");
-      return;
+      return false;
     }
+    setMsg("Mídia renomeada.");
+    setMsgKind("ok");
     await loadData();
+    return true;
   }
 
   async function moveFolder(folderId, targetParentId) {
@@ -472,12 +497,12 @@ export default function MidiasPage() {
 
   async function submitRenameDialog() {
     if (!renameDialog) return;
-    if (renameDialog.type === "folder") {
-      await onRenameFolder(renameDialog.item);
-    } else {
-      await onRenameMidia(renameDialog.item);
-    }
-    setRenameDialog(null);
+    const novoNome = String(renameDialog.value || "").trim();
+    const ok =
+      renameDialog.type === "folder"
+        ? await onRenameFolder(renameDialog.item, novoNome)
+        : await onRenameMidia(renameDialog.item, novoNome);
+    if (ok) setRenameDialog(null);
   }
 
   async function submitConfirmDialog() {
@@ -728,10 +753,15 @@ export default function MidiasPage() {
                     <span className="truncate">{p.nome}</span>
                   </p>
                 </button>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex gap-2" onDragStart={(e) => e.preventDefault()}>
                   <button
                     type="button"
-                    onClick={() => openRenameFolderDialog(p)}
+                    draggable={false}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openRenameFolderDialog(p);
+                    }}
                     disabled={!canManageMidias}
                     className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
                   >
@@ -739,7 +769,12 @@ export default function MidiasPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => openDeleteFolderDialog(p)}
+                    draggable={false}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDeleteFolderDialog(p);
+                    }}
                     disabled={!canManageMidias}
                     className="rounded-md border border-red-400/70 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-100 dark:border-red-500/45 dark:font-normal dark:text-red-300 dark:hover:bg-red-950/45"
                   >
@@ -796,10 +831,15 @@ export default function MidiasPage() {
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{m.tipo_midia}</p>
                 <p className="mt-1 max-w-[180px] truncate font-medium text-foreground">{m.nome_exibicao || m.nome_arquivo}</p>
                 <p className="mt-1 max-w-[180px] truncate text-xs text-muted-foreground">{m.nome_arquivo}</p>
-                <div className="mt-2 flex gap-2">
+                <div className="mt-2 flex gap-2" onDragStart={(e) => e.preventDefault()}>
                   <button
                     type="button"
-                    onClick={() => openRenameMidiaDialog(m)}
+                    draggable={false}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openRenameMidiaDialog(m);
+                    }}
                     disabled={!canManageMidias}
                     className="rounded-md border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
                   >
@@ -807,7 +847,12 @@ export default function MidiasPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => openDeleteMidiaDialog(m)}
+                    draggable={false}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDeleteMidiaDialog(m);
+                    }}
                     disabled={!canManageMidias}
                     className="rounded-md border border-red-400/70 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-100 dark:border-red-500/45 dark:font-normal dark:text-red-300 dark:hover:bg-red-950/45"
                   >
@@ -905,16 +950,22 @@ export default function MidiasPage() {
         title={renameDialog?.title || "Renomear"}
       >
         {renameDialog ? (
-          <>
+          <form
+            className="mt-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitRenameDialog();
+            }}
+          >
             <input
               value={renameDialog.value}
               onChange={(e) => setRenameDialog((s) => (s ? { ...s, value: e.target.value } : s))}
-              className="mt-3 w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
+              autoFocus
+              className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
             />
             <div className="mt-3 flex gap-2">
               <button
-                type="button"
-                onClick={() => void submitRenameDialog()}
+                type="submit"
                 className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground"
               >
                 Salvar
@@ -927,7 +978,7 @@ export default function MidiasPage() {
                 Cancelar
               </button>
             </div>
-          </>
+          </form>
         ) : null}
       </Modal>
 
