@@ -7,6 +7,8 @@ import {
   loadEmpresaResumoParaImagem,
   loadMidiasEmpresaResumo,
 } from "./imagePreviewPrompt.js";
+import { deriveFraseNaImagemFromHistory, normalizeFraseNaImagem } from "./imageHeadline.js";
+import { pickBestProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
 
 const linkItemSchema = z.object({
   kind: z.enum(["contexto", "midia"]),
@@ -14,11 +16,68 @@ const linkItemSchema = z.object({
   label: z.string().min(1).max(160),
 });
 
+const CONFIRMATION_MESSAGE_MAX = 320;
+
 const proposalOutSchema = z.object({
-  confirmation_message: z.string().min(12).max(8000),
+  confirmation_message: z.string().min(12).max(CONFIRMATION_MESSAGE_MAX),
   links: z.array(linkItemSchema).max(8).optional().default([]),
   post_context_proposal: z.record(z.string(), z.unknown()).optional().default({}),
 });
+
+/**
+ * Preenche `label` ausente e descarta itens inválidos antes do Zod (modelos pequenos omitem campos).
+ *
+ * @param {unknown} parsed
+ * @param {Array<Record<string, unknown>>} contextoRows
+ * @param {Array<Record<string, unknown>>} midiaRows
+ */
+function coerceProposalParsed(parsed, contextoRows, midiaRows) {
+  if (!parsed || typeof parsed !== "object") return parsed;
+  const out = { ...parsed };
+  const ctxLabel = new Map(
+    contextoRows.map((r) => [
+      String(r.id_contexto_empresa ?? "").trim(),
+      String(r.nome ?? "").trim() || "Contexto",
+    ]),
+  );
+  const midLabel = new Map(
+    midiaRows.map((r) => [
+      String(r.id_midia ?? "").trim(),
+      String(r.nome_exibicao ?? r.nome_arquivo ?? "").trim() || "Mídia",
+    ]),
+  );
+  if (Array.isArray(out.links)) {
+    out.links = out.links
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const kind = item.kind === "midia" || item.kind === "contexto" ? item.kind : null;
+        const id = typeof item.id === "string" ? item.id.trim() : "";
+        if (!kind || !id) return null;
+        let label = typeof item.label === "string" ? item.label.trim().slice(0, 160) : "";
+        if (!label) {
+          label =
+            kind === "contexto"
+              ? ctxLabel.get(id) || "Contexto"
+              : midLabel.get(id) || "Mídia do acervo";
+        }
+        return { kind, id, label };
+      })
+      .filter(Boolean);
+  }
+  if (typeof out.confirmation_message === "string" && out.confirmation_message.length > CONFIRMATION_MESSAGE_MAX) {
+    out.confirmation_message = out.confirmation_message.trim().slice(0, CONFIRMATION_MESSAGE_MAX - 1) + "…";
+  } else if (typeof out.confirmation_message !== "string") {
+    out.confirmation_message = "";
+  }
+  if (!out.post_context_proposal || typeof out.post_context_proposal !== "object") {
+    out.post_context_proposal = {};
+  }
+  const frase = normalizeFraseNaImagem(out.post_context_proposal.frase_na_imagem);
+  if (frase) {
+    out.post_context_proposal.frase_na_imagem = frase;
+  }
+  return out;
+}
 
 /**
  * Só mantém links cujo id existe nas linhas do Supabase (nunca inventar).
@@ -71,7 +130,7 @@ function formatContextosForLlm(rows) {
       const desc = String(r.descricao ?? "").trim();
       let dados = "";
       try {
-        dados = JSON.stringify(r.dados_json ?? {}).slice(0, 1200);
+        dados = JSON.stringify(r.dados_json ?? {}).slice(0, 700);
       } catch {
         dados = "{}";
       }
@@ -114,6 +173,85 @@ function formatEmpresaForLlm(emp) {
 }
 
 /**
+ * Monta confirmação + links a partir do painel quando o Llama devolve texto livre.
+ *
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {Array<Record<string, unknown>>} contextoRows
+ * @param {Array<Record<string, unknown>>} midiaRows
+ */
+function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
+  const lastUser = [...history].reverse().find((m) => m.role === "user");
+  const ctx = contextoRows[0] ?? null;
+  const hint = lastUser ? String(lastUser.content) : "";
+  const bestId = pickBestProductMidiaId(midiaRows, hint);
+  const mid = bestId
+    ? (midiaRows.find((r) => String(r.id_midia ?? "").trim() === bestId) ?? null)
+    : (midiaRows.find((r) => String(r.tipo_midia || "").trim().toLowerCase() === "imagem") ??
+      midiaRows[0] ??
+      null);
+  const ctxNome = ctx ? String(ctx.nome ?? "").trim() || "contexto da marca" : "contexto da marca";
+  const frase = deriveFraseNaImagemFromHistory(history, contextoRows);
+  let confirmation_message = `Então você quer um post${ctx ? ` com o contexto "${ctxNome}"` : ""}${
+    mid ? " com foto do acervo" : ""
+  }${frase ? ` e a frase na imagem: "${frase}"` : ""}? Confirme para gerar a prévia.`;
+  if (lastUser?.content) {
+    const hint = String(lastUser.content).trim().slice(0, 80);
+    if (hint && confirmation_message.length + hint.length < CONFIRMATION_MESSAGE_MAX - 20) {
+      confirmation_message += ` (${hint}${hint.length >= 80 ? "…" : ""})`;
+    }
+  }
+  const links = [];
+  if (ctx) {
+    const id = String(ctx.id_contexto_empresa ?? "").trim();
+    if (id) {
+      links.push({
+        kind: "contexto",
+        id,
+        label: String(ctx.nome ?? "Contexto").trim().slice(0, 160) || "Contexto",
+      });
+    }
+  }
+  if (mid) {
+    const id = String(mid.id_midia ?? "").trim();
+    if (id) {
+      links.push({
+        kind: "midia",
+        id,
+        label:
+          String(mid.nome_exibicao ?? mid.nome_arquivo ?? "").trim().slice(0, 160) || "Mídia do acervo",
+      });
+    }
+  }
+  const midias_referenced = mid
+    ? [
+        {
+          id_midia: String(mid.id_midia ?? "").trim(),
+          nome_exibicao: String(mid.nome_exibicao ?? mid.nome_arquivo ?? "Mídia").trim(),
+          why: "Principal referência visual do acervo (montagem automática).",
+        },
+      ]
+    : [];
+  return {
+    confirmation_message,
+    links,
+    post_context_proposal: {
+      intent_summary: lastUser ? String(lastUser.content).trim().slice(0, 500) : "",
+      matched_contexto: ctx
+        ? {
+            id_contexto_empresa: String(ctx.id_contexto_empresa ?? "").trim() || null,
+            nome: String(ctx.nome ?? "").trim(),
+            tipo_schema: "",
+            reason: "fallback_painel",
+          }
+        : null,
+      facts_for_image: frase ? { frase_na_imagem: frase } : {},
+      frase_na_imagem: frase,
+      midias_referenced,
+    },
+  };
+}
+
+/**
  * @param {string} promptUser
  */
 async function llamaGenerateJson(promptUser) {
@@ -122,7 +260,29 @@ async function llamaGenerateJson(promptUser) {
       "Configure LLAMA_BASE_URL e/ou LLAMA_MODEL no .env do backend (API OpenAI-compatível, ex. Ollama).",
     );
   }
-  return llamaChatCompletionJson(promptUser, { temperature: 0.35 });
+  const proposalModel = (env.LLAMA_PROPOSAL_MODEL || env.LLAMA_MODEL || "llama3.2:3b").trim();
+  const strictSuffix =
+    "\n\nIMPORTANTE: sua resposta deve ser SOMENTE um objeto JSON válido, sem markdown e sem texto antes ou depois.";
+
+  const attempts = [
+    { temperature: 0.2, responseFormatJson: true },
+    { temperature: 0.15, responseFormatJson: true },
+    { temperature: 0.2, responseFormatJson: false },
+  ];
+
+  let lastErr;
+  for (const opts of attempts) {
+    try {
+      return await llamaChatCompletionJson(`${promptUser}${strictSuffix}`, {
+        ...opts,
+        model: proposalModel,
+      });
+    } catch (err) {
+      lastErr = err;
+      if (!err?.rawContent) throw err;
+    }
+  }
+  throw lastErr ?? new Error("Falha ao obter JSON do modelo");
 }
 
 /**
@@ -139,18 +299,20 @@ export async function generatePostContextProposal(opts) {
   const [empresaRow, contextoRows, midiaRows] = await Promise.all([
     loadEmpresaResumoParaImagem(db, idEmpresa),
     loadContextosEmpresaAtivos(db, idEmpresa),
-    loadMidiasEmpresaResumo(db, idEmpresa, 48),
+    loadMidiasEmpresaResumo(db, idEmpresa, 20),
   ]);
 
   const instrucao = `Você é assistente de marketing da TumaIA. O cliente já conversou sobre um pedido de post/conteúdo.
 Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no painel (tipos como data comemorativa, lançamento, promoção, personalizado, etc. vêm em schema_json/dados_json);
 (3) usar o ACERVO DE MÍDIAS para links e para o campo JSON midias_referenced (nunca invente URLs de arquivo; use só ids listados em "### midia_id=");
-(4) escrever UMA mensagem curta em português do Brasil pedindo confirmação explícita, no estilo:
+(4) escrever UMA mensagem MUITO curta (máx. 2 frases, até ~280 caracteres) em português do Brasil pedindo confirmação explícita, no estilo:
    "Então você quer um post com o contexto de \\"...\\" com ...?"
-   Mencione números ou fatos que o cliente disse (ex.: 500 mil seguidores) quando couber.
-(5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem).
+   Mencione números ou fatos que o cliente disse (ex.: 500 mil seguidores) só se couber na frase — sem parágrafo extra.
+(5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo OBRIGATORIAMENTE "frase_na_imagem": frase curta que vai ESCRITA NA ARTE (não é legenda do post). Ex.: pedido de 500 mil seguidores → "Parabéns pelos 500k!" ou "500k seguidores!". Máx. 8 palavras, português BR, sem hashtags.
 (6) preencher "links": palavras/frases clicáveis no painel — cada item com kind "contexto" ou "midia", "id" UUID que EXISTA na lista acima, e "label" curto (texto do link). Se o pedido envolver contexto comemorativo e uma mídia de referência, inclua os DOIS links. Se não houver encaixe no banco, use "links": [].
-(7) Se o cliente pedir arte com logo, produto, embalagem, variações de peça (ex.: armações) ou "só inserir" elementos do acervo, preencha "midias_referenced" com até 3 entradas { "id_midia", "nome_exibicao", "why" } usando ids EXISTENTES em "### midia_id=" (ordem importa: a 1ª será referência visual na Replicate; 2ª e 3ª entram como texto no prompt). Priorize as imagens mais importantes para composição na ordem.
+(7) Se o cliente pedir arte com logo, produto, embalagem, armações/óculos PNG ou "inserir" elemento do acervo, preencha "midias_referenced" com até 3 ids EXISTENTES em "### midia_id=".
+   ORDEM CRÍTICA: a 1ª posição vai para o FLUX como image_prompt — deve ser RECORTE/PNG DE PRODUTO (óculos, logo isolado), NUNCA um post/arte/banner/festa/400k já pronto do acervo.
+   Não use como 1ª referência imagens que pareçam post de Instagram, comemoração de seguidores, balões ou layout completo.
 
 Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
 {
@@ -159,6 +321,7 @@ Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
   "post_context_proposal": {
     "intent_summary": "string",
     "matched_contexto": { "id_contexto_empresa": "uuid ou null", "nome": "string", "tipo_schema": "string", "reason": "string" } | null,
+    "frase_na_imagem": "string curta na arte, ex. Parabéns pelos 500k!",
     "facts_for_image": { "chave": "valor" },
     "midias_referenced": [ { "id_midia": "uuid opcional", "nome_exibicao": "string", "why": "string" } ]
   }
@@ -174,8 +337,10 @@ Regras:
   - Use sobreposição de palavras-chave ou trechos: se o cliente disser "óculos reto" e existir arquivo "imagem-oculos-reto.jfif" ou nome_exibicao parecido, associe essa mídia.
   - Se houver várias candidatas, escolha a mais específica ao que foi pedido; na 1ª posição de midias_referenced coloque a principal para composição visual; em "why" explique brevemente o vínculo (ex.: "nome_arquivo contém oculos-reto como o cliente pediu").
   - Se nenhuma mídia for claramente relacionada, deixe midias_referenced vazio ou só contextos em links — não force UUID.
-- facts_for_image: pares curtos (ex.: seguidores_alvo, ocasiao, tom).
-- Tom profissional e cordial. Sem markdown na confirmation_message.`;
+- frase_na_imagem: OBRIGATÓRIO quando o pedido tiver marco, promoção ou data — é o texto que aparece na imagem.
+- facts_for_image: pares curtos opcionais (ex.: ocasiao, tom); repita frase_na_imagem em facts_for_image.frase_na_imagem se quiser.
+- Tom profissional e cordial. Sem markdown na confirmation_message.
+- PROIBIDO responder com parágrafos de post pronto, legenda ou texto fora do JSON. A confirmation_message é só a pergunta de confirmação (1–2 frases, máx. 280 caracteres).`;
 
   const bloco = `
 === Cadastro da empresa ===
@@ -196,24 +361,41 @@ ${formatHistoryForPrompt(history)}
   let parsed;
   let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   let model = env.LLAMA_MODEL || "llama3.2:3b";
+  let usedPanelFallback = false;
   try {
     const out = await llamaGenerateJson(promptUser);
     parsed = out.parsed;
     usage = out.usage;
     model = out.model;
   } catch (err) {
-    await recordLlamaTextCall({
-      ok: false,
-      status: err?.status && Number(err.status) >= 400 ? Number(err.status) : 500,
-      inputTokens: err?.llmUsage?.inputTokens,
-      outputTokens: err?.llmUsage?.outputTokens,
-      totalTokens: err?.llmUsage?.totalTokens,
-      model: err?.llmModel || model,
-    });
-    throw err;
+    if (err?.rawContent || err?.message === "O modelo retornou JSON inválido") {
+      console.warn(
+        "[post-context-proposal] Llama sem JSON; usando fallback com dados do painel:",
+        err instanceof Error ? err.message : err,
+      );
+      parsed = buildFallbackProposalFromPanel(history, contextoRows, midiaRows);
+      usedPanelFallback = true;
+      usage = {
+        inputTokens: err?.llmUsage?.inputTokens ?? 0,
+        outputTokens: err?.llmUsage?.outputTokens ?? 0,
+        totalTokens: err?.llmUsage?.totalTokens ?? 0,
+      };
+      model = err?.llmModel || model;
+    } else {
+      await recordLlamaTextCall({
+        ok: false,
+        status: err?.status && Number(err.status) >= 400 ? Number(err.status) : 500,
+        inputTokens: err?.llmUsage?.inputTokens,
+        outputTokens: err?.llmUsage?.outputTokens,
+        totalTokens: err?.llmUsage?.totalTokens,
+        model: err?.llmModel || model,
+      });
+      throw err;
+    }
   }
 
-  const safe = proposalOutSchema.safeParse(parsed);
+  const coerced = coerceProposalParsed(parsed, contextoRows, midiaRows);
+  const safe = proposalOutSchema.safeParse(coerced);
   if (!safe.success) {
     await recordLlamaTextCall({
       ok: false,
@@ -223,7 +405,10 @@ ${formatHistoryForPrompt(history)}
       totalTokens: usage.totalTokens,
       model,
     });
-    throw new Error("Resposta do modelo em formato inesperado");
+    const err = new Error("Resposta do modelo em formato inesperado");
+    err.parsed = parsed;
+    err.zod = safe.error.flatten();
+    throw err;
   }
 
   await recordLlamaTextCall({
@@ -237,16 +422,46 @@ ${formatHistoryForPrompt(history)}
 
   const links = sanitizePostSupplementLinks(safe.data.links, contextoRows, midiaRows);
 
+  let post_context_proposal =
+    safe.data.post_context_proposal && typeof safe.data.post_context_proposal === "object"
+      ? { ...safe.data.post_context_proposal }
+      : {};
+
+  if (!post_context_proposal.frase_na_imagem) {
+    const derived = deriveFraseNaImagemFromHistory(history, contextoRows);
+    if (derived) post_context_proposal.frase_na_imagem = derived;
+  }
+
+  const rawRefs = post_context_proposal.midias_referenced;
+  if (Array.isArray(rawRefs) && rawRefs.length > 1 && midiaRows.length) {
+    const ids = rawRefs
+      .map((item) => (item && typeof item.id_midia === "string" ? item.id_midia.trim() : ""))
+      .filter(Boolean);
+    const hint = history
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join(" ")
+      .slice(-400);
+    const ranked = rankReferenceMidiaIds(ids, midiaRows, hint);
+    const byId = new Map(
+      rawRefs
+        .filter((item) => item && typeof item === "object")
+        .map((item) => [String(item.id_midia ?? "").trim(), item]),
+    );
+    post_context_proposal.midias_referenced = ranked
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .slice(0, 3);
+  }
+
   return {
     confirmation_message: safe.data.confirmation_message.trim(),
     links,
-    post_context_proposal:
-      safe.data.post_context_proposal && typeof safe.data.post_context_proposal === "object"
-        ? safe.data.post_context_proposal
-        : {},
+    post_context_proposal,
     _meta: {
       contextos_carregados: contextoRows.length,
       midias_carregadas: midiaRows.length,
+      ...(usedPanelFallback ? { fallback: "painel_sem_json_llama" } : {}),
     },
   };
 }

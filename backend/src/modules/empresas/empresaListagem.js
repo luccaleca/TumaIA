@@ -6,13 +6,15 @@ export function montarListaMinhasEmpresas(membros, empresasRows) {
   for (const emp of empresasRows || []) {
     empresasMap.set(emp.id_empresa, emp);
   }
-  const lista = (membros || []).map((m) => ({
-    papel: cargoApiDeUsuarioEmpresa(m),
-    perfil_acesso: m.perfil_acesso,
-    responsavel_operacional: !!m.responsavel_operacional,
-    receber_alertas: !!m.receber_alertas,
-    empresa: empresasMap.get(m.id_empresa) || null,
-  }));
+  const lista = (membros || [])
+    .map((m) => ({
+      papel: cargoApiDeUsuarioEmpresa(m),
+      perfil_acesso: m.perfil_acesso,
+      responsavel_operacional: !!m.responsavel_operacional,
+      receber_alertas: !!m.receber_alertas,
+      empresa: empresasMap.get(m.id_empresa) || null,
+    }))
+    .filter((row) => row.empresa && row.empresa.ativo !== false);
   lista.sort((a, b) => {
     const na = (a.empresa?.nome_fantasia || "").toLocaleLowerCase("pt-BR");
     const nb = (b.empresa?.nome_fantasia || "").toLocaleLowerCase("pt-BR");

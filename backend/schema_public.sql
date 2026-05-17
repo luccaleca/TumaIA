@@ -180,7 +180,8 @@ CREATE TABLE public.empresa (
     segmento character varying NOT NULL,
     cnpj character varying NOT NULL,
     email_principal character varying NOT NULL,
-    nome_contato_principal character varying NOT NULL,
+    foto_perfil_caminho text,
+    foto_perfil_url text,
     data_criacao timestamp with time zone DEFAULT now() NOT NULL,
     ativo boolean DEFAULT true NOT NULL,
     data_atualizacao timestamp with time zone DEFAULT now() NOT NULL

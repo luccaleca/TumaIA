@@ -9,6 +9,7 @@
     "test": "node ../testes/run-backend.mjs",
     "test:llama:text": "node ia/tests/check-llama-text.mjs",
     "check:replicate": "node scripts/check-replicate.mjs",
+    "diag:image-flow": "node scripts/diag-image-flow.mjs",
     "test:replicate:smoke": "node scripts/run-replicate-smoke.mjs"
   },
   "dependencies": {

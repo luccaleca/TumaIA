@@ -3,12 +3,17 @@ import { env } from "../config.js";
 /** Limite por chamada Replicate (1× image_prompt + demais só texto no prompt). */
 export const REFERENCE_MIDIA_MAX = 3;
 
-const IMAGE_MIME = /^image\/(jpeg|jpg|png|gif|webp)$/i;
+const IMAGE_MIME = /^image\/(jpeg|jpe|jpg|png|gif|webp|jfif|pjpeg)$/i;
+const IMAGE_EXT = /\.(jpe?g|jfif|png|gif|webp)$/i;
 
 function isImageRow(row) {
   if (!row || String(row.tipo_midia || "").trim().toLowerCase() !== "imagem") return false;
   const mime = String(row.formato_arquivo || "").trim();
-  return IMAGE_MIME.test(mime);
+  if (IMAGE_MIME.test(mime)) return true;
+  const ext = String(row.extensao ?? "").trim();
+  if (ext && IMAGE_EXT.test(ext.startsWith(".") ? ext : `.${ext}`)) return true;
+  const arquivo = String(row.nome_arquivo ?? "").trim().toLowerCase();
+  return IMAGE_EXT.test(arquivo);
 }
 
 /**
@@ -76,7 +81,7 @@ export async function resolveReferenceMidiasForReplicate(db, idEmpresa, ids) {
   const { data, error } = await db
     .from("midia")
     .select(
-      "id_midia, id_empresa, tipo_midia, formato_arquivo, caminho_storage, url_arquivo, nome_exibicao, descricao, alt_text",
+      "id_midia, id_empresa, tipo_midia, formato_arquivo, extensao, nome_arquivo, caminho_storage, url_arquivo, nome_exibicao, descricao, alt_text",
     )
     .eq("id_empresa", idEmpresa)
     .eq("ativo", true)

@@ -20,9 +20,11 @@ from .instrucoes import (
     PROMPT_RAG,
     SCHEMA_INSTR_SQL,
     ESTILO_CONVERSA,
+    PEDIDOS_POST_BREVE,
     SEM_META_RESPOSTA,
     SQL_SELECT_FOCUS,
 )
+from .pedidos_post import pergunta_sobre_post_redes
 from .provedores import llm_para_contexto
 from .recuperacao_contexto import (
     deve_anexar_schema_postgres,
@@ -33,6 +35,20 @@ from .recuperacao_contexto import (
 
 # Io paralelo (Postgres/embeddings+Chroma) sem bloquear um ao outro.
 _pool_ia = ThreadPoolExecutor(max_workers=4, thread_name_prefix="tumacore_ia")
+
+_POST_RESPOSTA_MAX_CHARS = 320
+
+
+def _truncar_resposta_pedido_post(texto: str) -> str:
+    """Garante resposta curta mesmo se o modelo ignorar instruções."""
+    t = (texto or "").strip()
+    if len(t) <= _POST_RESPOSTA_MAX_CHARS:
+        return t
+    cortado = t[:_POST_RESPOSTA_MAX_CHARS]
+    ultimo_ponto = max(cortado.rfind(". "), cortado.rfind("! "), cortado.rfind("? "))
+    if ultimo_ponto > 80:
+        return cortado[: ultimo_ponto + 1].strip()
+    return cortado.rstrip() + "…"
 
 
 def responder_mensagem(
@@ -87,6 +103,7 @@ def responder_mensagem(
     modelo = llm_para_contexto(sql_context=eh_sql_ou_banco)
     bloco_historico = formatar_historico_prompt(historico)
     bloco_fatos = bloco_fatos_identidade_para_prompt(historico, q)
+    bloco_post_breve = f"{PEDIDOS_POST_BREVE}\n\n" if pergunta_sobre_post_redes(q) else ""
 
     bloco_empresa = ""
     if id_empresa:
@@ -122,6 +139,7 @@ def responder_mensagem(
                 "Você é o assistente TumaCore, amigável, em português.\n"
                 + f"{SEM_META_RESPOSTA}\n"
                 + f"{ESTILO_CONVERSA}\n"
+                + bloco_post_breve
                 + (f"{bloco_empresa}\n\n" if bloco_empresa else "")
                 + (f"{bloco_fatos}\n" if bloco_fatos else "")
                 + f"{SQL_SELECT_FOCUS}\n\n"
@@ -137,6 +155,7 @@ def responder_mensagem(
                 "Você é o assistente TumaCore, amigável, em português. "
                 + f"{SEM_META_RESPOSTA}\n"
                 + f"{ESTILO_CONVERSA}\n"
+                + bloco_post_breve
                 + (f"{bloco_empresa}\n\n" if bloco_empresa else "")
                 + (f"{bloco_fatos}\n" if bloco_fatos else "")
                 + (f"{bloco_historico}\n" if bloco_historico else "")
@@ -145,6 +164,8 @@ def responder_mensagem(
                 + f"Usuário: {q}"
             )
         text = msg.content if hasattr(msg, "content") else str(msg)
+        if pergunta_sobre_post_redes(q):
+            text = _truncar_resposta_pedido_post(text)
         return {"result": text, "source_documents": []}
 
     context = "\n\n---\n\n".join(d.page_content for d in docs)
@@ -174,7 +195,12 @@ def responder_mensagem(
     if bloco_fatos:
         prefixo_parts.append(bloco_fatos)
     prefixo = "\n\n---\n\n".join(prefixo_parts) + ("\n\n" if prefixo_parts else "")
-    prompt_text = prefixo + PROMPT_RAG.format(context=context, question=q)
+    post_breve_block = f"{PEDIDOS_POST_BREVE}\n\n" if pergunta_sobre_post_redes(q) else ""
+    prompt_text = prefixo + PROMPT_RAG.format(
+        context=context, question=q, post_breve_block=post_breve_block
+    )
     msg = modelo.invoke(prompt_text)
     text = msg.content if hasattr(msg, "content") else str(msg)
+    if pergunta_sobre_post_redes(q):
+        text = _truncar_resposta_pedido_post(text)
     return {"result": text, "source_documents": docs}

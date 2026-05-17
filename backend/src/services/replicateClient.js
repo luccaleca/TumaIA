@@ -5,6 +5,28 @@
 
 const BASE = "https://api.replicate.com/v1";
 
+const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
+
+/**
+ * @param {string} url
+ * @param {RequestInit} init
+ * @param {number} [timeoutMs]
+ */
+async function replicateFetch(url, init, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Replicate: tempo esgotado (${Math.round(timeoutMs / 1000)}s)`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
 /** @param {string} token */
 export function replicateHeaders(token) {
   return {
@@ -20,7 +42,7 @@ export function replicateHeaders(token) {
  * @returns {Promise<string>} latest_version.id
  */
 export async function getModelLatestVersionId(token, owner, name) {
-  const res = await fetch(`${BASE}/models/${owner}/${name}`, {
+  const res = await replicateFetch(`${BASE}/models/${owner}/${name}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const raw = await res.text();
@@ -43,11 +65,15 @@ export async function getModelLatestVersionId(token, owner, name) {
  * @param {{ version: string, input: Record<string, unknown> }} body
  */
 export async function createPrediction(token, { version, input }) {
-  const res = await fetch(`${BASE}/predictions`, {
-    method: "POST",
-    headers: replicateHeaders(token),
-    body: JSON.stringify({ version, input }),
-  });
+  const res = await replicateFetch(
+    `${BASE}/predictions`,
+    {
+      method: "POST",
+      headers: replicateHeaders(token),
+      body: JSON.stringify({ version, input }),
+    },
+    45_000,
+  );
   const raw = await res.text();
   if (!res.ok) {
     const err = new Error(`Replicate POST predictions: ${res.status} ${raw}`);
@@ -68,9 +94,13 @@ export async function waitForPrediction(token, getUrl, opts = {}) {
   const stepMs = opts.stepMs ?? 1500;
   const t0 = Date.now();
   for (;;) {
-    const res = await fetch(getUrl, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await replicateFetch(
+      getUrl,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      20_000,
+    );
     const raw = await res.text();
     if (!res.ok) {
       throw new Error(`Replicate GET prediction: ${res.status} ${raw}`);
@@ -97,7 +127,7 @@ export async function waitForPrediction(token, getUrl, opts = {}) {
  * @param {string} token
  */
 export async function getReplicateAccount(token) {
-  const res = await fetch(`${BASE}/account`, {
+  const res = await replicateFetch(`${BASE}/account`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   const raw = await res.text();

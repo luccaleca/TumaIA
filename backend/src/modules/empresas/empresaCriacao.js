@@ -20,7 +20,6 @@ export async function criarEmpresaParaUsuario(supabase, idUsuario, rawBody) {
     segmento: b.segmento ?? null,
     cnpj: b.cnpj ?? null,
     email_principal: b.email_principal ?? null,
-    nome_contato_principal: b.nome_contato_principal ?? null,
   };
 
   const { data: emp, error: eEmp } = await supabase

@@ -35,7 +35,6 @@ export const createEmpresaBody = z.object({
     (v) => (v === "" || v === undefined ? null : v),
     z.union([z.null(), z.string().email().max(200)]),
   ),
-  nome_contato_principal: z.string().max(200).optional().nullable(),
 });
 
 export const updateEmpresaBody = createEmpresaBody
@@ -70,6 +69,12 @@ export const patchMembroBody = z.object({
 export const createPastaBody = z.object({
   nome: z.string().min(1).max(120),
   id_pasta_pai: z.string().uuid().nullable().optional(),
+});
+
+/** Upload da foto de perfil da empresa (mesmo bucket das mídias, pasta `_perfil`). */
+export const empresaFotoPerfilBody = z.object({
+  base64_data: z.string().min(10),
+  mime_type: z.enum(["image/jpeg", "image/png", "image/webp"]),
 });
 
 export const uploadMidiaBody = z.object({
@@ -121,6 +126,7 @@ export const contextoTipoSchema = z.enum([
   "lancamento",
   "data_comemorativa",
   "personalizado",
+  "identidade_marca",
 ]);
 
 export function parseJsonIfString(v) {
@@ -267,6 +273,7 @@ function nomesTipoAceitos(tipo) {
   if (tipo === "lancamento") return ["lancamento", "lançamento"];
   if (tipo === "data_comemorativa") return ["data comemorativa", "data_comemorativa"];
   if (tipo === "personalizado") return ["personalizado"];
+  if (tipo === "identidade_marca") return ["identidade_marca", "identidade da marca", "identidade"];
   return [tipo];
 }
 
@@ -275,6 +282,7 @@ function nomeTipoPadrao(tipo) {
   if (tipo === "lancamento") return "Lançamento";
   if (tipo === "data_comemorativa") return "Data Comemorativa";
   if (tipo === "personalizado") return "Personalizado";
+  if (tipo === "identidade_marca") return "Identidade da marca";
   return String(tipo || "Personalizado");
 }
 

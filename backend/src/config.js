@@ -27,6 +27,10 @@ const envSchema = z.object({
   /** API OpenAI-compatível (ex.: Ollama `http://127.0.0.1:11434/v1`). */
   LLAMA_BASE_URL: z.preprocess(empty, z.string().url().optional()),
   LLAMA_MODEL: z.preprocess(empty, z.string().min(1).optional()),
+  /** Modelo só para `post-context-proposal` (ex. `llama3.2:1b` se o 3b for lento). */
+  LLAMA_PROPOSAL_MODEL: z.preprocess(empty, z.string().min(1).optional()),
+  /** Modelo multimodal para análise de imagem (ex. `llava:7b` no Ollama). */
+  LLAMA_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   LLAMA_API_KEY: z.preprocess(empty, z.string().optional()),
   LLAMA_DAILY_TOKEN_BUDGET: z.preprocess(empty, z.coerce.number().int().positive().optional()),
   MEDIA_BUCKET: z.preprocess(empty, z.string().optional()),

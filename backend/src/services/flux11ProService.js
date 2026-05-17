@@ -19,6 +19,8 @@ export const flux11ProInputSchema = z.object({
   output_quality: z.coerce.number().int().min(1).max(100).optional().default(85),
   safety_tolerance: z.coerce.number().int().min(1).max(6).optional().default(2),
   prompt_upsampling: z.coerce.boolean().optional().default(false),
+  /** Menor = menos cópia do layout da referência (0–1 no modelo). */
+  image_prompt_strength: z.coerce.number().min(0).max(1).optional().default(0.22),
 });
 
 let generationChain = Promise.resolve();
@@ -59,6 +61,7 @@ async function executeFlux11ProOnce(token, data) {
         output_quality: data.output_quality,
         safety_tolerance: data.safety_tolerance,
         prompt_upsampling: data.prompt_upsampling,
+        image_prompt_strength: data.image_prompt_strength,
       },
     });
     const getUrl = created?.urls?.get;

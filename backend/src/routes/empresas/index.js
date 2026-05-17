@@ -3,6 +3,7 @@ import { requireUserJwt } from "../../middleware/requireUserJwt.js";
 import { requireUsuario } from "../../middleware/requireUsuario.js";
 import { registerConvitesRoutes } from "./convites.routes.js";
 import { registerContextosRoutes } from "./contextos.routes.js";
+import { registerIdentidadeRoutes } from "./identidade.routes.js";
 import { registerEmpresaCoreRoutes } from "./empresa.routes.js";
 import { registerMembrosRoutes } from "./membros.routes.js";
 import { registerMidiasRoutes } from "./midias.routes.js";
@@ -18,6 +19,7 @@ registerConvitesRoutes(r);
 registerEmpresaCoreRoutes(r);
 registerMembrosRoutes(r);
 registerContextosRoutes(r);
+registerIdentidadeRoutes(r);
 registerPastasRoutes(r);
 registerMidiasRoutes(r);
 

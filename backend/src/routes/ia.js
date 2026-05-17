@@ -15,7 +15,10 @@ import {
   loadContextosEmpresaAtivos,
   loadEmpresaResumoParaImagem,
 } from "../services/imagePreviewPrompt.js";
+import { collectReferenceMidiaIds } from "../services/referenceMidiaFromProposal.js";
+import { rankReferenceMidiaIds } from "../services/referenceMidiaRanking.js";
 import { REFERENCE_MIDIA_MAX, resolveReferenceMidiasForReplicate } from "../services/referenceMidiaUrls.js";
+import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
 import { generatePostContextProposal } from "../services/postContextProposalService.js";
 import { assertReplicateBillingAllowed, assertReplicateBurst, assertReplicateDailySuccessCap } from "../services/replicateUsage.js";
 
@@ -24,6 +27,24 @@ const r = Router();
 const CONFIRM_IMAGE_UI = [
   { id: "confirm_generate_image", label: "Confirmar e gerar prévia da imagem (Replicate / créditos)" },
 ];
+
+/** Não bloquear o chat para sempre; deve ser >= timeout do fetch Llama. */
+const POST_PROPOSAL_TIMEOUT_MS = 118_000;
+
+/**
+ * @param {Parameters<typeof generatePostContextProposal>[0]} opts
+ */
+async function generatePostContextProposalWithTimeout(opts) {
+  return Promise.race([
+    generatePostContextProposal(opts),
+    new Promise((_, reject) => {
+      setTimeout(
+        () => reject(new Error("Tempo esgotado ao montar confirmação de contexto (Llama/Ollama).")),
+        POST_PROPOSAL_TIMEOUT_MS,
+      );
+    }),
+  ]);
+}
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(4000),
@@ -96,23 +117,7 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
       Boolean(db) &&
       llamaPostContextOk;
 
-    const historyForProposal = [
-      ...(parsed.data.history || []),
-      { role: "user", content: parsed.data.question },
-    ];
-
-    const proposalPromise = needsPostSupplement
-      ? generatePostContextProposal({
-          history: historyForProposal,
-          idEmpresa: parsed.data.id_empresa,
-          db,
-        }).catch((e) => {
-          console.warn("[ia/chat] post_supplement omitido:", e instanceof Error ? e.message : e);
-          return null;
-        })
-      : Promise.resolve(null);
-
-    const [result, proposalOut] = await Promise.all([runChatSerialized(parsed.data), proposalPromise]);
+    const result = await runChatSerialized(parsed.data);
 
     if (!result?.ok) {
       res.status(502).json({ error: result?.error || "Falha na IA" });
@@ -121,21 +126,13 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
     const answer = String(result.result || "");
     const source_documents = Array.isArray(result.source_documents) ? result.source_documents : [];
 
-    let post_supplement;
-    let ui_actions;
-    if (proposalOut) {
-      post_supplement = {
-        confirmation_message: proposalOut.confirmation_message,
-        links: proposalOut.links,
-        post_context_proposal: proposalOut.post_context_proposal,
-      };
-      ui_actions = CONFIRM_IMAGE_UI;
-    }
+    /** O painel chama `POST /ia/post-context-proposal` em seguida (Ollama pode levar ~1–2 min). */
+    const offer_post_context = needsPostSupplement;
 
     res.json({
       answer,
       source_documents,
-      ...(post_supplement ? { post_supplement, ui_actions } : {}),
+      ...(offer_post_context ? { offer_post_context: true } : {}),
     });
   } catch (err) {
     res.status(500).json({
@@ -159,6 +156,16 @@ const imagePreviewSchema = z.object({
   aspect_ratio: fluxSchnellInputSchema.shape.aspect_ratio.optional(),
   /** Preenchido pelo painel após o passo "Confirmar contexto" (alinha imagem ao que foi combinado). */
   post_context_proposal: z.record(z.string(), z.unknown()).optional(),
+  /** Links do `post_supplement` (kind midia) — usados se `reference_midia_ids` vier vazio. */
+  post_supplement_links: z
+    .array(
+      z.object({
+        kind: z.enum(["contexto", "midia"]),
+        id: z.string().uuid(),
+      }),
+    )
+    .max(8)
+    .optional(),
   /**
    * Mídias de imagem do acervo (UUID) para referência visual na Replicate.
    * A primeira vira `image_prompt` no FLUX 1.1 Pro (composição); a segunda entra como texto no prompt.
@@ -209,7 +216,7 @@ r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res
   }
 
   try {
-    const out = await generatePostContextProposal({
+    const out = await generatePostContextProposalWithTimeout({
       history: parsed.data.history,
       idEmpresa: parsed.data.id_empresa,
       db,
@@ -289,28 +296,68 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     return;
   }
 
-  let prompt = buildFluxImagePrompt({
-    history: parsed.data.history,
-    empresaRow,
-    contextoRows,
-    postContextProposal: parsed.data.post_context_proposal,
-  });
-
-  const refIds = [...new Set((parsed.data.reference_midia_ids || []).map((x) => String(x).trim()))].slice(
-    0,
-    REFERENCE_MIDIA_MAX,
+  const fromBody = (parsed.data.reference_midia_ids || []).map((x) => String(x).trim()).filter(Boolean);
+  const fromProposal = collectReferenceMidiaIds(
+    parsed.data.post_context_proposal,
+    parsed.data.post_supplement_links,
   );
+  let refIds = [...new Set([...fromBody, ...fromProposal])].slice(0, REFERENCE_MIDIA_MAX);
+
+  const userHint = parsed.data.history
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join(" ")
+    .slice(-400);
+
+  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
+  const excludeRefIds = identidadeDados?.id_midia_referencia_analise
+    ? [String(identidadeDados.id_midia_referencia_analise)]
+    : [];
+
   let referenceMeta = null;
   /** @type {string | null} */
   let primaryRefUrl = null;
 
   if (refIds.length) {
     try {
+      const { data: midiaRows } = await db
+        .from("midia")
+        .select(
+          "id_midia, nome_exibicao, nome_arquivo, descricao, alt_text, tipo_midia, formato_arquivo, extensao",
+        )
+        .eq("id_empresa", idEmpresa)
+        .eq("ativo", true)
+        .in("id_midia", refIds);
+      if (Array.isArray(midiaRows) && midiaRows.length) {
+        refIds = rankReferenceMidiaIds(refIds, midiaRows, userHint, excludeRefIds);
+      }
+    } catch {
+      /* segue ordem original */
+    }
+  }
+
+  let prompt = buildFluxImagePrompt({
+    history: parsed.data.history,
+    empresaRow,
+    contextoRows,
+    postContextProposal: parsed.data.post_context_proposal,
+    hasReferenceImage: false,
+  });
+
+  if (refIds.length) {
+    try {
       const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds);
       primaryRefUrl = resolved.primaryUrl;
       if (primaryRefUrl) {
+        prompt = buildFluxImagePrompt({
+          history: parsed.data.history,
+          empresaRow,
+          contextoRows,
+          postContextProposal: parsed.data.post_context_proposal,
+          hasReferenceImage: true,
+        });
         if (resolved.auxiliaryReferenceText) {
-          const add = `\n\n=== Mídias de referência adicionais (acervo — composição textual) ===\n${resolved.auxiliaryReferenceText}`;
+          const add = `\n\n=== Outros assets do acervo (só contexto; não copiar layout) ===\n${resolved.auxiliaryReferenceText}`;
           prompt = (prompt + add).slice(0, FLUX_IMAGE_PROMPT_MAX);
         }
         referenceMeta = {
@@ -350,6 +397,7 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
       aspect_ratio: aspect,
       output_format: "png",
       output_quality: 85,
+      image_prompt_strength: 0.22,
     });
     out = await executeFlux11Pro(token, fluxProInput);
   } else {
@@ -369,7 +417,13 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
   }
 
   const image_urls = normalizeFluxOutputUrls(out.output);
-  const contexto_geracao = buildImagePreviewContextMeta(idEmpresa, empresaRow, contextoRows);
+  const contexto_geracao = buildImagePreviewContextMeta(
+    idEmpresa,
+    empresaRow,
+    contextoRows,
+    parsed.data.post_context_proposal,
+    parsed.data.history,
+  );
   res.json({
     prediction_id: out.prediction_id,
     status: out.status,

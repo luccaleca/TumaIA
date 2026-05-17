@@ -1,12 +1,25 @@
 import { z } from "zod";
 import {
   db,
+  empresaFotoPerfilBody,
   getMembroAtivoEmpresa,
   podeGerenciarMidias,
   updateEmpresaBody,
 } from "../../modules/empresas/shared.js";
 import { criarEmpresaParaUsuario } from "../../modules/empresas/empresaCriacao.js";
+import {
+  aplicarFotoPerfilEmpresa,
+  removerFotoPerfilEmpresa,
+} from "../../modules/empresas/empresaFotoPerfil.js";
+import {
+  desativarEmpresa,
+  sairDaEmpresa,
+} from "../../modules/empresas/empresaDesativacao.js";
 import { montarListaMinhasEmpresas } from "../../modules/empresas/empresaListagem.js";
+
+const desativarEmpresaBody = z.object({
+  confirmacao_nome: z.string().min(1).max(200),
+});
 
 export function registerEmpresaCoreRoutes(r) {
   r.get("/minhas", async (req, res) => {
@@ -74,6 +87,105 @@ export function registerEmpresaCoreRoutes(r) {
     }
   });
 
+  r.post("/:idEmpresa/foto-perfil", async (req, res) => {
+    try {
+      const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+      if (!idEmpresa.success) {
+        res.status(400).json({ error: "id_empresa inválido" });
+        return;
+      }
+      const parsed = empresaFotoPerfilBody.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.flatten() });
+        return;
+      }
+      const supabase = db();
+      if (!supabase) {
+        res.status(503).json({ error: "Supabase não configurado" });
+        return;
+      }
+      const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+        supabase,
+        idEmpresa.data,
+        req.usuario.id_usuario,
+      );
+      if (ePerm) {
+        res.status(500).json({ error: ePerm.message });
+        return;
+      }
+      if (!membro || !podeGerenciarMidias(membro.cargo)) {
+        res.status(403).json({ error: "Sem permissão para alterar a foto da empresa" });
+        return;
+      }
+      let buffer;
+      try {
+        buffer = Buffer.from(parsed.data.base64_data, "base64");
+      } catch {
+        res.status(400).json({ error: "base64_data inválido" });
+        return;
+      }
+      if (!buffer.length) {
+        res.status(400).json({ error: "Arquivo vazio" });
+        return;
+      }
+      try {
+        const empresa = await aplicarFotoPerfilEmpresa(
+          supabase,
+          idEmpresa.data,
+          buffer,
+          parsed.data.mime_type,
+        );
+        res.json({ empresa });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erro ao enviar foto";
+        res.status(400).json({ error: msg });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno";
+      console.error("empresas.fotoPerfilUpload:", e);
+      if (!res.headersSent) res.status(500).json({ error: msg });
+    }
+  });
+
+  r.delete("/:idEmpresa/foto-perfil", async (req, res) => {
+    try {
+      const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+      if (!idEmpresa.success) {
+        res.status(400).json({ error: "id_empresa inválido" });
+        return;
+      }
+      const supabase = db();
+      if (!supabase) {
+        res.status(503).json({ error: "Supabase não configurado" });
+        return;
+      }
+      const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+        supabase,
+        idEmpresa.data,
+        req.usuario.id_usuario,
+      );
+      if (ePerm) {
+        res.status(500).json({ error: ePerm.message });
+        return;
+      }
+      if (!membro || !podeGerenciarMidias(membro.cargo)) {
+        res.status(403).json({ error: "Sem permissão para remover a foto da empresa" });
+        return;
+      }
+      try {
+        const empresa = await removerFotoPerfilEmpresa(supabase, idEmpresa.data);
+        res.json({ empresa });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Erro ao remover foto";
+        res.status(500).json({ error: msg });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno";
+      console.error("empresas.fotoPerfilDelete:", e);
+      if (!res.headersSent) res.status(500).json({ error: msg });
+    }
+  });
+
   r.patch("/:idEmpresa", async (req, res) => {
     try {
       const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
@@ -119,9 +231,6 @@ export function registerEmpresaCoreRoutes(r) {
       if (b.segmento !== undefined) row.segmento = b.segmento ?? null;
       if (b.cnpj !== undefined) row.cnpj = b.cnpj ?? null;
       if (b.email_principal !== undefined) row.email_principal = b.email_principal ?? null;
-      if (b.nome_contato_principal !== undefined) {
-        row.nome_contato_principal = b.nome_contato_principal ?? null;
-      }
 
       const { data: updated, error: eUp } = await supabase
         .from("empresa")
@@ -148,6 +257,72 @@ export function registerEmpresaCoreRoutes(r) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro interno";
       console.error("empresas.patchEmpresa:", e);
+      if (!res.headersSent) res.status(500).json({ error: msg });
+    }
+  });
+
+  r.post("/:idEmpresa/sair", async (req, res) => {
+    try {
+      const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+      if (!idEmpresa.success) {
+        res.status(400).json({ error: "id_empresa inválido" });
+        return;
+      }
+      const supabase = db();
+      if (!supabase) {
+        res.status(503).json({ error: "Supabase não configurado" });
+        return;
+      }
+
+      const out = await sairDaEmpresa(supabase, idEmpresa.data, req.usuario.id_usuario);
+      if (!out.ok) {
+        res.status(out.status).json({ error: out.error });
+        return;
+      }
+      res.json({ saiu: true, nome_fantasia: out.nome_fantasia });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno";
+      console.error("empresas.sair:", e);
+      if (!res.headersSent) res.status(500).json({ error: msg });
+    }
+  });
+
+  r.post("/:idEmpresa/desativar", async (req, res) => {
+    try {
+      const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+      if (!idEmpresa.success) {
+        res.status(400).json({ error: "id_empresa inválido" });
+        return;
+      }
+      const parsed = desativarEmpresaBody.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.flatten() });
+        return;
+      }
+      const supabase = db();
+      if (!supabase) {
+        res.status(503).json({ error: "Supabase não configurado" });
+        return;
+      }
+
+      const out = await desativarEmpresa(
+        supabase,
+        idEmpresa.data,
+        req.usuario.id_usuario,
+        parsed.data.confirmacao_nome,
+      );
+      if (!out.ok) {
+        res.status(out.status).json({ error: out.error });
+        return;
+      }
+      res.json({
+        desativada: true,
+        id_empresa: out.id_empresa,
+        nome_fantasia: out.nome_fantasia,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno";
+      console.error("empresas.desativar:", e);
       if (!res.headersSent) res.status(500).json({ error: msg });
     }
   });

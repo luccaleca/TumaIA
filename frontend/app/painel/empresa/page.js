@@ -3,22 +3,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import Modal from "../../components/Modal";
+import IdentidadeMarcaSection from "./IdentidadeMarcaSection";
+import EmpresaZonaPerigosa from "./EmpresaZonaPerigosa";
+import EmpresaFotoPerfil from "./EmpresaFotoPerfil";
+import EmpresaWorkspaceCard from "./EmpresaWorkspaceCard";
+import EmpresaDadosSection from "./EmpresaDadosSection";
+import EmpresaFormulario from "./EmpresaFormulario";
+import {
+  emptyEmpresaFields,
+  empresaToFormFields,
+  formatCnpj,
+  formatTelefone,
+  normalizeCnpjForApi,
+  normalizeInstagramForApi,
+  normalizeTelefoneForApi,
+} from "../../../lib/empresaFormMasks";
 
-const emptyEmpresa = {
-  nome_fantasia: "",
-  razao_social: "",
-  descricao: "",
-  instagram_empresa: "",
-  telefone_principal: "",
-  segmento: "",
-  cnpj: "",
-  email_principal: "",
-  nome_contato_principal: "",
-};
+const emptyEmpresa = { ...emptyEmpresaFields };
 
 function empresaRowFromList(list, idEmpresa) {
   if (!idEmpresa || !Array.isArray(list)) return null;
   return list.find((row) => row?.empresa?.id_empresa === idEmpresa) || null;
+}
+
+function cargoLabel(papel) {
+  if (papel === "administrador") return "Administrador";
+  if (papel === "editor") return "Editor";
+  return "Membro";
 }
 
 export default function EmpresaPage() {
@@ -61,17 +72,7 @@ export default function EmpresaPage() {
     setMeuCargo(row?.papel || "");
     if (empresa?.id_empresa) {
       setEmpresaId(empresa.id_empresa);
-      setForm({
-        nome_fantasia: empresa.nome_fantasia || "",
-        razao_social: empresa.razao_social || "",
-        descricao: empresa.descricao || "",
-        instagram_empresa: empresa.instagram_empresa || "",
-        telefone_principal: empresa.telefone_principal || "",
-        segmento: empresa.segmento || "",
-        cnpj: empresa.cnpj || "",
-        email_principal: empresa.email_principal || "",
-        nome_contato_principal: empresa.nome_contato_principal || "",
-      });
+      setForm(empresaToFormFields(empresa));
     } else {
       setEmpresaId(null);
       setForm(emptyEmpresa);
@@ -87,25 +88,51 @@ export default function EmpresaPage() {
       const list = Array.isArray(json?.empresas) ? json.empresas : [];
       setEmpresasMinhas(list);
       const ids = list.map((row) => row?.empresa?.id_empresa).filter(Boolean);
+      if (options.voltarParaLista) {
+        aplicarLinhaSelecionada(list, null);
+        return;
+      }
       const fromForce = options.forceEmpresaId;
       const atual =
         options.empresaIdAtual !== undefined ? options.empresaIdAtual : empresaIdRef.current;
+      const autoFirst = options.autoSelectFirst !== false;
       const selectedId =
         (fromForce && ids.includes(fromForce) ? fromForce : null) ||
         (atual && ids.includes(atual) ? atual : null) ||
-        ids[0] ||
+        (autoFirst && ids.length ? ids[0] : null) ||
         null;
       aplicarLinhaSelecionada(list, selectedId);
     },
     [aplicarLinhaSelecionada],
   );
 
+  const onNotifyZonaPerigosa = useCallback((text, kind) => {
+    setMsg(text);
+    setMsgKind(kind === "err" ? "err" : "ok");
+  }, []);
+
+  const onEmpresaRemovidaZonaPerigosa = useCallback(async () => {
+    const minhas = await authApiFetchWithToken("/empresas/minhas");
+    if (!minhas.ok) return;
+    applyMinhasPayload(minhas.json, { autoSelectFirst: false, voltarParaLista: true });
+  }, [applyMinhasPayload]);
+
+  const refreshEmpresasLista = useCallback(async () => {
+    const minhas = await authApiFetchWithToken("/empresas/minhas");
+    if (!minhas.ok) return;
+    const idAtual = empresaIdRef.current;
+    applyMinhasPayload(minhas.json, {
+      autoSelectFirst: false,
+      ...(idAtual ? { forceEmpresaId: idAtual } : {}),
+    });
+  }, [applyMinhasPayload]);
+
   useEffect(() => {
     let active = true;
     authApiFetchWithToken("/empresas/minhas").then((result) => {
       if (!active) return;
       if (result.ok) {
-        applyMinhasPayload(result.json);
+        applyMinhasPayload(result.json, { autoSelectFirst: false });
         const vazia = !Array.isArray(result.json?.empresas) || result.json.empresas.length === 0;
         if (vazia) {
           setMsg(
@@ -127,6 +154,10 @@ export default function EmpresaPage() {
       active = false;
     };
   }, [applyMinhasPayload]);
+
+  useEffect(() => {
+    if (!empresaId) setMembros([]);
+  }, [empresaId]);
 
   useEffect(() => {
     if (!empresaId) return;
@@ -152,8 +183,9 @@ export default function EmpresaPage() {
   function onNovaEmpresa() {
     setCriandoNovaEmpresa(true);
     setEmpresaEditOpen(true);
+    aplicarLinhaSelecionada(empresasMinhas, null);
     setForm({ ...emptyEmpresa });
-    setMsg("Preencha os dados da nova empresa. A empresa em que você trabalha no painel continua selecionada no menu acima até salvar a nova.");
+    setMsg("Preencha os dados da nova empresa.");
     setMsgKind("ok");
   }
 
@@ -164,17 +196,7 @@ export default function EmpresaPage() {
       const row = empresaRowFromList(empresasMinhas, empresaId);
       const empresa = row?.empresa;
       if (empresa) {
-        setForm({
-          nome_fantasia: empresa.nome_fantasia || "",
-          razao_social: empresa.razao_social || "",
-          descricao: empresa.descricao || "",
-          instagram_empresa: empresa.instagram_empresa || "",
-          telefone_principal: empresa.telefone_principal || "",
-          segmento: empresa.segmento || "",
-          cnpj: empresa.cnpj || "",
-          email_principal: empresa.email_principal || "",
-          nome_contato_principal: empresa.nome_contato_principal || "",
-        });
+        setForm(empresaToFormFields(empresa));
       }
     }
   }
@@ -183,7 +205,7 @@ export default function EmpresaPage() {
     event.preventDefault();
     const nomeFantasia = form.nome_fantasia.trim();
     if (!nomeFantasia) {
-      setMsg("Nome fantasia é obrigatório.");
+      setMsg("Nome é obrigatório.");
       setMsgKind("err");
       return;
     }
@@ -198,16 +220,18 @@ export default function EmpresaPage() {
     setMsg(postNova ? "Criando empresa..." : "Salvando empresa...");
     setMsgKind("ok");
 
+    const telDigits = normalizeTelefoneForApi(form.telefone_principal);
+    const cnpjDigits = normalizeCnpjForApi(form.cnpj);
+
     const body = {
       nome_fantasia: nomeFantasia,
       razao_social: form.razao_social.trim() || null,
       descricao: form.descricao.trim() || null,
-      instagram_empresa: form.instagram_empresa.trim() || null,
-      telefone_principal: form.telefone_principal.trim() || null,
+      instagram_empresa: normalizeInstagramForApi(form.instagram_empresa),
+      telefone_principal: telDigits ? formatTelefone(telDigits) : null,
       segmento: form.segmento.trim() || null,
-      cnpj: form.cnpj.trim() || null,
+      cnpj: cnpjDigits ? formatCnpj(cnpjDigits) : null,
       email_principal: form.email_principal.trim() || null,
-      nome_contato_principal: form.nome_contato_principal.trim() || null,
     };
 
     const path = postNova ? "/empresas" : `/empresas/${empresaId}`;
@@ -237,6 +261,7 @@ export default function EmpresaPage() {
       if (minhas.ok) {
         applyMinhasPayload(minhas.json, {
           forceEmpresaId: postNova && empresa?.id_empresa ? empresa.id_empresa : undefined,
+          autoSelectFirst: false,
         });
       }
     } finally {
@@ -337,10 +362,24 @@ export default function EmpresaPage() {
       cnpj: form.cnpj,
       instagram_empresa: form.instagram_empresa,
       telefone_principal: form.telefone_principal,
-      nome_contato_principal: form.nome_contato_principal,
       descricao: form.descricao,
     };
   }, [criandoNovaEmpresa, empresasMinhas, empresaId, form]);
+
+  const mostrarListaWorkspaces = useMemo(
+    () => empresasMinhas.length > 0 && !empresaId && !criandoNovaEmpresa,
+    [empresasMinhas.length, empresaId, criandoNovaEmpresa],
+  );
+
+  const mostrarBotaoVoltarLista =
+    criandoNovaEmpresa || (Boolean(empresaId) && empresasMinhas.length > 0);
+
+  const empresaAtivaRow = useMemo(
+    () => (empresaId ? empresaRowFromList(empresasMinhas, empresaId) : null),
+    [empresaId, empresasMinhas],
+  );
+  const empresaAtiva = empresaAtivaRow?.empresa ?? null;
+  const fotoPerfilUrl = empresaAtiva?.foto_perfil_url ? String(empresaAtiva.foto_perfil_url).trim() : "";
 
   if (loading) {
     return (
@@ -350,168 +389,123 @@ export default function EmpresaPage() {
 
   return (
     <main className="rounded-xl border border-border bg-background p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Empresa</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          {empresasMinhas.length > 1 ? (
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <span className="text-muted-foreground">Trabalhar em:</span>
-              <select
-                value={empresaId || ""}
-                onChange={(e) => onSelectEmpresa(e.target.value)}
-                className="max-w-[220px] rounded-md border border-border bg-surface-elevated px-2 py-1.5 text-sm text-foreground"
+      {mostrarListaWorkspaces ? (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">Suas empresas</h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Escolha um workspace para ver dados, membros e identidade da marca.
+              </p>
+            </div>
+            {podeAdicionarOutraEmpresa ? (
+              <button
+                type="button"
+                onClick={() => onNovaEmpresa()}
+                className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
               >
-                {empresasMinhas.map((row) => {
-                  const e = row?.empresa;
-                  if (!e?.id_empresa) return null;
-                  return (
-                    <option key={e.id_empresa} value={e.id_empresa}>
-                      {e.nome_fantasia || "Sem nome"}
-                    </option>
-                  );
-                })}
-              </select>
-            </label>
-          ) : null}
-          {podeAdicionarOutraEmpresa ? (
-            <button
-              type="button"
-              onClick={() => onNovaEmpresa()}
-              className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
-            >
-              Nova empresa
-            </button>
-          ) : null}
-        </div>
-      </div>
+                Nova empresa
+              </button>
+            ) : null}
+          </div>
+          <div
+            className="mt-6 grid gap-4"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))" }}
+          >
+            {empresasMinhas.map((row) => {
+              const e = row?.empresa;
+              if (!e?.id_empresa) return null;
+              return (
+                <EmpresaWorkspaceCard
+                  key={e.id_empresa}
+                  empresa={e}
+                  papel={row.papel}
+                  cargoLabel={cargoLabel}
+                  onSelect={onSelectEmpresa}
+                />
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              {mostrarBotaoVoltarLista ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (criandoNovaEmpresa) onCancelarFormulario();
+                    else {
+                      aplicarLinhaSelecionada(empresasMinhas, null);
+                      setEmpresaEditOpen(false);
+                      setEmpresaDetalhesOpen(false);
+                    }
+                  }}
+                  className="shrink-0 rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted"
+                >
+                  ← {criandoNovaEmpresa ? "Cancelar" : "Suas empresas"}
+                </button>
+              ) : null}
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold text-foreground">
+                  {criandoNovaEmpresa
+                    ? "Nova empresa"
+                    : hasEmpresa
+                      ? dadosResumoCard?.nome_fantasia || "Empresa"
+                      : "Cadastre sua empresa"}
+                </h1>
+                {!hasEmpresa && !criandoNovaEmpresa ? (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Preencha os dados para começar a usar o painel.
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
 
-      {hasEmpresa ? (
-        <p className="mt-1 text-xs text-muted-foreground">
-          Seu cargo nesta empresa: <strong>{meuCargo || "—"}</strong>
-        </p>
-      ) : null}
       {!canEditEmpresa && hasEmpresa ? (
         <p className="mt-3 rounded-lg border border-amber-600/35 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950 dark:border-amber-500/35 dark:bg-amber-950/45 dark:font-normal dark:text-amber-100">
           Você pode visualizar os dados da empresa, mas não pode editá-los com o cargo atual.
         </p>
       ) : null}
-
       {hasEmpresa ? (
-        <section className="mt-5 rounded-xl border border-border bg-background p-4">
-          <div className="flex items-start justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => setEmpresaDetalhesOpen((v) => !v)}
-              className="flex-1 text-left"
-            >
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground">Empresa ativa</p>
-                <p className="text-base font-semibold text-foreground">
-                  {dadosResumoCard?.nome_fantasia || "Sem nome fantasia"}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {dadosResumoCard?.segmento || "Sem segmento"} ·{" "}
-                  {dadosResumoCard?.email_principal || "Sem e-mail principal"}
-                </p>
-              </div>
-              <div className="text-xs text-muted-foreground">{empresaDetalhesOpen ? "Ocultar detalhes" : "Ver detalhes"}</div>
-            </button>
-            {canEditEmpresa ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setCriandoNovaEmpresa(false);
-                  setEmpresaEditOpen(true);
-                }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-sm text-foreground hover:bg-muted"
-                title="Editar empresa"
-                aria-label="Editar empresa"
-              >
-                ⚙
-              </button>
-            ) : null}
-          </div>
-          {empresaDetalhesOpen ? (
-            <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-border bg-surface p-3 md:grid-cols-2">
-              <p className="text-sm text-foreground"><strong>Razão social:</strong> {dadosResumoCard?.razao_social || "—"}</p>
-              <p className="text-sm text-foreground"><strong>CNPJ:</strong> {dadosResumoCard?.cnpj || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Instagram:</strong> {dadosResumoCard?.instagram_empresa || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Telefone:</strong> {dadosResumoCard?.telefone_principal || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Contato:</strong> {dadosResumoCard?.nome_contato_principal || "—"}</p>
-              <p className="text-sm text-foreground"><strong>Descrição:</strong> {dadosResumoCard?.descricao || "—"}</p>
-            </div>
-          ) : null}
-        </section>
+        <EmpresaDadosSection
+          empresaId={empresaId}
+          fotoPerfilUrl={fotoPerfilUrl}
+          dados={dadosResumoCard}
+          meuCargo={meuCargo}
+          cargoLabel={cargoLabel}
+          canEdit={canEditEmpresa}
+          detalhesOpen={empresaDetalhesOpen}
+          onToggleDetalhes={() => setEmpresaDetalhesOpen((v) => !v)}
+          onEditar={() => {
+            setCriandoNovaEmpresa(false);
+            setEmpresaEditOpen(true);
+          }}
+          onFotoUpdated={() => void refreshEmpresasLista()}
+          onMsg={(text, kind) => {
+            setMsg(text);
+            setMsgKind(kind === "err" ? "err" : "ok");
+          }}
+        />
+      ) : null}
+      {mostrarFormulario ? (
+        <EmpresaFormulario
+          form={form}
+          setForm={setForm}
+          canEdit={canEditEmpresa}
+          saving={saving}
+          criandoNovaEmpresa={criandoNovaEmpresa}
+          hasEmpresa={hasEmpresa}
+          empresaEditOpen={empresaEditOpen}
+          onSubmit={onSubmit}
+          onCancelar={onCancelarFormulario}
+        />
       ) : null}
 
-      {mostrarFormulario ? (
-        <form className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2" onSubmit={onSubmit}>
-          {criandoNovaEmpresa ? (
-            <p className="md:col-span-2 text-sm font-medium text-foreground">Nova empresa</p>
-          ) : null}
-          {Object.entries({
-            nome_fantasia: "Nome fantasia",
-            razao_social: "Razão social",
-            instagram_empresa: "Instagram",
-            telefone_principal: "Telefone principal",
-            segmento: "Segmento",
-            cnpj: "CNPJ",
-            email_principal: "E-mail principal",
-            nome_contato_principal: "Nome do contato principal",
-          }).map(([key, label]) => (
-            <div key={key}>
-              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor={key}>
-                {label}
-              </label>
-              <input
-                id={key}
-                type="text"
-                value={form[key]}
-                onChange={(e) => setForm((s) => ({ ...s, [key]: e.target.value }))}
-                disabled={!canEditEmpresa}
-                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
-              />
-            </div>
-          ))}
-
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="descricao">
-              Descrição
-            </label>
-            <textarea
-              id="descricao"
-              value={form.descricao}
-              onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
-              disabled={!canEditEmpresa}
-              className="min-h-24 w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none focus:border-accent"
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="submit"
-                disabled={saving || !canEditEmpresa}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 ease-out will-change-transform disabled:opacity-60 enabled:hover:scale-[1.03] enabled:hover:shadow-md enabled:hover:shadow-accent/25 enabled:active:scale-[0.98]"
-              >
-                {saving
-                  ? "Salvando..."
-                  : criandoNovaEmpresa || !hasEmpresa
-                    ? "Cadastrar empresa"
-                    : "Salvar empresa"}
-              </button>
-              {hasEmpresa && (empresaEditOpen || criandoNovaEmpresa) ? (
-                <button
-                  type="button"
-                  onClick={() => onCancelarFormulario()}
-                  className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-                >
-                  Cancelar
-                </button>
-              ) : null}
-            </div>
-          </div>
-        </form>
+      {hasEmpresa && !criandoNovaEmpresa ? (
+        <IdentidadeMarcaSection empresaId={empresaId} canEdit={canEditEmpresa} />
       ) : null}
 
       {hasEmpresa && !criandoNovaEmpresa ? (
@@ -572,6 +566,19 @@ export default function EmpresaPage() {
           </div>
         </section>
       ) : null}
+
+      {hasEmpresa && !criandoNovaEmpresa ? (
+        <EmpresaZonaPerigosa
+          empresaId={empresaId}
+          nomeFantasia={dadosResumoCard?.nome_fantasia || ""}
+          isAdministrador={canManageMembros}
+          onEmpresaRemovida={() => void onEmpresaRemovidaZonaPerigosa()}
+          onNotify={onNotifyZonaPerigosa}
+        />
+      ) : null}
+
+        </>
+      )}
 
       <Modal open={Boolean(membroToRemove)} onClose={() => setMembroToRemove(null)} title="Remover membro">
         {membroToRemove ? (
