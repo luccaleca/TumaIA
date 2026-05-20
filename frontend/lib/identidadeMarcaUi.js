@@ -2,6 +2,33 @@ import { authApiFetchWithToken } from "./auth";
 
 export const MAX_FOTOS_IDENTIDADE = 8;
 
+/** Nome fixo do contexto de identidade (um por empresa) — não listar em /painel/contextos. */
+export const IDENTIDADE_CONTEXTO_NOME = "Identidade da marca";
+export const IDENTIDADE_TIPO = "identidade_marca";
+
+/**
+ * Linha bruta da API (`contexto_empresa`) ou item normalizado com `.row`.
+ * @param {Record<string, unknown> | null | undefined} row
+ */
+export function isIdentidadeMarcaContextoRow(row) {
+  if (!row || typeof row !== "object") return false;
+  const base = row.row && typeof row.row === "object" ? row.row : row;
+  const schema = base.schema_json;
+  const dados = base.dados_json;
+  if (schema && typeof schema === "object" && schema.tipo === IDENTIDADE_TIPO) return true;
+  if (dados && typeof dados === "object" && dados.tipo === IDENTIDADE_TIPO) return true;
+  const nome = String(base.nome ?? "")
+    .trim()
+    .toLowerCase();
+  return nome === IDENTIDADE_CONTEXTO_NOME.toLowerCase();
+}
+
+/** Análise de fotos (vision); abaixo do proxy do Next (~320s) e do backend (240s). */
+export const IDENTIDADE_ANALISE_TIMEOUT_MS = 270_000;
+
+/** Cores de placeholder antigas do formulário — não tratar como escolha do usuário. */
+export const CORES_PLACEHOLDER_FORM = ["#6B2D9E", "#D4AF37"];
+
 export const emptyDados = {
   sobre_empresa: "",
   segmento: "",
@@ -9,13 +36,32 @@ export const emptyDados = {
   estilo_visual: "",
   evitar: "",
   publico: "",
-  cor_primaria: "#6B2D9E",
-  cor_secundaria: "#D4AF37",
+  cor_primaria: "",
+  cor_secundaria: "",
   exemplo_frase_marca: "",
   site_url: "",
   id_midia_referencia_analise: null,
+  id_midia_logo: null,
   legenda_referencia: "",
 };
+
+const HEX_RE = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/;
+
+/** @param {unknown} v */
+export function normalizeHexColor(v) {
+  if (v == null) return null;
+  let s = String(v).trim();
+  if (!s) return null;
+  if (!s.startsWith("#")) s = `#${s}`;
+  if (!HEX_RE.test(s)) return null;
+  if (s.length === 4) {
+    const r = s[1];
+    const g = s[2];
+    const b = s[3];
+    s = `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return s.toUpperCase();
+}
 
 /** Campos usados na barra de progresso (espelha o backend). */
 export const PILARES_COMPLETUDE = [
@@ -24,6 +70,9 @@ export const PILARES_COMPLETUDE = [
   { key: "estilo_visual", label: "Estilo visual" },
   { key: "sobre_empresa", label: "Sobre a empresa" },
 ];
+
+/** Exibido na barra; não entra no % dos 4 pilares principais. */
+export const PILAR_LOGO = { key: "id_midia_logo", label: "Logo" };
 
 const MERGE_KEYS = [
   "sobre_empresa",
@@ -46,11 +95,12 @@ export function dadosFromApi(raw) {
     estilo_visual: raw.estilo_visual || "",
     evitar: raw.evitar || "",
     publico: raw.publico || "",
-    cor_primaria: raw.cor_primaria || "#6B2D9E",
-    cor_secundaria: raw.cor_secundaria || "#D4AF37",
+    cor_primaria: normalizeHexColor(raw.cor_primaria) || "",
+    cor_secundaria: normalizeHexColor(raw.cor_secundaria) || "",
     exemplo_frase_marca: raw.exemplo_frase_marca || "",
     site_url: raw.site_url || "",
     id_midia_referencia_analise: raw.id_midia_referencia_analise || null,
+    id_midia_logo: raw.id_midia_logo || null,
     legenda_referencia: raw.legenda_referencia || "",
   };
 }
@@ -68,7 +118,8 @@ export function temConteudoIdentidade(dados) {
       String(dados.segmento ?? "").trim() ||
       String(dados.publico ?? "").trim() ||
       String(dados.evitar ?? "").trim() ||
-      String(dados.exemplo_frase_marca ?? "").trim(),
+      String(dados.exemplo_frase_marca ?? "").trim() ||
+      String(dados.id_midia_logo ?? "").trim(),
   );
 }
 
@@ -99,10 +150,24 @@ export function mergeIdentidadeSugestao(current, sugestao, lockedFields = new Se
     if (lockedFields.has(key)) continue;
     const next = sugestao[key];
     if (next == null || String(next).trim() === "") continue;
+
+    if (key === "cor_primaria" || key === "cor_secundaria") {
+      const hex = normalizeHexColor(next);
+      if (hex) out[key] = hex;
+      continue;
+    }
+
     const cur = String(out[key] ?? "").trim();
     if (!cur) out[key] = String(next).trim();
   }
   return out;
+}
+
+/** @param {string} value */
+export function corEPlaceholderLegado(value) {
+  const hex = normalizeHexColor(value);
+  if (!hex) return true;
+  return CORES_PLACEHOLDER_FORM.includes(hex);
 }
 
 export function toBase64WithoutPrefix(file) {

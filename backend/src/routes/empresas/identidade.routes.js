@@ -27,6 +27,7 @@ const identidadeDadosBody = z.object({
   exemplo_frase_marca: z.string().max(120).optional(),
   site_url: z.string().max(500).optional(),
   id_midia_referencia_analise: z.string().uuid().nullable().optional(),
+  id_midia_logo: z.string().uuid().nullable().optional(),
   legenda_referencia: z.string().max(2000).optional(),
 });
 

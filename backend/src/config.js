@@ -29,6 +29,16 @@ const envSchema = z.object({
   LLAMA_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   /** Modelo só para `post-context-proposal` (ex. `llama3.2:1b` se o 3b for lento). */
   LLAMA_PROPOSAL_MODEL: z.preprocess(empty, z.string().min(1).optional()),
+  /**
+   * `false` (padrão): resumo de confirmação montado só com dados do painel (rápido, ~1–3s).
+   * `true`: tenta Llama antes; se demorar, cai no painel.
+   */
+  POST_CONTEXT_USE_LLAMA: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  /** Timeout de uma chamada Llama na proposta de contexto (ms). Padrão 32s. */
+  LLAMA_PROPOSAL_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 32_000 : Number(v)),
+    z.number().int().min(8_000).max(600_000),
+  ),
   /** Modelo multimodal para análise de imagem (ex. `llava:7b` no Ollama). */
   LLAMA_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   LLAMA_API_KEY: z.preprocess(empty, z.string().optional()),

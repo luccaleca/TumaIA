@@ -7,6 +7,7 @@ import IdentidadeMarcaSection from "./IdentidadeMarcaSection";
 import EmpresaZonaPerigosa from "./EmpresaZonaPerigosa";
 import EmpresaFotoPerfil from "./EmpresaFotoPerfil";
 import EmpresaWorkspaceCard from "./EmpresaWorkspaceCard";
+import EmpresaUsoToggle from "./EmpresaUsoToggle";
 import EmpresaDadosSection from "./EmpresaDadosSection";
 import EmpresaFormulario from "./EmpresaFormulario";
 import {
@@ -18,6 +19,13 @@ import {
   normalizeInstagramForApi,
   normalizeTelefoneForApi,
 } from "../../../lib/empresaFormMasks";
+import {
+  EMPRESA_ATIVA_CHANGE_EVENT,
+  clearEmpresaAtiva,
+  getEmpresaAtivaId,
+  resolveEmpresaAtivaId,
+  setEmpresaAtiva,
+} from "../../../lib/empresaAtiva";
 
 const emptyEmpresa = { ...emptyEmpresaFields };
 
@@ -54,6 +62,16 @@ export default function EmpresaPage() {
   const [conviteEmail, setConviteEmail] = useState("");
   const [membroToRemove, setMembroToRemove] = useState(null);
   const empresaIdRef = useRef(null);
+  const [empresaAtivaPainelId, setEmpresaAtivaPainelId] = useState(null);
+
+  useEffect(() => {
+    function syncAtiva() {
+      setEmpresaAtivaPainelId(getEmpresaAtivaId());
+    }
+    syncAtiva();
+    window.addEventListener(EMPRESA_ATIVA_CHANGE_EVENT, syncAtiva);
+    return () => window.removeEventListener(EMPRESA_ATIVA_CHANGE_EVENT, syncAtiva);
+  }, []);
 
   const hasEmpresa = useMemo(() => Boolean(empresaId), [empresaId]);
   const podeAdicionarOutraEmpresa = useMemo(() => empresasMinhas.length >= 1, [empresasMinhas.length]);
@@ -96,12 +114,20 @@ export default function EmpresaPage() {
       const atual =
         options.empresaIdAtual !== undefined ? options.empresaIdAtual : empresaIdRef.current;
       const autoFirst = options.autoSelectFirst !== false;
-      const selectedId =
-        (fromForce && ids.includes(fromForce) ? fromForce : null) ||
-        (atual && ids.includes(atual) ? atual : null) ||
-        (autoFirst && ids.length ? ids[0] : null) ||
-        null;
-      aplicarLinhaSelecionada(list, selectedId);
+      const selectRow = options.selectRow !== false;
+      const selectedId = resolveEmpresaAtivaId(list, {
+        preferId: fromForce || atual || null,
+        fallbackFirst: selectRow && autoFirst,
+      });
+      if (selectedId) {
+        const row = empresaRowFromList(list, selectedId);
+        if (row?.empresa) setEmpresaAtiva(row.empresa);
+      }
+      if (selectRow) aplicarLinhaSelecionada(list, selectedId);
+      else if (!getEmpresaAtivaId() && ids.length) {
+        const row = empresaRowFromList(list, ids[0]);
+        if (row?.empresa) setEmpresaAtiva(row.empresa);
+      }
     },
     [aplicarLinhaSelecionada],
   );
@@ -132,7 +158,7 @@ export default function EmpresaPage() {
     authApiFetchWithToken("/empresas/minhas").then((result) => {
       if (!active) return;
       if (result.ok) {
-        applyMinhasPayload(result.json, { autoSelectFirst: false });
+        applyMinhasPayload(result.json, { autoSelectFirst: false, selectRow: false });
         const vazia = !Array.isArray(result.json?.empresas) || result.json.empresas.length === 0;
         if (vazia) {
           setMsg(
@@ -178,6 +204,23 @@ export default function EmpresaPage() {
     setEmpresaEditOpen(false);
     setCriandoNovaEmpresa(false);
     setEmpresaDetalhesOpen(false);
+  }
+
+  function onToggleUsoPainel(id) {
+    if (!id) return;
+    if (empresaAtivaPainelId === id) {
+      clearEmpresaAtiva();
+      setMsg("Empresa desativada. Clique em Uso em outra quando quiser usá-la no chat.");
+      setMsgKind("ok");
+      return;
+    }
+    const row = empresaRowFromList(empresasMinhas, id);
+    if (row?.empresa) {
+      setEmpresaAtiva(row.empresa);
+      const nome = row.empresa.nome_fantasia || "Empresa";
+      setMsg(`${nome} selecionada para o chat e a IA.`);
+      setMsgKind("ok");
+    }
   }
 
   function onNovaEmpresa() {
@@ -394,9 +437,6 @@ export default function EmpresaPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-foreground">Suas empresas</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Escolha um workspace para ver dados, membros e identidade da marca.
-              </p>
             </div>
             {podeAdicionarOutraEmpresa ? (
               <button
@@ -421,7 +461,9 @@ export default function EmpresaPage() {
                   empresa={e}
                   papel={row.papel}
                   cargoLabel={cargoLabel}
+                  emUsoNoPainel={empresaAtivaPainelId === e.id_empresa}
                   onSelect={onSelectEmpresa}
+                  onToggleUso={onToggleUsoPainel}
                 />
               );
             })}
@@ -448,13 +490,21 @@ export default function EmpresaPage() {
                 </button>
               ) : null}
               <div className="min-w-0">
-                <h1 className="text-xl font-semibold text-foreground">
-                  {criandoNovaEmpresa
-                    ? "Nova empresa"
-                    : hasEmpresa
-                      ? dadosResumoCard?.nome_fantasia || "Empresa"
-                      : "Cadastre sua empresa"}
-                </h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-semibold text-foreground">
+                    {criandoNovaEmpresa
+                      ? "Nova empresa"
+                      : hasEmpresa
+                        ? dadosResumoCard?.nome_fantasia || "Empresa"
+                        : "Cadastre sua empresa"}
+                  </h1>
+                  {hasEmpresa && !criandoNovaEmpresa ? (
+                    <EmpresaUsoToggle
+                      ativo={empresaAtivaPainelId === empresaId}
+                      onClick={() => onToggleUsoPainel(empresaId)}
+                    />
+                  ) : null}
+                </div>
                 {!hasEmpresa && !criandoNovaEmpresa ? (
                   <p className="mt-1 text-sm text-muted-foreground">
                     Preencha os dados para começar a usar o painel.

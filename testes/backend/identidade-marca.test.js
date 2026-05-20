@@ -7,6 +7,7 @@ import {
   normalizeHexColor,
   normalizeIdentidadeDados,
   partitionContextosIdentidade,
+  refineIdentidadeFromAnalysis,
 } from "../../backend/src/modules/empresas/identidadeMarca.js";
 import { rankReferenceMidiaIds } from "../../backend/src/services/referenceMidiaRanking.js";
 import { normalizeWebsiteUrl } from "../../backend/src/services/websiteTextExtract.js";
@@ -100,5 +101,24 @@ describe("identidadeMarca — normalizeIdentidadeDados", () => {
   it("normaliza tom_voz array", () => {
     const d = normalizeIdentidadeDados({ tom_voz: ["animado", "premium"] });
     assert.equal(d.tom_voz, "animado, premium");
+  });
+
+  it("preserva id_midia_logo", () => {
+    const id = "cccccccc-cccc-4ccc-accc-cccccccccccc";
+    const d = normalizeIdentidadeDados({ id_midia_logo: id });
+    assert.equal(d.id_midia_logo, id);
+  });
+});
+
+describe("identidadeMarca — refineIdentidadeFromAnalysis", () => {
+  it("aplica paleta e normaliza tom_voz", () => {
+    const d = refineIdentidadeFromAnalysis(
+      { tom_voz: "animado; premium; direto", estilo_visual: "Limpo e moderno" },
+      { primary: "#E31B23", secondary: "#1A1A1A" },
+    );
+    assert.equal(d.cor_primaria, "#E31B23");
+    assert.equal(d.cor_secundaria, "#1A1A1A");
+    assert.equal(d.tom_voz, "animado, premium, direto");
+    assert.match(d.estilo_visual, /#E31B23/);
   });
 });

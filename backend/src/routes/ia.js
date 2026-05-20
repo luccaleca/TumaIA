@@ -17,6 +17,8 @@ import {
 } from "../services/imagePreviewPrompt.js";
 import { collectReferenceMidiaIds } from "../services/referenceMidiaFromProposal.js";
 import { rankReferenceMidiaIds } from "../services/referenceMidiaRanking.js";
+import { wantsLogoAsHero } from "../services/logoReferencePolicy.js";
+import { friendlyImageGenerationError } from "../services/replicateImagePromptPrep.js";
 import { REFERENCE_MIDIA_MAX, resolveReferenceMidiasForReplicate } from "../services/referenceMidiaUrls.js";
 import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
 import { generatePostContextProposal } from "../services/postContextProposalService.js";
@@ -24,27 +26,7 @@ import { assertReplicateBillingAllowed, assertReplicateBurst, assertReplicateDai
 
 const r = Router();
 
-const CONFIRM_IMAGE_UI = [
-  { id: "confirm_generate_image", label: "Confirmar e gerar prévia da imagem (Replicate / créditos)" },
-];
-
-/** Não bloquear o chat para sempre; deve ser >= timeout do fetch Llama. */
-const POST_PROPOSAL_TIMEOUT_MS = 118_000;
-
-/**
- * @param {Parameters<typeof generatePostContextProposal>[0]} opts
- */
-async function generatePostContextProposalWithTimeout(opts) {
-  return Promise.race([
-    generatePostContextProposal(opts),
-    new Promise((_, reject) => {
-      setTimeout(
-        () => reject(new Error("Tempo esgotado ao montar confirmação de contexto (Llama/Ollama).")),
-        POST_PROPOSAL_TIMEOUT_MS,
-      );
-    }),
-  ]);
-}
+const CONFIRM_IMAGE_UI = [{ id: "confirm_generate_image", label: "Gerar prévia da imagem" }];
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(4000),
@@ -110,12 +92,10 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
 
   try {
     const db = getSupabaseAdmin();
-    const llamaPostContextOk = Boolean(env.LLAMA_BASE_URL?.trim() || env.LLAMA_MODEL?.trim());
     const needsPostSupplement =
       shouldOfferDeliveryButtons(parsed.data.question) &&
       Boolean(parsed.data.id_empresa) &&
-      Boolean(db) &&
-      llamaPostContextOk;
+      Boolean(db);
 
     const result = await runChatSerialized(parsed.data);
 
@@ -171,6 +151,8 @@ const imagePreviewSchema = z.object({
    * A primeira vira `image_prompt` no FLUX 1.1 Pro (composição); a segunda entra como texto no prompt.
    */
   reference_midia_ids: z.array(z.string().uuid()).max(3).optional(),
+  /** Contexto de campanha escolhido no painel antes de gerar (só este entra no bloco de campanha). */
+  focus_contexto_id: z.string().uuid().optional(),
 });
 
 const postContextProposalBodySchema = z.object({
@@ -216,7 +198,7 @@ r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res
   }
 
   try {
-    const out = await generatePostContextProposalWithTimeout({
+    const out = await generatePostContextProposal({
       history: parsed.data.history,
       idEmpresa: parsed.data.id_empresa,
       db,
@@ -314,9 +296,16 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     ? [String(identidadeDados.id_midia_referencia_analise)]
     : [];
 
+  const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
+  if (logoId && !excludeRefIds.includes(logoId) && !refIds.includes(logoId)) {
+    refIds = [...refIds, logoId].slice(0, REFERENCE_MIDIA_MAX);
+  }
+
   let referenceMeta = null;
   /** @type {string | null} */
   let primaryRefUrl = null;
+  /** @type {'logo' | 'product'} */
+  let primaryRefKind = "product";
 
   if (refIds.length) {
     try {
@@ -329,12 +318,14 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
         .eq("ativo", true)
         .in("id_midia", refIds);
       if (Array.isArray(midiaRows) && midiaRows.length) {
-        refIds = rankReferenceMidiaIds(refIds, midiaRows, userHint, excludeRefIds);
+        refIds = rankReferenceMidiaIds(refIds, midiaRows, userHint, excludeRefIds, logoId);
       }
     } catch {
       /* segue ordem original */
     }
   }
+
+  const focusContextoId = parsed.data.focus_contexto_id ?? null;
 
   let prompt = buildFluxImagePrompt({
     history: parsed.data.history,
@@ -342,12 +333,18 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     contextoRows,
     postContextProposal: parsed.data.post_context_proposal,
     hasReferenceImage: false,
+    focusCampanhaContextoId: focusContextoId,
   });
 
   if (refIds.length) {
     try {
-      const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds);
+      const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds, {
+        logoId,
+        userHint,
+        logoAsHero: wantsLogoAsHero(userHint),
+      });
       primaryRefUrl = resolved.primaryUrl;
+      primaryRefKind = resolved.primaryKind === "logo" ? "logo" : "product";
       if (primaryRefUrl) {
         prompt = buildFluxImagePrompt({
           history: parsed.data.history,
@@ -355,6 +352,8 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
           contextoRows,
           postContextProposal: parsed.data.post_context_proposal,
           hasReferenceImage: true,
+          focusCampanhaContextoId: focusContextoId,
+          referenceKind: primaryRefKind,
         });
         if (resolved.auxiliaryReferenceText) {
           const add = `\n\n=== Outros assets do acervo (só contexto; não copiar layout) ===\n${resolved.auxiliaryReferenceText}`;
@@ -390,6 +389,18 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
   const aspect = parsed.data.aspect_ratio ?? "1:1";
   let out;
 
+  const runSchnellOnly = () =>
+    executeFluxSchnell(
+      token,
+      fluxSchnellInputSchema.parse({
+        prompt,
+        aspect_ratio: aspect,
+        num_outputs: 1,
+        output_format: "png",
+        output_quality: 80,
+      }),
+    );
+
   if (primaryRefUrl) {
     const fluxProInput = flux11ProInputSchema.parse({
       prompt,
@@ -397,22 +408,34 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
       aspect_ratio: aspect,
       output_format: "png",
       output_quality: 85,
-      image_prompt_strength: 0.22,
+      image_prompt_strength: primaryRefKind === "logo" ? 0.12 : 0.22,
     });
     out = await executeFlux11Pro(token, fluxProInput);
+    const refTooSmall = !out.ok && /256\s*x\s*256|at least 256/i.test(String(out.error || ""));
+    if (refTooSmall) {
+      console.warn("[ia/image-preview] referência <256px após prep; fallback Schnell sem image_prompt");
+      if (referenceMeta && typeof referenceMeta === "object") {
+        referenceMeta = { ...referenceMeta, fallback: "schnell_sem_referencia_pixels" };
+      }
+      prompt = buildFluxImagePrompt({
+        history: parsed.data.history,
+        empresaRow,
+        contextoRows,
+        postContextProposal: parsed.data.post_context_proposal,
+        hasReferenceImage: false,
+        focusCampanhaContextoId: focusContextoId,
+      });
+      out = await runSchnellOnly();
+    }
   } else {
-    const fluxInput = fluxSchnellInputSchema.parse({
-      prompt,
-      aspect_ratio: aspect,
-      num_outputs: 1,
-      output_format: "png",
-      output_quality: 80,
-    });
-    out = await executeFluxSchnell(token, fluxInput);
+    out = await runSchnellOnly();
   }
 
   if (!out.ok) {
-    res.status(out.status || 500).json({ error: out.error || "Falha na geração", raw: out.raw });
+    res.status(out.status || 500).json({
+      error: friendlyImageGenerationError(out.error),
+      raw: out.raw,
+    });
     return;
   }
 
@@ -423,6 +446,7 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     contextoRows,
     parsed.data.post_context_proposal,
     parsed.data.history,
+    focusContextoId,
   );
   res.json({
     prediction_id: out.prediction_id,

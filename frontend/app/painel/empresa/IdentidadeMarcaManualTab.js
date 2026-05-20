@@ -14,8 +14,10 @@ const CAMPOS_MARCA = [
   ["exemplo_frase_marca", "Frase de exemplo", false],
 ];
 
+const COR_PICKER_VAZIO = "#94A3B8";
+
 function ColorField({ id, ariaLabel, value, onChange, disabled }) {
-  const hex = value && /^#/.test(value) ? value : "#6B2D9E";
+  const hex = value && /^#/.test(value) ? value : COR_PICKER_VAZIO;
   return (
     <div className="flex items-center gap-3">
       <label

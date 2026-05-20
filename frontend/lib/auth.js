@@ -131,10 +131,26 @@ async function refreshAccessToken() {
   }
 }
 
+function messageForFetchTimeout(timeoutMs, requestLabel) {
+  const label = String(requestLabel || "").trim();
+  if (label === "post-context") {
+    return "O resumo demorou mais que o esperado. Tente de novo em instantes.";
+  }
+  if (label === "identidade") {
+    return "A análise demorou demais. Aguarde um instante e tente de novo.";
+  }
+  if (timeoutMs > DEFAULT_FETCH_TIMEOUT_MS) {
+    return "A operação demorou demais. Aguarde um instante e tente de novo.";
+  }
+  return "Tempo esgotado — verifique se o backend está rodando.";
+}
+
 export async function authApiFetch(path, opts = {}) {
   const timeoutMs =
     typeof opts.timeoutMs === "number" ? opts.timeoutMs : DEFAULT_FETCH_TIMEOUT_MS;
-  const { headers: hdrIn, ...fetchRest } = opts;
+  const timeoutLabel =
+    typeof opts.timeoutLabel === "string" ? opts.timeoutLabel : "";
+  const { headers: hdrIn, timeoutLabel: _tl, ...fetchRest } = opts;
   const base = getApiBase();
   const url = `${base}${path}`;
   const headers = { ...hdrIn };
@@ -166,7 +182,7 @@ export async function authApiFetch(path, opts = {}) {
         ok: false,
         status: 0,
         json: null,
-        networkError: new Error("Tempo esgotado — verifique se o backend está rodando."),
+        networkError: new Error(messageForFetchTimeout(timeoutMs, timeoutLabel)),
       };
     }
     return { ok: false, status: 0, json: null, networkError: err };

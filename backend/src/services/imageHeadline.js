@@ -1,9 +1,13 @@
 /** Frase curta que aparece NA IMAGEM (não é legenda do post). */
 export const FRASE_NA_IMAGEM_MAX = 56;
 
+const HIDDEN_USER_LINES = new Set([
+  "confirmar e gerar prévia da imagem.",
+  "gerar arte com contextos e fotos do painel.",
+]);
+
 const FOLLOWER_RE =
   /(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(?:k|mil|m|milh[oõ]es?)?\s*(?:de\s+)?seguidores?|seguidores?\s*(?:no\s+)?(?:instagram|insta)?/i;
-const FOLLOWER_NUM_RE = /(\d{3,})\s*k|\b(\d{2,3})\s*mil\b|500\s*k|400\s*k|500\s*mil|400\s*mil/gi;
 
 /**
  * @param {string} text
@@ -50,65 +54,107 @@ export function normalizeFraseNaImagem(raw) {
 }
 
 /**
- * Gera frase padrão a partir do pedido (ex.: marco de seguidores).
+ * Últimas mensagens do cliente (ignora confirmações automáticas do painel).
+ *
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {number} maxUserMessages
+ */
+export function recentUserTexts(history, maxUserMessages = 3) {
+  const out = [];
+  for (let i = history.length - 1; i >= 0 && out.length < maxUserMessages; i--) {
+    const m = history[i];
+    if (m?.role !== "user") continue;
+    const t = String(m.content ?? "").trim();
+    if (!t) continue;
+    const norm = t.toLowerCase().replace(/\s+/g, " ");
+    if (HIDDEN_USER_LINES.has(norm)) continue;
+    out.unshift(t);
+  }
+  return out;
+}
+
+function fraseFromProposal(proposal) {
+  if (!proposal || typeof proposal !== "object") return null;
+  const direct = proposal.frase_na_imagem;
+  if (typeof direct === "string") {
+    const n = normalizeFraseNaImagem(direct);
+    if (n) return n;
+  }
+  const facts = proposal.facts_for_image;
+  if (facts && typeof facts === "object") {
+    for (const key of ["frase_na_imagem", "headline", "texto_na_imagem", "frase"]) {
+      const v = facts[key];
+      if (typeof v === "string") {
+        const n = normalizeFraseNaImagem(v);
+        if (n) return n;
+      }
+    }
+  }
+  return null;
+}
+
+function isFollowerCelebrationFrase(frase) {
+  return /parab[eé]ns\s+pelos|seguidores/i.test(String(frase || ""));
+}
+
+/**
+ * Deriva frase só do pedido recente do cliente (não de toda a conversa nem nome de contexto antigo).
  *
  * @param {Array<{ role: string, content: string }>} history
  * @param {Array<Record<string, unknown>>} [contextoRows]
  */
 export function deriveFraseNaImagemFromHistory(history, contextoRows = []) {
-  const userText = history
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join(" ");
-  const ctxText = contextoRows
-    .map((r) => `${r.nome ?? ""} ${r.descricao ?? ""} ${JSON.stringify(r.dados_json ?? {})}`)
-    .join(" ");
-  const blob = `${userText} ${ctxText}`;
+  /** Só o último pedido real do cliente — evita “500k” de mensagens antigas na mesma conversa. */
+  const recent = recentUserTexts(history, 1).join(" ");
+  if (!recent.trim()) return null;
 
-  const milestone = parseFollowerMilestone(blob);
+  const milestone = parseFollowerMilestone(recent);
   if (milestone) {
     return normalizeFraseNaImagem(`Parabéns pelos ${milestone}!`);
   }
 
-  if (/dia\s+das\s+m[aã]es|mothers?\s*day/i.test(blob)) {
+  const lower = recent.toLowerCase();
+  if (/at[eé]\s*\d+\s*%|%\s*off|desconto|\bpromo\b|black\s*friday/i.test(lower)) {
+    const pct = lower.match(/at[eé]\s*(\d{1,3})\s*%|(\d{1,3})\s*%\s*off/);
+    if (pct) {
+      const n = pct[1] || pct[2];
+      if (n) return normalizeFraseNaImagem(`Até ${n}% OFF`);
+    }
+    if (/black\s*friday/i.test(lower)) return normalizeFraseNaImagem("Black Friday");
+    return normalizeFraseNaImagem("Promoção");
+  }
+
+  if (/dia\s+das\s+m[aã]es|mothers?\s*day/i.test(lower)) {
     return normalizeFraseNaImagem("Feliz Dia das Mães!");
   }
-  if (/natal|christmas/i.test(blob)) return normalizeFraseNaImagem("Feliz Natal!");
-  if (/black\s*friday/i.test(blob)) return normalizeFraseNaImagem("Black Friday");
-
-  const ctx = contextoRows[0];
-  const nome = ctx ? String(ctx.nome ?? "").trim() : "";
-  if (nome && nome.length <= 40) {
-    return normalizeFraseNaImagem(nome);
-  }
+  if (/natal|christmas/i.test(lower)) return normalizeFraseNaImagem("Feliz Natal!");
 
   return null;
 }
 
 /**
- * Frase para renderizar na arte (campo explícito do Llama ou derivação).
+ * Frase para a arte: prioriza o pedido recente do cliente (evita “500k” de testes antigos na mesma conversa).
  *
  * @param {Record<string, unknown> | null | undefined} proposal
  * @param {Array<{ role: string, content: string }>} history
  * @param {Array<Record<string, unknown>>} [contextoRows]
  */
 export function resolveFraseNaImagem(proposal, history, contextoRows = []) {
-  if (proposal && typeof proposal === "object") {
-    const direct = proposal.frase_na_imagem;
-    if (typeof direct === "string") {
-      const n = normalizeFraseNaImagem(direct);
-      if (n) return n;
+  const fromRecent = deriveFraseNaImagemFromHistory(history, contextoRows);
+  const fromProposal = fraseFromProposal(proposal);
+  const recentBlob = recentUserTexts(history, 1).join(" ");
+
+  if (fromRecent) {
+    if (
+      fromProposal &&
+      fromProposal !== fromRecent &&
+      isFollowerCelebrationFrase(fromProposal) &&
+      !parseFollowerMilestone(recentBlob)
+    ) {
+      return fromRecent;
     }
-    const facts = proposal.facts_for_image;
-    if (facts && typeof facts === "object") {
-      for (const key of ["frase_na_imagem", "headline", "texto_na_imagem", "frase"]) {
-        const v = facts[key];
-        if (typeof v === "string") {
-          const n = normalizeFraseNaImagem(v);
-          if (n) return n;
-        }
-      }
-    }
+    return fromRecent;
   }
-  return deriveFraseNaImagemFromHistory(history, contextoRows);
+
+  return fromProposal;
 }

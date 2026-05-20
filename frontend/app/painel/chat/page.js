@@ -6,23 +6,73 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import { shouldOfferPostContext } from "../../../lib/chatDeliveryUi";
+import { IDENTIDADE_CONTEXTO_NOME, isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
+import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
+import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
+import {
+  CHAT_PEDIDO_AGUARDE_MSG,
+  CHAT_PEDIDO_RESUMO_MSG,
+  formatFraseNaImagemFromProposal,
+  patchMessageContextoSelection,
+  patchMessageFrase,
+} from "./chatImageConfirmUtils";
 
-/** Alinhado ao polling da Replicate no backend (~120s) + margem. */
+/** Alinhado ao polling do backend (~120s) + margem. */
 const IMAGE_PREVIEW_TIMEOUT_MS = 150_000;
-/** Ollama com contextos + mídias no prompt (backend: 120s). */
-const POST_CONTEXT_TIMEOUT_MS = 130_000;
+/** Chat com contextos + mídias no prompt (backend: 120s). */
+/** Painel imediato ~3s; com Llama no .env até ~32s + margem. */
+const POST_CONTEXT_TIMEOUT_MS = 55_000;
+const CONFIRM_IMAGE_USER_LINE = "Confirmar e gerar prévia da imagem.";
+const HIDDEN_USER_LINES = new Set([
+  CONFIRM_IMAGE_USER_LINE,
+  "Gerar prévia da imagem.",
+]);
 
-function looksLikeImageCreationCommand(text) {
-  const t = String(text || "")
-    .trim()
-    .toLowerCase();
-  if (t.length < 6) return false;
+function friendlyUiActionLabel(action) {
+  if (action?.id === "confirm_generate_image") return "Gerar prévia da imagem";
+  const label = String(action?.label ?? "").trim();
+  return label.replace(/\s*\(Replicate\s*\/\s*créditos\)\s*/gi, "").trim() || "Gerar prévia da imagem";
+}
+
+function isHiddenUserMessage(message) {
+  return message?.role === "user" && HIDDEN_USER_LINES.has(String(message.content ?? "").trim());
+}
+
+/**
+ * Só gera direto se o usuário pediu para GERAR a prévia (resumo já exibido).
+ * "Montar arte", "criar post" etc. sempre passam pelo chat + confirmação.
+ */
+function shouldGenerateImagePreviewDirectly(text) {
+  const raw = String(text || "").trim();
+  if (HIDDEN_USER_LINES.has(raw)) return true;
+  const t = raw.toLowerCase();
+  if (t.length < 8) return false;
   return (
-    /\bcri(a|ar|e)\s+(a\s+)?im(agem)?\b/.test(t) ||
-    /\bgera(r)?\s+(a\s+)?(pr[eé]via|arte)\b/.test(t) ||
-    /\bpr[eé]via\s+(da\s+)?im(agem)?\b/.test(t) ||
-    /\bmont(a|ar)\s+(a\s+)?(arte|imagem)\b/.test(t)
+    (/\bconfirm(ar|o)\b/.test(t) && /\b(pr[eé]via|imagem|arte)\b/.test(t)) ||
+    /\bgera(r)?\s+(a\s+)?pr[eé]via\b/.test(t) ||
+    /\bpr[eé]via\s+(da\s+)?im(agem)?\b/.test(t)
   );
+}
+
+/** Mensagem da IA que já tem resumo confirmável (evita pular confirmação com proposta antiga). */
+function findLatestConfirmedProposalAnchor(msgs) {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m.role !== "assistant") continue;
+    const sup = m.post_supplement;
+    const proposal = sup?.post_context_proposal;
+    const confirmed =
+      typeof sup?.confirmation_message === "string" && sup.confirmation_message.trim().length >= 8;
+    if (confirmed && proposal && typeof proposal === "object" && Object.keys(proposal).length > 0) {
+      return {
+        proposal,
+        supplement: sup,
+        messageId: m.id,
+        selected_contexto_id: m.selected_contexto_id,
+      };
+    }
+  }
+  return null;
 }
 
 function normalizeSupplementLink(l) {
@@ -54,7 +104,7 @@ function findLatestImageProposalObject(msgs) {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** UUIDs de mídias de imagem para referência na Replicate (máx. 3: 1ª = pixels no FLUX Pro; 2ª e 3ª = texto). */
+/** UUIDs de mídias de imagem para referência visual (máx. 3). */
 function referenceMidiaIdsFromProposal(proposal, supplementLinks) {
   const ids = [];
   const push = (id) => {
@@ -86,7 +136,7 @@ function referenceMidiaIdsFromProposal(proposal, supplementLinks) {
   return ids.slice(0, 3);
 }
 
-function buildImagePreviewRequestBody({ history, empresaId, proposal, supplementLinks }) {
+function buildImagePreviewRequestBody({ history, empresaId, proposal, supplementLinks, focusContextoId }) {
   const reference_midia_ids = referenceMidiaIdsFromProposal(proposal, supplementLinks);
   const linksForApi = Array.isArray(supplementLinks)
     ? supplementLinks
@@ -94,6 +144,10 @@ function buildImagePreviewRequestBody({ history, empresaId, proposal, supplement
         .map((l) => ({ kind: l.kind, id: l.id.trim() }))
         .filter((l) => UUID_RE.test(l.id))
     : [];
+  const focus =
+    focusContextoId && UUID_RE.test(String(focusContextoId).trim())
+      ? String(focusContextoId).trim()
+      : null;
   return {
     history,
     id_empresa: empresaId,
@@ -102,19 +156,8 @@ function buildImagePreviewRequestBody({ history, empresaId, proposal, supplement
       : {}),
     ...(linksForApi.length ? { post_supplement_links: linksForApi } : {}),
     ...(reference_midia_ids.length ? { reference_midia_ids } : {}),
+    ...(focus ? { focus_contexto_id: focus } : {}),
   };
-}
-
-function formatFraseNaImagemFromProposal(proposal) {
-  if (!proposal || typeof proposal !== "object") return null;
-  const direct = proposal.frase_na_imagem;
-  if (typeof direct === "string" && direct.trim()) return direct.trim();
-  const facts = proposal.facts_for_image;
-  if (facts && typeof facts === "object" && typeof facts.frase_na_imagem === "string") {
-    const f = facts.frase_na_imagem.trim();
-    if (f) return f;
-  }
-  return null;
 }
 
 function buildImageContextNote(cg) {
@@ -125,31 +168,25 @@ function buildImageContextNote(cg) {
       ? cg.frase_na_imagem.trim()
       : null;
   if (frase) lines.push(`Frase na imagem: «${frase}»`);
-  const n = Number(cg.contextos_carregados) || 0;
   const nomes = Array.isArray(cg.contextos)
-    ? cg.contextos.map((c) => (c && typeof c.nome === "string" ? c.nome.trim() : "")).filter(Boolean)
+    ? cg.contextos
+        .map((c) => (c && typeof c.nome === "string" ? c.nome.trim() : ""))
+        .filter(Boolean)
+        .filter((nome) => nome.toLowerCase() !== IDENTIDADE_CONTEXTO_NOME.toLowerCase())
     : [];
-  if (n === 0) {
-    lines.push("Contextos do painel: nenhum ativo (usou cadastro + conversa).");
-  } else {
-    const lista = nomes.slice(0, 6).join(", ");
-    const mais = nomes.length > 6 ? "…" : "";
-    lines.push(
-      `Contextos considerados: ${n}${lista ? ` (${lista}${mais})` : ""}`,
-    );
+  const n = nomes.length;
+  if (n > 0) {
+    const lista = nomes.slice(0, 3).join(", ");
+    const mais = nomes.length > 3 ? "…" : "";
+    lines.push(`Contexto: ${lista}${mais}`);
   }
   return lines.length ? `\n\n(${lines.join(" · ")})` : "";
 }
 
-function appendImageGenerationModeNote(contextoLinha, json) {
-  const ig = json?.image_generation;
-  if (ig && ig.mode === "flux-1.1-pro-reference") {
-    return (
-      contextoLinha +
-      "\n\n(Referência visual do acervo: FLUX 1.1 Pro com image_prompt — custo na Replicate costuma ser maior que prévia só com texto.)"
-    );
-  }
-  return contextoLinha;
+function imagePreviewSuccessLine(urls) {
+  return urls.length > 0
+    ? "Prévia da imagem (o link pode expirar depois de um tempo):"
+    : "A geração terminou sem imagem. Tente de novo ou ajuste o pedido no chat.";
 }
 
 function lastConversaStorageKey(empresaId) {
@@ -203,6 +240,11 @@ function fromApiMensagem(m) {
     meta && typeof meta === "object" && meta.post_context_proposal && typeof meta.post_context_proposal === "object"
       ? meta.post_context_proposal
       : undefined;
+  const hidden = meta && typeof meta === "object" && meta.hidden === true;
+  const selected_contexto_id =
+    meta && typeof meta === "object" && typeof meta.selected_contexto_id === "string"
+      ? meta.selected_contexto_id.trim()
+      : null;
   const out = {
     id: typeof m.id_mensagem === "string" ? m.id_mensagem : crypto.randomUUID(),
     role: papel,
@@ -210,6 +252,10 @@ function fromApiMensagem(m) {
     sources,
     ui_actions: ui_actions.length ? ui_actions : undefined,
     image_urls: image_urls.length ? image_urls : undefined,
+    ...(hidden ? { hidden: true } : {}),
+    ...(selected_contexto_id && UUID_RE.test(selected_contexto_id)
+      ? { selected_contexto_id }
+      : {}),
   };
   if (post_supplement) out.post_supplement = post_supplement;
   if (post_context_proposal && Object.keys(post_context_proposal).length > 0 && !post_supplement) {
@@ -229,6 +275,10 @@ function toApiMensagens(messages) {
     }
     if (m.post_context_proposal && typeof m.post_context_proposal === "object" && Object.keys(m.post_context_proposal).length > 0) {
       meta.post_context_proposal = m.post_context_proposal;
+    }
+    if (m.hidden) meta.hidden = true;
+    if (m.selected_contexto_id && UUID_RE.test(String(m.selected_contexto_id))) {
+      meta.selected_contexto_id = String(m.selected_contexto_id);
     }
     return {
       papel: m.role,
@@ -303,15 +353,14 @@ export default function PainelChatPage() {
   const [actionBusy, setActionBusy] = useState(null);
   /** Mensagem da IA aguardando `POST /ia/post-context-proposal`. */
   const [postContextLoadingId, setPostContextLoadingId] = useState(null);
+  const [contextosCampanha, setContextosCampanha] = useState([]);
   const messagesRef = useRef(messages);
 
   const chatBusy = sending || !!actionBusy || !!postContextLoadingId;
   const busyStatusLabel = actionBusy
-    ? actionBusy === "panel-image"
-      ? "Gerando arte com contextos e fotos do painel"
-      : "Gerando prévia da imagem na Replicate"
+    ? "Gerando prévia da imagem"
     : postContextLoadingId
-      ? "Montando confirmação com contextos e fotos do painel"
+      ? "Preparando resumo para a imagem"
       : null;
 
   useEffect(() => {
@@ -365,8 +414,12 @@ export default function PainelChatPage() {
         setEmpresaReady(true);
         return;
       }
-      const primeira = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas[0] : null;
-      const idEmp = primeira?.empresa?.id_empresa ?? null;
+      const list = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas : [];
+      const idEmp = resolveEmpresaAtivaId(list);
+      if (idEmp) {
+        const row = empresaRowFromMinhas(list, idEmp);
+        if (row?.empresa) setEmpresaAtiva(row.empresa);
+      }
       setEmpresaId(idEmp || null);
       setEmpresaReady(true);
     })();
@@ -374,6 +427,26 @@ export default function PainelChatPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!empresaId) {
+      setContextosCampanha([]);
+      return;
+    }
+    let active = true;
+    authApiFetchWithToken(`/empresas/${encodeURIComponent(empresaId)}/contextos`).then((r) => {
+      if (!active) return;
+      if (!r.ok || r.networkError) {
+        setContextosCampanha([]);
+        return;
+      }
+      const rows = Array.isArray(r.json?.contextos) ? r.json.contextos : [];
+      setContextosCampanha(rows.filter((c) => !isIdentidadeMarcaContextoRow(c)));
+    });
+    return () => {
+      active = false;
+    };
+  }, [empresaId]);
 
   const loadListaConversas = useCallback(async () => {
     if (!empresaId) return;
@@ -478,12 +551,13 @@ export default function PainelChatPage() {
             id_empresa: empresaId,
           }),
           timeoutMs: POST_CONTEXT_TIMEOUT_MS,
+          timeoutLabel: "post-context",
         });
         if (!prop.ok || prop.networkError) {
           const msg =
             prop.networkError?.message ||
             (typeof prop.json?.error === "string" ? prop.json.error : formatAuthError(prop.json)) ||
-            "Não foi possível montar a confirmação com os dados do painel.";
+            "Não foi possível preparar o resumo agora. Tente novamente em instantes.";
           const note = {
             id: crypto.randomUUID(),
             role: "assistant",
@@ -496,23 +570,24 @@ export default function PainelChatPage() {
           return;
         }
         const rawSup = prop.json;
+        const proposalFromApi =
+          rawSup?.post_context_proposal && typeof rawSup.post_context_proposal === "object"
+            ? rawSup.post_context_proposal
+            : {};
+        const confirmFromApi =
+          typeof rawSup?.confirmation_message === "string" ? rawSup.confirmation_message.trim() : "";
         const post_supplement =
-          rawSup &&
-          typeof rawSup.confirmation_message === "string" &&
-          rawSup.confirmation_message.trim()
+          rawSup && (confirmFromApi.length >= 8 || Object.keys(proposalFromApi).length > 0)
             ? {
-                confirmation_message: rawSup.confirmation_message.trim(),
+                confirmation_message: confirmFromApi.length >= 8 ? confirmFromApi : CHAT_PEDIDO_RESUMO_MSG,
                 links: Array.isArray(rawSup.links)
                   ? rawSup.links.map(normalizeSupplementLink).filter(Boolean)
                   : [],
-                post_context_proposal:
-                  rawSup.post_context_proposal && typeof rawSup.post_context_proposal === "object"
-                    ? rawSup.post_context_proposal
-                    : {},
+                post_context_proposal: proposalFromApi,
               }
             : undefined;
         const rawUi = rawSup?.ui_actions;
-        const ui_actions = Array.isArray(rawUi)
+        let ui_actions = Array.isArray(rawUi)
           ? rawUi.filter(
               (a) =>
                 a &&
@@ -523,16 +598,52 @@ export default function PainelChatPage() {
                 a.label.trim(),
             )
           : [];
+        if (!ui_actions.length && post_supplement) {
+          ui_actions = [{ id: "confirm_generate_image", label: "Gerar prévia da imagem" }];
+        }
+        const proposalObj =
+          post_supplement?.post_context_proposal && typeof post_supplement.post_context_proposal === "object"
+            ? post_supplement.post_context_proposal
+            : {};
+        let selectedId =
+          proposalObj?.matched_contexto &&
+          typeof proposalObj.matched_contexto === "object" &&
+          typeof proposalObj.matched_contexto.id_contexto_empresa === "string"
+            ? proposalObj.matched_contexto.id_contexto_empresa.trim()
+            : null;
+        if (
+          selectedId &&
+          contextosCampanha.length &&
+          !contextosCampanha.some((c) => String(c.id_contexto_empresa) === selectedId)
+        ) {
+          selectedId = String(contextosCampanha[0]?.id_contexto_empresa ?? "") || null;
+        }
+        if (!selectedId && contextosCampanha.length) {
+          selectedId = String(contextosCampanha[0]?.id_contexto_empresa ?? "") || null;
+        }
+
         setMessages((prev) => {
-          const next = prev.map((m) =>
+          let next = prev.map((m) =>
             m.id === assistantMessageId
               ? {
                   ...m,
+                  content: CHAT_PEDIDO_RESUMO_MSG,
                   post_supplement,
                   ui_actions: ui_actions.length ? ui_actions : undefined,
+                  ...(selectedId && UUID_RE.test(selectedId) ? { selected_contexto_id: selectedId } : {}),
                 }
               : m,
           );
+          if (selectedId && contextosCampanha.length) {
+            const anchor = next.find((m) => m.id === assistantMessageId);
+            if (anchor) {
+              next = next.map((m) =>
+                m.id === assistantMessageId
+                  ? patchMessageContextoSelection(anchor, selectedId, contextosCampanha)
+                  : m,
+              );
+            }
+          }
           void syncMensagens(chatId, next);
           return next;
         });
@@ -550,7 +661,32 @@ export default function PainelChatPage() {
         setPostContextLoadingId(null);
       }
     },
-    [empresaId, syncMensagens],
+    [empresaId, syncMensagens, contextosCampanha],
+  );
+
+  const onConfirmContextoChange = useCallback(
+    (messageId, ctxId) => {
+      if (!ctxId || !UUID_RE.test(ctxId)) return;
+      setMessages((prev) => {
+        const next = prev.map((m) =>
+          m.id === messageId ? patchMessageContextoSelection(m, ctxId, contextosCampanha) : m,
+        );
+        if (conversaId) void syncMensagens(conversaId, next);
+        return next;
+      });
+    },
+    [contextosCampanha, conversaId, syncMensagens],
+  );
+
+  const onConfirmFraseChange = useCallback(
+    (messageId, frase) => {
+      setMessages((prev) => {
+        const next = prev.map((m) => (m.id === messageId ? patchMessageFrase(m, frase) : m));
+        if (conversaId) void syncMensagens(conversaId, next);
+        return next;
+      });
+    },
+    [conversaId, syncMensagens],
   );
 
   const runDeliveryAction = useCallback(
@@ -561,21 +697,18 @@ export default function PainelChatPage() {
 
       if (
         typeof window !== "undefined" &&
-        !window.confirm(
-          "Gerar a prévia cria uma imagem na Replicate e pode consumir créditos da conta ligada ao servidor. Só continue se isso for intencional.",
-        )
+        !window.confirm("Gerar a prévia da imagem? Pode consumir créditos do seu plano.")
       ) {
         return;
       }
 
-      const userLine = "Confirmar e gerar prévia da imagem.";
       setActionBusy(`${fromAssistantMessageId}:${actionId}`);
       setSending(true);
       const prev = messagesRef.current;
       const cleared = prev.map((m) =>
         m.id === fromAssistantMessageId ? { ...m, ui_actions: undefined } : m,
       );
-      const userMsg = { id: crypto.randomUUID(), role: "user", content: userLine };
+      const userMsg = { id: crypto.randomUUID(), role: "user", content: CONFIRM_IMAGE_USER_LINE, hidden: true };
       const msgsWithUser = [...cleared, userMsg];
       setMessages(msgsWithUser);
 
@@ -599,7 +732,7 @@ export default function PainelChatPage() {
             id: crypto.randomUUID(),
             role: "assistant",
             content:
-              "Não encontrei o pacote de confirmação nesta mensagem. Peça o post de novo no chat para a IA montar o resumo com links.",
+              "Não encontrei o resumo desta arte. Descreva de novo o que você quer publicar.",
             sources: [],
           };
           const comErro = [...msgsWithUser, errBubble];
@@ -607,6 +740,10 @@ export default function PainelChatPage() {
           await syncMensagens(idChat, comErro);
           return;
         }
+        const focusContextoId =
+          anchor?.selected_contexto_id ||
+          proposal?.matched_contexto?.id_contexto_empresa ||
+          null;
         const result = await authApiFetchWithToken("/ia/image-preview", {
           method: "POST",
           body: JSON.stringify(
@@ -615,6 +752,7 @@ export default function PainelChatPage() {
               empresaId,
               proposal,
               supplementLinks,
+              focusContextoId,
             }),
           ),
           timeoutMs: IMAGE_PREVIEW_TIMEOUT_MS,
@@ -633,15 +771,11 @@ export default function PainelChatPage() {
         }
         const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
         const cg = result.json?.contexto_geracao;
-        let contextoLinha = buildImageContextNote(cg);
-        contextoLinha = appendImageGenerationModeNote(contextoLinha, result.json);
+        const contextoLinha = buildImageContextNote(cg);
         const assistantFollowUp = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content:
-            (urls.length > 0
-              ? "Prévia gerada (o link da imagem pode expirar na hospedagem da Replicate):"
-              : "A geração retornou sem URLs de imagem.") + contextoLinha,
+          content: imagePreviewSuccessLine(urls) + contextoLinha,
           sources: [],
           image_urls: urls.length ? urls : undefined,
         };
@@ -664,138 +798,6 @@ export default function PainelChatPage() {
       }
     },
     [conversaId, empresaId, sending, actionBusy, syncMensagens],
-  );
-
-  const runGenerateImageFromPanel = useCallback(
-    async function runGenerateImageFromPanelFn() {
-      if (!empresaId || sending || actionBusy) return;
-      const hist = messages.filter((m) => m.role === "user" || m.role === "assistant");
-      if (!hist.length) {
-        showErr("Envie pelo menos uma mensagem antes de gerar a arte, para a IA ter contexto da conversa.");
-        return;
-      }
-      if (
-        typeof window !== "undefined" &&
-        !window.confirm(
-          "Gerar a prévia usa os contextos ativos e fotos referenciadas no painel (Replicate pode consumir créditos). Continuar?",
-        )
-      ) {
-        return;
-      }
-
-      let idChat = conversaId;
-      const userLine = "Gerar arte com contextos e fotos do painel.";
-      const userMsg = { id: crypto.randomUUID(), role: "user", content: userLine };
-      const msgsWithUser = [...messages, userMsg];
-      setActionBusy("panel-image");
-      setSending(true);
-      setMessages(msgsWithUser);
-
-      if (!idChat) {
-        const cr = await authApiFetchWithToken("/chat/conversas", {
-          method: "POST",
-          body: JSON.stringify({ id_empresa: empresaId }),
-        });
-        if (!cr.ok || cr.networkError) {
-          setMessages(messages);
-          setActionBusy(null);
-          setSending(false);
-          showErr(cr.networkError?.message || formatAuthError(cr.json) || "Não foi possível iniciar a conversa.");
-          return;
-        }
-        const created = cr.json?.conversa?.id_conversa;
-        if (!created || typeof created !== "string") {
-          setMessages(messages);
-          setActionBusy(null);
-          setSending(false);
-          showErr("Algo saiu errado. Tente de novo.");
-          return;
-        }
-        idChat = created;
-        setConversaId(created);
-        try {
-          sessionStorage.setItem(lastConversaStorageKey(empresaId), created);
-        } catch {
-          /* ignore */
-        }
-      }
-
-      const okSync1 = await syncMensagens(idChat, msgsWithUser);
-      if (!okSync1) {
-        setActionBusy(null);
-        setSending(false);
-        return;
-      }
-
-      const historyFull = msgsWithUser.map((m) => ({ role: m.role, content: m.content }));
-      const proposal = findLatestImageProposalObject(msgsWithUser);
-      let supplementLinks = [];
-      for (let i = msgsWithUser.length - 1; i >= 0; i--) {
-        const ps = msgsWithUser[i]?.post_supplement;
-        if (ps && Array.isArray(ps.links) && ps.links.length) {
-          supplementLinks = ps.links;
-          break;
-        }
-      }
-
-      try {
-        const result = await authApiFetchWithToken("/ia/image-preview", {
-          method: "POST",
-          body: JSON.stringify(
-            buildImagePreviewRequestBody({
-              history: historyFull,
-              empresaId,
-              proposal: proposal || undefined,
-              supplementLinks,
-            }),
-          ),
-          timeoutMs: IMAGE_PREVIEW_TIMEOUT_MS,
-        });
-        if (!result.ok || result.networkError) {
-          const msg =
-            result.networkError?.message ||
-            result.json?.error ||
-            "Não foi possível gerar a prévia agora.";
-          const errText = typeof msg === "string" ? msg : formatAuthError(result.json) || "Erro desconhecido.";
-          const errBubble = { id: crypto.randomUUID(), role: "assistant", content: String(errText), sources: [] };
-          const comErro = [...msgsWithUser, errBubble];
-          setMessages(comErro);
-          await syncMensagens(idChat, comErro);
-          return;
-        }
-        const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
-        const cg = result.json?.contexto_geracao;
-        let contextoLinha = buildImageContextNote(cg);
-        contextoLinha = appendImageGenerationModeNote(contextoLinha, result.json);
-        const assistantFollowUp = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content:
-            (urls.length > 0
-              ? "Prévia gerada (o link da imagem pode expirar na hospedagem da Replicate):"
-              : "A geração retornou sem URLs de imagem.") + contextoLinha,
-          sources: [],
-          image_urls: urls.length ? urls : undefined,
-        };
-        const finalMsgs = [...msgsWithUser, assistantFollowUp];
-        setMessages(finalMsgs);
-        await syncMensagens(idChat, finalMsgs);
-      } catch (err) {
-        const errBubble = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: err instanceof Error ? err.message : "Erro inesperado ao gerar a arte.",
-          sources: [],
-        };
-        const comErro = [...msgsWithUser, errBubble];
-        setMessages(comErro);
-        await syncMensagens(idChat, comErro);
-      } finally {
-        setActionBusy(null);
-        setSending(false);
-      }
-    },
-    [empresaId, sending, actionBusy, messages, conversaId, syncMensagens],
   );
 
   const onSubmit = useCallback(
@@ -844,25 +846,19 @@ export default function PainelChatPage() {
         return;
       }
 
-      const latestProposal = findLatestImageProposalObject(msgsComUsuario);
-      if (looksLikeImageCreationCommand(question) && latestProposal) {
+      const confirmAnchor = findLatestConfirmedProposalAnchor(msgsComUsuario);
+      if (shouldGenerateImagePreviewDirectly(question) && confirmAnchor) {
+        const latestProposal = confirmAnchor.proposal;
         if (
           typeof window !== "undefined" &&
-          !window.confirm(
-            "Gerar a prévia cria uma imagem na Replicate e pode consumir créditos da conta ligada ao servidor. Só continue se isso for intencional.",
-          )
+          !window.confirm("Gerar a prévia da imagem? Pode consumir créditos do seu plano.")
         ) {
           setSending(false);
           return;
         }
-        let latestLinks = [];
-        for (let i = msgsComUsuario.length - 1; i >= 0; i--) {
-          const ps = msgsComUsuario[i]?.post_supplement;
-          if (ps && Array.isArray(ps.links) && ps.links.length) {
-            latestLinks = ps.links;
-            break;
-          }
-        }
+        const latestLinks = Array.isArray(confirmAnchor.supplement?.links)
+          ? confirmAnchor.supplement.links
+          : [];
         const imgRes = await authApiFetchWithToken("/ia/image-preview", {
           method: "POST",
           body: JSON.stringify(
@@ -871,6 +867,9 @@ export default function PainelChatPage() {
               empresaId,
               proposal: latestProposal,
               supplementLinks: latestLinks,
+              focusContextoId:
+                confirmAnchor.selected_contexto_id ||
+                latestProposal?.matched_contexto?.id_contexto_empresa,
             }),
           ),
           timeoutMs: IMAGE_PREVIEW_TIMEOUT_MS,
@@ -890,15 +889,11 @@ export default function PainelChatPage() {
         }
         const urls = Array.isArray(imgRes.json?.image_urls) ? imgRes.json.image_urls.filter(Boolean) : [];
         const cg = imgRes.json?.contexto_geracao;
-        let contextoLinha = buildImageContextNote(cg);
-        contextoLinha = appendImageGenerationModeNote(contextoLinha, imgRes.json);
+        const contextoLinha = buildImageContextNote(cg);
         const assistantFollowUp = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content:
-            (urls.length > 0
-              ? "Prévia gerada (o link da imagem pode expirar na hospedagem da Replicate):"
-              : "A geração retornou sem URLs de imagem.") + contextoLinha,
+          content: imagePreviewSuccessLine(urls) + contextoLinha,
           sources: [],
           image_urls: urls.length ? urls : undefined,
         };
@@ -977,10 +972,14 @@ export default function PainelChatPage() {
               a.label.trim(),
           )
         : [];
+      const needsPostContext =
+        !post_supplement &&
+        (Boolean(result.json?.offer_post_context) || shouldOfferPostContext(question));
+
       const assistantMsg = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: answer,
+        content: needsPostContext ? CHAT_PEDIDO_AGUARDE_MSG : answer,
         sources,
         post_supplement,
         ui_actions: ui_actions.length ? ui_actions : undefined,
@@ -989,10 +988,6 @@ export default function PainelChatPage() {
       setMessages(finalMsgs);
       await syncMensagens(idChat, finalMsgs);
       setSending(false);
-
-      const needsPostContext =
-        !post_supplement &&
-        (Boolean(result.json?.offer_post_context) || shouldOfferPostContext(question));
       if (needsPostContext && empresaId) {
         const historyForProposal = finalMsgs.map((m) => ({ role: m.role, content: m.content }));
         void attachPostContextSupplement(idChat, assistantMsg.id, historyForProposal);
@@ -1279,6 +1274,7 @@ export default function PainelChatPage() {
 
               {messages.map((message) => {
                 if (message.role === "user") {
+                  if (isHiddenUserMessage(message)) return null;
                   return (
                     <article key={message.id} className="flex justify-end">
                       <div className="max-w-[85%] rounded-2xl bg-accent px-4 py-3 text-base font-medium text-accent-foreground shadow-sm md:max-w-[70%]">
@@ -1291,6 +1287,12 @@ export default function PainelChatPage() {
                 const hasSources = Array.isArray(message.sources) && message.sources.length > 0;
                 const hasUiActions = Array.isArray(message.ui_actions) && message.ui_actions.length > 0;
                 const hasImages = Array.isArray(message.image_urls) && message.image_urls.length > 0;
+                const supplementMsg =
+                  message.post_supplement &&
+                  typeof message.post_supplement.confirmation_message === "string"
+                    ? message.post_supplement.confirmation_message.trim()
+                    : "";
+                const hasSupplement = Boolean(supplementMsg);
 
                 return (
                   <article key={message.id} className="flex items-start gap-3">
@@ -1304,45 +1306,33 @@ export default function PainelChatPage() {
                       />
                     </div>
                     <div className="min-w-0 max-w-[85%] rounded-2xl border border-border bg-background px-4 py-3 text-foreground shadow-sm md:max-w-[70%]">
-                      <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{message.content}</p>
+                      {!hasSupplement ? (
+                        <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{message.content}</p>
+                      ) : (
+                        <p className="mb-2 text-sm text-muted-foreground">{message.content}</p>
+                      )}
                       {postContextLoadingId === message.id ? (
                         <div className="mt-3 rounded-xl border border-dashed border-accent/40 bg-accent-muted/15 px-3 py-2.5 text-sm text-muted-foreground">
-                          Montando confirmação com contextos e fotos do painel…
+                          Preparando o resumo…
                         </div>
                       ) : null}
-                      {message.post_supplement &&
-                      typeof message.post_supplement === "object" &&
-                      typeof message.post_supplement.confirmation_message === "string" &&
-                      message.post_supplement.confirmation_message.trim() ? (
-                        <div className="mt-3 rounded-xl border border-accent/35 bg-accent-muted/20 px-3 py-2.5 text-sm leading-relaxed">
-                          <p className="whitespace-pre-wrap text-foreground/95">
-                            {message.post_supplement.confirmation_message}
-                          </p>
-                          {formatFraseNaImagemFromProposal(message.post_supplement.post_context_proposal) ? (
-                            <p className="mt-2 text-sm font-medium text-foreground/90">
-                              Frase na imagem: «
-                              {formatFraseNaImagemFromProposal(message.post_supplement.post_context_proposal)}
-                              »
-                            </p>
-                          ) : null}
-                          {Array.isArray(message.post_supplement.links) && message.post_supplement.links.length > 0 ? (
-                            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
-                              {message.post_supplement.links.map((l) => (
-                                <li key={`${l.kind}-${l.id}`}>
-                                  <Link
-                                    href={l.href}
-                                    className="font-semibold text-accent underline decoration-accent/45 underline-offset-2 hover:decoration-accent"
-                                  >
-                                    {l.label}
-                                  </Link>
-                                  <span className="ml-1.5 text-xs text-muted-foreground">
-                                    {l.kind === "contexto" ? "· contexto" : "· mídia"}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : null}
-                        </div>
+                      {hasSupplement ? (
+                        <ChatImageConfirmBlock
+                          supplement={message.post_supplement}
+                          contextosCampanha={contextosCampanha}
+                          selectedContextoId={
+                            message.selected_contexto_id ||
+                            message.post_supplement?.post_context_proposal?.matched_contexto
+                              ?.id_contexto_empresa ||
+                            ""
+                          }
+                          fraseNaImagem={formatFraseNaImagemFromProposal(
+                            message.post_supplement?.post_context_proposal,
+                          )}
+                          onContextoChange={(ctxId) => onConfirmContextoChange(message.id, ctxId)}
+                          onFraseChange={(frase) => onConfirmFraseChange(message.id, frase)}
+                          disabled={!!actionBusy || sending}
+                        />
                       ) : null}
                       {hasImages ? (
                         <div className="mt-3 space-y-2">
@@ -1369,7 +1359,7 @@ export default function PainelChatPage() {
                               onClick={() => void runDeliveryAction(message.id, a.id)}
                               className="rounded-xl border border-accent/40 bg-accent-muted px-3 py-2.5 text-left text-sm font-semibold text-[#009638] shadow-sm transition-[transform,box-shadow] hover:border-accent/60 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-100"
                             >
-                              {a.label}
+                              {friendlyUiActionLabel(a)}
                             </button>
                           ))}
                         </div>
@@ -1400,18 +1390,6 @@ export default function PainelChatPage() {
               <p className="mb-2 text-center text-xs font-medium text-muted-foreground" aria-live="polite">
                 {busyStatusLabel}… pode levar até 2 minutos.
               </p>
-            ) : null}
-            {empresaId && messages.length > 0 ? (
-              <div className="mb-2 flex justify-end">
-                <button
-                  type="button"
-                  disabled={chatBusy}
-                  onClick={() => void runGenerateImageFromPanel()}
-                  className="rounded-lg border border-accent/35 bg-accent-muted/30 px-3 py-1.5 text-xs font-semibold text-[#009638] transition-colors hover:border-accent/55 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-100"
-                >
-                  Gerar arte (contextos + fotos do painel)
-                </button>
-              </div>
             ) : null}
             <form className="flex items-end gap-2" onSubmit={onSubmit}>
               <button

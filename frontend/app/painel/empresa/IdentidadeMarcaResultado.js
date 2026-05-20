@@ -16,8 +16,10 @@ const CAMPOS = [
   ["exemplo_frase_marca", "Frase de exemplo da marca", false],
 ];
 
+const COR_PICKER_VAZIO = "#94A3B8";
+
 function ColorField({ id, label, value, onChange, disabled }) {
-  const hex = value && /^#/.test(value) ? value : "#6B2D9E";
+  const hex = value && /^#/.test(value) ? value : COR_PICKER_VAZIO;
   return (
     <div>
       <label htmlFor={`${id}-hex`} className="mb-1.5 block text-xs font-medium text-muted-foreground">
@@ -66,7 +68,7 @@ export default function IdentidadeMarcaResultado({ dados, canEdit, onFieldChange
       <div className="rounded-xl border border-dashed border-border bg-surface-elevated/30 px-4 py-8 text-center">
         <p className="text-sm font-medium text-foreground">Resultado da análise</p>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-          Depois de analisar suas fotos, a Tuma mostra aqui cores, estilo e tom sugeridos. Você pode revisar e
+          Depois de analisar suas fotos, o Tuma mostra aqui cores, estilo e tom sugeridos. Você pode revisar e
           alterar tudo antes de salvar.
         </p>
       </div>
@@ -78,7 +80,7 @@ export default function IdentidadeMarcaResultado({ dados, canEdit, onFieldChange
       <div className="mb-4">
         <h3 className="text-sm font-semibold text-foreground">Resultado da análise</h3>
         <p className="mt-1 text-sm text-muted-foreground">
-          Sugestões da Tuma com base nas fotos. Ajuste qualquer campo — o que você mudar não será substituído na
+          Sugestões do Tuma com base nas fotos. Ajuste qualquer campo — o que você mudar não será substituído na
           próxima análise.
         </p>
       </div>

@@ -10,6 +10,8 @@ import {
 } from "../../../lib/identidadeMarcaUi";
 import IdentidadeMarcaFotosTab from "./IdentidadeMarcaFotosTab";
 import IdentidadeMarcaManualTab from "./IdentidadeMarcaManualTab";
+import IdentidadeMarcaProgressBar from "./IdentidadeMarcaProgressBar";
+import IdentidadeMarcaLogoField from "./IdentidadeMarcaLogoField";
 
 const BTN_SECUNDARIO =
   "rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60";
@@ -77,6 +79,19 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
     });
   }
 
+  function onLogoChange(idMidia) {
+    setLockedFields((prev) => {
+      const next = new Set(prev);
+      next.add("id_midia_logo");
+      return next;
+    });
+    setDados((s) => {
+      const next = { ...s, id_midia_logo: idMidia };
+      setCompletude(calcCompletudeLocal(next));
+      return next;
+    });
+  }
+
   async function onSave() {
     if (!empresaId || !canEdit) return;
     setSaving(true);
@@ -93,22 +108,33 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
     const id = result.json?.identidade;
     setDados(dadosFromApi(id?.dados));
     setCompletude(id?.completude || null);
+    setOpen(false);
     onMsg("Identidade da marca salva.", "ok");
   }
 
   if (!empresaId) return null;
 
-  const pct = completude?.percentual ?? calcCompletudeLocal(dados).percentual;
-  const pronto = completude?.pronto_para_imagem;
+  const compLocal = calcCompletudeLocal(dados);
+  const pct = completude?.percentual ?? compLocal.percentual;
+  const pronto = completude?.pronto_para_imagem ?? compLocal.pronto_para_imagem;
+  const temConteudo = temConteudoIdentidade(dados) || pct > 0;
+
+  const progressSummary = pronto
+    ? "Identidade pronta — o Tuma pode gerar artes alinhadas à sua marca."
+    : pct >= 75
+      ? "Quase lá — falta pouco para a identidade ficar completa."
+      : pct > 0
+        ? "O Tuma já entende parte da sua marca; complete ou analise mais fotos se quiser."
+        : "Configure fotos ou preencha manualmente para o Tuma entender sua marca.";
 
   return (
     <section className="mt-6 rounded-xl border border-border bg-background" id="identidade-marca">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold text-foreground">Identidade da marca</h2>
-          {completude || pct > 0 ? (
+          {!open && temConteudo ? (
             <p className="mt-0.5 text-xs text-muted-foreground">
-              {pct}%{pronto ? " · pronto para artes" : ""}
+              {pct}% completo{pronto ? " · pronto para artes" : ""}
             </p>
           ) : null}
         </div>
@@ -116,6 +142,29 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
           {open ? "Recolher" : "Configurar"}
         </button>
       </div>
+
+      {!open && !loading ? (
+        <div className="space-y-3 border-b border-border px-4 py-4 sm:px-5">
+          <IdentidadeMarcaProgressBar
+            percentual={pct}
+            prontoParaImagem={pronto}
+            dados={dados}
+            batchLabel={progressSummary}
+            compact
+          />
+          {msg ? (
+            <p
+              className={`rounded-lg border px-3 py-2 text-sm ${
+                msgKind === "err"
+                  ? "border-red-300 bg-red-50 text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:text-red-100"
+                  : "border-accent/30 bg-accent-muted text-foreground"
+              }`}
+            >
+              {msg}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       {open ? (
         <>
@@ -156,6 +205,16 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
               </button>
             </div>
 
+            <IdentidadeMarcaLogoField
+              empresaId={empresaId}
+              canEdit={canEdit}
+              idMidiaLogo={dados.id_midia_logo}
+              midias={midias}
+              onChange={onLogoChange}
+              onReloadMidias={loadMidias}
+              onMsg={onMsg}
+            />
+
             {modo === "fotos" ? (
               <IdentidadeMarcaFotosTab
                 empresaId={empresaId}
@@ -172,7 +231,15 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
                 temConteudoInicial={temConteudoIdentidade(dados)}
               />
             ) : (
-              <IdentidadeMarcaManualTab dados={dados} canEdit={canEdit} onFieldChange={onManualFieldChange} />
+              <>
+                <IdentidadeMarcaProgressBar
+                  percentual={pct}
+                  prontoParaImagem={pronto}
+                  dados={dados}
+                  batchLabel={progressSummary}
+                />
+                <IdentidadeMarcaManualTab dados={dados} canEdit={canEdit} onFieldChange={onManualFieldChange} />
+              </>
             )}
 
             {msg ? (

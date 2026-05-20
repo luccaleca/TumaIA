@@ -2,6 +2,8 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
+import { isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
+import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
 
 const TIPOS = [
   { value: "promocao", label: "Promoção" },
@@ -13,7 +15,6 @@ const TIPOS = [
 /** Label + texto da dica (painel ao passar o mouse ou focar no ?) */
 const PROMOCAO_FIELD_ROWS = [
   ["nome", "Nome", "Como chamar essa campanha? Ex.: Black Friday 2026, Semana do Cliente"],
-  ["produto", "Produto", "O que entra na oferta? Ex.: kit cafés especiais, assinatura anual"],
   ["beneficio", "Benefício", "O que o cliente ganha? Ex.: 30% off, frete grátis, brinde"],
   ["tipo", "Tipo", "Que tipo de ação é? Ex.: desconto %, leve 3 pague 2, cashback"],
   ["detalhe", "Detalhe", "Algo importante para a IA saber? Ex.: só no app, só primeira compra"],
@@ -26,8 +27,7 @@ const PROMOCAO_FIELD_ROWS = [
 ];
 
 const LANCAMENTO_FIELD_ROWS = [
-  ["nome", "Nome", "Como chamar o lançamento? Ex.: linha Verão 2026, app Tuma 2.0"],
-  ["oQue", "O que está sendo lançado", "O que é novo? Ex.: coleção cápsulas, plano Pro"],
+  ["nome", "Nome", "Como chamar o lançamento? Ex.: linha Verão 2026, campanha de verão"],
   ["problema", "Problema que resolve", "Qual dor resolve? Ex.: falta de tempo para postar"],
   ["novidades", "O que há de novo", "Novidades em relação ao anterior? Ex.: checkout em 1 clique"],
   ["diferencial", "Diferencial", "Por que escolher vocês? Ex.: único com garantia 90 dias"],
@@ -46,13 +46,15 @@ const DATA_COMEMORATIVA_FIELD_ROWS = [
   ["mensagem", "Mensagem central", "Qual mensagem principal? Ex.: gratidão, união, desconto especial"],
   ["tom", "Tom", "Como falar? Ex.: emotivo, festivo, elegante"],
   ["publico", "Público", "Para quem fala? Ex.: mães, jovens 18–25, B2B"],
-  ["conexaoMarca", "Conexão com a marca", "Como a marca entra na data? Ex.: produto como presente, causas"],
+  ["conexaoMarca", "Conexão com a marca", "Como a marca entra na data? Ex.: mensagem institucional, causas"],
   ["cta", "CTA", "O que pedir? Ex.: presenteie quem ama, aproveite o kit comemorativo"],
   ["restricoes", "Restrições", "Cuidados? Ex.: sem menção a concorrentes, evitar termos religiosos"],
 ];
 
 const HINT_FORM_TIPO =
-  "Promoção: ofertas e descontos. Lançamento: novidade ou produto novo. Data comemorativa: datas sazonais. Personalizado: campos livres que você define.";
+  "Promoção: regras da campanha (sem item específico). Lançamento: tom e posicionamento da novidade. Data comemorativa: datas sazonais. Personalizado: campos livres. Produto e oferta do dia você define ao pedir o post no chat.";
+const HINT_APOS_TIPO =
+  "Preencha só o que vale para todas as artes desse tipo. O que for específico de um post (produto, preço do dia, frase) você pede na conversa.";
 const HINT_FORM_NOME =
   "Nome interno no painel (opcional). Ex.: Campanha Instagram março, Black Friday loja centro.";
 const HINT_FORM_DESCRICAO =
@@ -60,9 +62,9 @@ const HINT_FORM_DESCRICAO =
 const HINT_PERSONAL_TITULO =
   "Título deste bloco de informações livres. Ex.: Tom de voz, Persona do cliente, Restrições legais.";
 const HINT_PERSONAL_CAMPO_NOME =
-  "Nome do dado que a IA deve considerar. Ex.: Instagram da marca, Proibido mencionar, Público-alvo.";
+  "Nome do dado fixo da campanha. Ex.: Tom, Público-alvo, Restrições. Evite produto ou preço do dia.";
 const HINT_PERSONAL_CAMPO_VALOR =
-  "Conteúdo desse dado. Ex.: @minha_loja, concorrentes X e Y, mulheres 25–40 anos na Grande SP.";
+  "Conteúdo desse dado. Ex.: @minha_loja, não citar concorrentes, mulheres 25–40 anos na Grande SP.";
 
 /** Inputs/select do formulário (alinhado ao painel: superfície, borda, foco accent). */
 const CTX_CTRL_CLASS =
@@ -100,12 +102,11 @@ function LabelWithHint({ id, label, hint }) {
 
 function emptyForm() {
   return {
-    tipo: "promocao",
+    tipo: "",
     nome: "",
     descricao: "",
     promocao: {
       nome: "",
-      produto: "",
       beneficio: "",
       tipo: "",
       detalhe: "",
@@ -118,7 +119,6 @@ function emptyForm() {
     },
     lancamento: {
       nome: "",
-      oQue: "",
       problema: "",
       novidades: "",
       diferencial: "",
@@ -166,11 +166,11 @@ function normalizeFromApi(row) {
 function summarizeContexto(item) {
   if (item.tipo === "promocao") {
     const p = item.dados?.promocao || {};
-    return [p.nome, p.produto, p.beneficio].filter(Boolean).join(" · ");
+    return [p.nome, p.beneficio].filter(Boolean).join(" · ");
   }
   if (item.tipo === "lancamento") {
     const l = item.dados?.lancamento || {};
-    return [l.nome, l.oQue, l.diferencial].filter(Boolean).join(" · ");
+    return [l.nome, l.diferencial].filter(Boolean).join(" · ");
   }
   if (item.tipo === "data_comemorativa") {
     const d = item.dados?.dataComemorativa || {};
@@ -210,9 +210,11 @@ export default function ContextosPage() {
       setLoading(false);
       return;
     }
-    const primeira = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas[0] : null;
-    const idEmp = primeira?.empresa?.id_empresa || null;
-    const papel = String(primeira?.papel || "").toLowerCase();
+    const list = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas : [];
+    const idEmp = resolveEmpresaAtivaId(list);
+    const rowAtiva = idEmp ? empresaRowFromMinhas(list, idEmp) : null;
+    if (rowAtiva?.empresa) setEmpresaAtiva(rowAtiva.empresa);
+    const papel = String(rowAtiva?.papel || "").toLowerCase();
     setCanManageContextos(papel === "administrador" || papel === "editor");
     setEmpresaId(idEmp);
     if (!idEmp) {
@@ -230,7 +232,11 @@ export default function ContextosPage() {
       return;
     }
 
-    const items = Array.isArray(result.json?.contextos) ? result.json.contextos.map(normalizeFromApi) : [];
+    const items = Array.isArray(result.json?.contextos)
+      ? result.json.contextos
+          .filter((row) => !isIdentidadeMarcaContextoRow(row))
+          .map(normalizeFromApi)
+      : [];
     setContextos(items);
     setLoading(false);
   }
@@ -273,7 +279,6 @@ export default function ContextosPage() {
       const p = item.dados?.promocao || {};
       return [
         ["Nome", p.nome],
-        ["Produto", p.produto],
         ["Benefício", p.beneficio],
         ["Tipo", p.tipo],
         ["Detalhe", p.detalhe],
@@ -289,7 +294,6 @@ export default function ContextosPage() {
       const l = item.dados?.lancamento || {};
       return [
         ["Nome", l.nome],
-        ["O que está sendo lançado", l.oQue],
         ["Problema que resolve", l.problema],
         ["O que há de novo", l.novidades],
         ["Diferencial", l.diferencial],
@@ -385,6 +389,11 @@ export default function ContextosPage() {
     }
     if (!canManageContextos) {
       setMsg("Seu cargo não permite criar ou editar contextos.");
+      setMsgKind("err");
+      return;
+    }
+    if (!form.tipo) {
+      setMsg("Escolha o tipo do contexto antes de salvar.");
       setMsgKind("err");
       return;
     }
@@ -511,15 +520,16 @@ export default function ContextosPage() {
 
         {editorOpen ? (
         <form className="mt-4 grid grid-cols-1 gap-4" onSubmit={saveContexto}>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="max-w-md">
             <div>
-              <LabelWithHint id="ctx-form-tipo" label="Tipo" hint={HINT_FORM_TIPO} />
+              <LabelWithHint id="ctx-form-tipo" label="Tipo de contexto" hint={HINT_FORM_TIPO} />
               <select
                 id="ctx-form-tipo"
                 value={form.tipo}
                 onChange={(e) => setForm((s) => ({ ...s, tipo: e.target.value }))}
                 className={`${CTX_CTRL_CLASS} cursor-pointer`}
               >
+                <option value="">Escolha o tipo…</option>
                 {TIPOS.map((tipo) => (
                   <option key={tipo.value} value={tipo.value}>
                     {tipo.label}
@@ -527,26 +537,35 @@ export default function ContextosPage() {
                 ))}
               </select>
             </div>
-            <div className="md:col-span-2">
-              <LabelWithHint id="ctx-form-nome" label="Nome (opcional)" hint={HINT_FORM_NOME} />
-              <input
-                id="ctx-form-nome"
-                value={form.nome}
-                onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
-                className={CTX_CTRL_CLASS}
-              />
-            </div>
           </div>
 
-          <div>
-            <LabelWithHint id="ctx-form-descricao" label="Descrição (opcional)" hint={HINT_FORM_DESCRICAO} />
-            <input
-              id="ctx-form-descricao"
-              value={form.descricao}
-              onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
-              className={CTX_CTRL_CLASS}
-            />
-          </div>
+          {form.tipo ? (
+            <>
+              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                {HINT_APOS_TIPO}
+              </p>
+
+              <div>
+                <LabelWithHint id="ctx-form-nome" label="Nome (opcional)" hint={HINT_FORM_NOME} />
+                <input
+                  id="ctx-form-nome"
+                  value={form.nome}
+                  onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
+                  className={CTX_CTRL_CLASS}
+                />
+              </div>
+
+              <div>
+                <LabelWithHint id="ctx-form-descricao" label="Descrição (opcional)" hint={HINT_FORM_DESCRICAO} />
+                <input
+                  id="ctx-form-descricao"
+                  value={form.descricao}
+                  onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
+                  className={CTX_CTRL_CLASS}
+                />
+              </div>
+            </>
+          ) : null}
 
           {form.tipo === "promocao" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -670,7 +689,7 @@ export default function ContextosPage() {
             </div>
           ) : null}
 
-          <div>
+          {form.tipo ? (
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -687,7 +706,15 @@ export default function ContextosPage() {
                 Cancelar
               </button>
             </div>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={cancelEditor}
+              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+            >
+              Cancelar
+            </button>
+          )}
         </form>
         ) : null}
       </section>

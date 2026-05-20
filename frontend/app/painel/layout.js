@@ -10,7 +10,6 @@ import {
   clearToken,
   fetchMe,
 } from "../../lib/auth";
-
 function PainelShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();

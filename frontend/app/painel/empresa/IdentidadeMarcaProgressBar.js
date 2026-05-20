@@ -1,29 +1,41 @@
 "use client";
 
-import { PILARES_COMPLETUDE } from "../../../lib/identidadeMarcaUi";
+import { PILARES_COMPLETUDE, PILAR_LOGO } from "../../../lib/identidadeMarcaUi";
 
 export default function IdentidadeMarcaProgressBar({
   percentual,
   prontoParaImagem,
   dados,
   batchLabel,
+  compact = false,
 }) {
   const pct = Math.min(100, Math.max(0, Number(percentual) || 0));
+  const defaultHint = "A barra sobe conforme o Tuma entende cores, estilo e tom da marca.";
 
   return (
-    <div className="rounded-xl border border-border bg-surface-elevated/60 p-4">
+    <div
+      className={
+        compact
+          ? "rounded-lg border border-border/80 bg-surface-elevated/50 p-3"
+          : "rounded-xl border border-border bg-surface-elevated/60 p-4"
+      }
+    >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-sm font-medium text-foreground">Progresso da identidade</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {batchLabel || "A barra sobe conforme a Tuma entende cores, estilo e tom da marca."}
+          <p className={`font-medium text-foreground ${compact ? "text-xs" : "text-sm"}`}>
+            Progresso da identidade
+          </p>
+          <p className={`mt-0.5 text-muted-foreground ${compact ? "text-[11px] leading-snug" : "text-xs"}`}>
+            {batchLabel || defaultHint}
           </p>
         </div>
-        <p className="text-2xl font-semibold tabular-nums text-foreground">{pct}%</p>
+        <p className={`font-semibold tabular-nums text-foreground ${compact ? "text-lg" : "text-2xl"}`}>
+          {pct}%
+        </p>
       </div>
 
       <div
-        className="mt-3 h-2.5 overflow-hidden rounded-full bg-muted"
+        className={`overflow-hidden rounded-full bg-muted ${compact ? "mt-2 h-2" : "mt-3 h-2.5"}`}
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
@@ -37,10 +49,12 @@ export default function IdentidadeMarcaProgressBar({
       </div>
 
       {prontoParaImagem ? (
-        <p className="mt-2 text-xs font-medium text-accent">Pronto para gerar artes</p>
+        <p className={`font-medium text-accent ${compact ? "mt-1.5 text-[11px]" : "mt-2 text-xs"}`}>
+          Pronto para gerar artes
+        </p>
       ) : null}
 
-      <ul className="mt-3 flex flex-wrap gap-2">
+      <ul className={`flex flex-wrap gap-2 ${compact ? "mt-2" : "mt-3"}`}>
         {PILARES_COMPLETUDE.map(({ key, label }) => {
           const ok = Boolean(String(dados[key] ?? "").trim());
           return (
@@ -57,8 +71,24 @@ export default function IdentidadeMarcaProgressBar({
             </li>
           );
         })}
+        {(() => {
+          const { key, label } = PILAR_LOGO;
+          const ok = Boolean(String(dados[key] ?? "").trim());
+          return (
+            <li
+              key={key}
+              className={`rounded-full px-2.5 py-0.5 text-xs ${
+                ok
+                  ? "bg-accent/15 text-foreground ring-1 ring-accent/25"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {ok ? "✓ " : ""}
+              {label}
+            </li>
+          );
+        })()}
       </ul>
     </div>
   );
 }
-

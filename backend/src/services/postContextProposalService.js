@@ -7,6 +7,7 @@ import {
   loadEmpresaResumoParaImagem,
   loadMidiasEmpresaResumo,
 } from "./imagePreviewPrompt.js";
+import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
 import { deriveFraseNaImagemFromHistory, normalizeFraseNaImagem } from "./imageHeadline.js";
 import { pickBestProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
 
@@ -115,22 +116,25 @@ export function sanitizePostSupplementLinks(raw, contextoRows, midiaRows) {
 }
 
 function formatHistoryForPrompt(history) {
-  const tail = history.slice(-16);
+  const tail = history.slice(-8);
   return tail
-    .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${String(m.content).slice(0, 3500)}`)
+    .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${String(m.content).slice(0, 1200)}`)
     .join("\n---\n");
 }
 
 function formatContextosForLlm(rows) {
   if (!rows.length) return "(nenhum contexto ativo no painel)";
-  return rows
+  const { campanhaRows } = partitionContextosIdentidade(rows);
+  const list = campanhaRows.length ? campanhaRows : rows;
+  return list
+    .slice(0, 10)
     .map((r, i) => {
       const id = r.id_contexto_empresa ?? `idx-${i}`;
       const nome = String(r.nome ?? "").trim() || "(sem nome)";
       const desc = String(r.descricao ?? "").trim();
       let dados = "";
       try {
-        dados = JSON.stringify(r.dados_json ?? {}).slice(0, 700);
+        dados = JSON.stringify(r.dados_json ?? {}).slice(0, 380);
       } catch {
         dados = "{}";
       }
@@ -191,15 +195,9 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
       null);
   const ctxNome = ctx ? String(ctx.nome ?? "").trim() || "contexto da marca" : "contexto da marca";
   const frase = deriveFraseNaImagemFromHistory(history, contextoRows);
-  let confirmation_message = `Então você quer um post${ctx ? ` com o contexto "${ctxNome}"` : ""}${
-    mid ? " com foto do acervo" : ""
-  }${frase ? ` e a frase na imagem: "${frase}"` : ""}? Confirme para gerar a prévia.`;
-  if (lastUser?.content) {
-    const hint = String(lastUser.content).trim().slice(0, 80);
-    if (hint && confirmation_message.length + hint.length < CONFIRMATION_MESSAGE_MAX - 20) {
-      confirmation_message += ` (${hint}${hint.length >= 80 ? "…" : ""})`;
-    }
-  }
+  let confirmation_message = `Confira o resumo do seu pedido${ctx ? ` para «${ctxNome}»` : ""}${
+    frase ? ` — frase na imagem: «${frase}»` : ""
+  }. Quando estiver certo, gere a prévia.`;
   const links = [];
   if (ctx) {
     const id = String(ctx.id_contexto_empresa ?? "").trim();
@@ -251,6 +249,14 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
   };
 }
 
+function shouldUsePanelProposalFallback(err) {
+  if (err?.rawContent) return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg === "O modelo retornou JSON inválido") return true;
+  if (/Configure LLAMA_BASE_URL/i.test(msg)) return true;
+  return /tempo esgotado|timed?\s*out|abort|ECONNREFUSED|fetch failed|network/i.test(msg);
+}
+
 /**
  * @param {string} promptUser
  */
@@ -260,29 +266,19 @@ async function llamaGenerateJson(promptUser) {
       "Configure LLAMA_BASE_URL e/ou LLAMA_MODEL no .env do backend (API OpenAI-compatível, ex. Ollama).",
     );
   }
-  const proposalModel = (env.LLAMA_PROPOSAL_MODEL || env.LLAMA_MODEL || "llama3.2:3b").trim();
+  const proposalModel = (env.LLAMA_PROPOSAL_MODEL || env.LLAMA_MODEL || "llama3.2:1b").trim();
+  const timeoutMs = Number(env.LLAMA_PROPOSAL_TIMEOUT_MS) || 90_000;
   const strictSuffix =
-    "\n\nIMPORTANTE: sua resposta deve ser SOMENTE um objeto JSON válido, sem markdown e sem texto antes ou depois.";
+    "\n\nIMPORTANTE: responda SOMENTE um objeto JSON válido, sem markdown.";
 
-  const attempts = [
-    { temperature: 0.2, responseFormatJson: true },
-    { temperature: 0.15, responseFormatJson: true },
-    { temperature: 0.2, responseFormatJson: false },
-  ];
-
-  let lastErr;
-  for (const opts of attempts) {
-    try {
-      return await llamaChatCompletionJson(`${promptUser}${strictSuffix}`, {
-        ...opts,
-        model: proposalModel,
-      });
-    } catch (err) {
-      lastErr = err;
-      if (!err?.rawContent) throw err;
-    }
-  }
-  throw lastErr ?? new Error("Falha ao obter JSON do modelo");
+  return llamaChatCompletionJson(`${promptUser}${strictSuffix}`, {
+    temperature: 0.2,
+    responseFormatJson: true,
+    model: proposalModel,
+    timeoutMs,
+    timeoutMessage:
+      "Tempo esgotado aguardando o Llama (Ollama). O painel usará um resumo automático com os dados cadastrados.",
+  });
 }
 
 /**
@@ -305,13 +301,15 @@ export async function generatePostContextProposal(opts) {
   const instrucao = `Você é assistente de marketing da TumaIA. O cliente já conversou sobre um pedido de post/conteúdo.
 Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no painel (tipos como data comemorativa, lançamento, promoção, personalizado, etc. vêm em schema_json/dados_json);
 (3) usar o ACERVO DE MÍDIAS para links e para o campo JSON midias_referenced (nunca invente URLs de arquivo; use só ids listados em "### midia_id=");
-(4) escrever UMA mensagem MUITO curta (máx. 2 frases, até ~280 caracteres) em português do Brasil pedindo confirmação explícita, no estilo:
-   "Então você quer um post com o contexto de \\"...\\" com ...?"
-   Mencione números ou fatos que o cliente disse (ex.: 500 mil seguidores) só se couber na frase — sem parágrafo extra.
+(4) escrever UMA mensagem MUITO curta (máx. 2 frases, até ~280 caracteres) em português do Brasil pedindo confirmação, no estilo:
+   "Confira o resumo do seu pedido para [contexto/campanha]…"
+   Mencione números ou fatos que o cliente disse só se couber na frase — sem parágrafo extra.
+   PROIBIDO citar testes, painel técnico, Llama, Ollama, Replicate ou erros internos.
 (5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo OBRIGATORIAMENTE "frase_na_imagem": frase curta que vai ESCRITA NA ARTE (não é legenda do post). Ex.: pedido de 500 mil seguidores → "Parabéns pelos 500k!" ou "500k seguidores!". Máx. 8 palavras, português BR, sem hashtags.
 (6) preencher "links": palavras/frases clicáveis no painel — cada item com kind "contexto" ou "midia", "id" UUID que EXISTA na lista acima, e "label" curto (texto do link). Se o pedido envolver contexto comemorativo e uma mídia de referência, inclua os DOIS links. Se não houver encaixe no banco, use "links": [].
-(7) Se o cliente pedir arte com logo, produto, embalagem, armações/óculos PNG ou "inserir" elemento do acervo, preencha "midias_referenced" com até 3 ids EXISTENTES em "### midia_id=".
-   ORDEM CRÍTICA: a 1ª posição vai para o FLUX como image_prompt — deve ser RECORTE/PNG DE PRODUTO (óculos, logo isolado), NUNCA um post/arte/banner/festa/400k já pronto do acervo.
+(7) Se o cliente pedir arte com produto, embalagem, armações/óculos PNG ou "inserir" elemento do acervo, preencha "midias_referenced" com até 3 ids EXISTENTES em "### midia_id=".
+   ORDEM CRÍTICA: a 1ª posição vai para o FLUX como image_prompt — deve ser RECORTE/PNG DE PRODUTO, NUNCA logo da marca (logo fica só no cantinho da arte), NUNCA um post/arte/banner/festa/400k já pronto do acervo.
+   Só coloque o id do LOGO em 1º lugar se o cliente pedir EXPLICITAMENTE logo em destaque/principal/protagonista/arte da marca.
    Não use como 1ª referência imagens que pareçam post de Instagram, comemoração de seguidores, balões ou layout completo.
 
 Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
@@ -362,35 +360,47 @@ ${formatHistoryForPrompt(history)}
   let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
   let model = env.LLAMA_MODEL || "llama3.2:3b";
   let usedPanelFallback = false;
-  try {
-    const out = await llamaGenerateJson(promptUser);
-    parsed = out.parsed;
-    usage = out.usage;
-    model = out.model;
-  } catch (err) {
-    if (err?.rawContent || err?.message === "O modelo retornou JSON inválido") {
-      console.warn(
-        "[post-context-proposal] Llama sem JSON; usando fallback com dados do painel:",
-        err instanceof Error ? err.message : err,
-      );
-      parsed = buildFallbackProposalFromPanel(history, contextoRows, midiaRows);
-      usedPanelFallback = true;
-      usage = {
-        inputTokens: err?.llmUsage?.inputTokens ?? 0,
-        outputTokens: err?.llmUsage?.outputTokens ?? 0,
-        totalTokens: err?.llmUsage?.totalTokens ?? 0,
-      };
-      model = err?.llmModel || model;
-    } else {
-      await recordLlamaTextCall({
-        ok: false,
-        status: err?.status && Number(err.status) >= 400 ? Number(err.status) : 500,
-        inputTokens: err?.llmUsage?.inputTokens,
-        outputTokens: err?.llmUsage?.outputTokens,
-        totalTokens: err?.llmUsage?.totalTokens,
-        model: err?.llmModel || model,
-      });
-      throw err;
+  let fallbackMeta = null;
+
+  const panelParsed = buildFallbackProposalFromPanel(history, contextoRows, midiaRows);
+
+  if (!env.POST_CONTEXT_USE_LLAMA) {
+    parsed = panelParsed;
+    usedPanelFallback = true;
+    fallbackMeta = "painel_imediato";
+  } else {
+    try {
+      const out = await llamaGenerateJson(promptUser);
+      parsed = out.parsed;
+      usage = out.usage;
+      model = out.model;
+    } catch (err) {
+      if (shouldUsePanelProposalFallback(err)) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        console.warn(
+          "[post-context-proposal] Llama indisponível ou lento; resumo automático do painel:",
+          errMsg,
+        );
+        parsed = panelParsed;
+        usedPanelFallback = true;
+        fallbackMeta = /tempo esgotado/i.test(errMsg) ? "painel_timeout_llama" : "painel_sem_json_llama";
+        usage = {
+          inputTokens: err?.llmUsage?.inputTokens ?? 0,
+          outputTokens: err?.llmUsage?.outputTokens ?? 0,
+          totalTokens: err?.llmUsage?.totalTokens ?? 0,
+        };
+        model = err?.llmModel || model;
+      } else {
+        await recordLlamaTextCall({
+          ok: false,
+          status: err?.status && Number(err.status) >= 400 ? Number(err.status) : 500,
+          inputTokens: err?.llmUsage?.inputTokens,
+          outputTokens: err?.llmUsage?.outputTokens,
+          totalTokens: err?.llmUsage?.totalTokens,
+          model: err?.llmModel || model,
+        });
+        throw err;
+      }
     }
   }
 
@@ -427,9 +437,17 @@ ${formatHistoryForPrompt(history)}
       ? { ...safe.data.post_context_proposal }
       : {};
 
-  if (!post_context_proposal.frase_na_imagem) {
-    const derived = deriveFraseNaImagemFromHistory(history, contextoRows);
-    if (derived) post_context_proposal.frase_na_imagem = derived;
+  const { campanhaRows } = partitionContextosIdentidade(contextoRows);
+  const derived = deriveFraseNaImagemFromHistory(history, campanhaRows);
+  if (derived) {
+    post_context_proposal.frase_na_imagem = derived;
+    if (!post_context_proposal.facts_for_image || typeof post_context_proposal.facts_for_image !== "object") {
+      post_context_proposal.facts_for_image = {};
+    }
+    post_context_proposal.facts_for_image.frase_na_imagem = derived;
+  } else if (!post_context_proposal.frase_na_imagem) {
+    const fallback = deriveFraseNaImagemFromHistory(history, campanhaRows);
+    if (fallback) post_context_proposal.frase_na_imagem = fallback;
   }
 
   const rawRefs = post_context_proposal.midias_referenced;
@@ -461,7 +479,7 @@ ${formatHistoryForPrompt(history)}
     _meta: {
       contextos_carregados: contextoRows.length,
       midias_carregadas: midiaRows.length,
-      ...(usedPanelFallback ? { fallback: "painel_sem_json_llama" } : {}),
+      ...(fallbackMeta ? { fallback: fallbackMeta } : {}),
     },
   };
 }

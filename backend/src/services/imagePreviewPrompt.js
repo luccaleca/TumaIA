@@ -128,15 +128,19 @@ function formatConversationBlock(history, maxLen) {
   return "…" + block.slice(block.length - maxLen + 1);
 }
 
-function introWithFrase(frase, hasReferenceImage) {
+function introWithFrase(frase, hasReferenceImage, referenceKind = "product") {
   const textRule = frase
     ? `The ONLY text in the image must be exactly this Portuguese phrase (large, readable, one line, correct spelling): "${frase}". No other words, no repeated text, no extra paragraphs.`
     : "Minimal or no text in the image.";
   if (hasReferenceImage) {
+    const refRule =
+      referenceKind === "logo"
+        ? "The reference image is the brand LOGO only: place a SMALL logo mark in one corner (about 8–12% of the frame height), never centered, never full-bleed, never enlarged to fill the canvas. Build a new scene around it (product, promo background)."
+        : "The reference image is a PRODUCT packshot to feature as the hero (center or rule-of-thirds) — NOT an old post or banner to copy. Do NOT replicate the reference layout.";
     return (
-      "Create a NEW Instagram key visual. The reference image is ONLY a product asset (eyeglasses PNG) to place in the scene — NOT a poster to copy. Do NOT replicate the reference layout or old celebration graphic. " +
+      `Create a NEW Instagram key visual. ${refRule} ` +
       textRule +
-      " Fresh celebratory composition."
+      " Fresh marketing composition aligned with the brand brief."
     );
   }
   return (
@@ -154,6 +158,8 @@ function introWithFrase(frase, hasReferenceImage) {
  *   empresaRow: Record<string, unknown> | null,
  *   contextoRows: Array<Record<string, unknown>>,
  *   postContextProposal?: Record<string, unknown> | null,
+ *   focusCampanhaContextoId?: string | null,
+ *   referenceKind?: 'logo' | 'product' | null,
  * }} p
  */
 export function buildFluxImagePrompt({
@@ -162,6 +168,8 @@ export function buildFluxImagePrompt({
   contextoRows,
   postContextProposal,
   hasReferenceImage = false,
+  focusCampanhaContextoId = null,
+  referenceKind = null,
 }) {
   const intent =
     postContextProposal && typeof postContextProposal === "object"
@@ -179,22 +187,40 @@ export function buildFluxImagePrompt({
     : "";
 
   const { identidadeDados, campanhaRows } = partitionContextosIdentidade(contextoRows);
+  const focusId = focusCampanhaContextoId ? String(focusCampanhaContextoId).trim() : "";
+  const campanhaForPrompt =
+    focusId && campanhaRows.length
+      ? (() => {
+          const picked = campanhaRows.filter(
+            (r) => String(r.id_contexto_empresa ?? "").trim() === focusId,
+          );
+          return picked.length ? picked : campanhaRows;
+        })()
+      : campanhaRows;
   const brandBlock = identidadeDados
     ? formatBrandIdentityBlockForFlux(identidadeDados, 480)
     : "";
 
   const empBlock = formatEmpresaBlock(empresaRow, 280);
-  const intro = introWithFrase(fraseNaImagem, hasReferenceImage);
+  const kind = referenceKind === "logo" ? "logo" : "product";
+  const intro = introWithFrase(fraseNaImagem, hasReferenceImage, hasReferenceImage ? kind : "product");
+  const logoCornerHint = identidadeDados?.id_midia_logo
+    ? referenceKind === "logo"
+      ? "\n\nBrand logo is the HERO element (client requested); still avoid illegible stretching."
+      : "\n\nBrand logo: ALWAYS a small mark in a corner (bottom-right or top-left, ~8–12% of frame). Never centered, never full-bleed, unless the brief explicitly says logo as hero."
+    : "";
   const overhead =
     intro.length +
+    logoCornerHint.length +
     proposalBlock.length +
     (brandBlock ? brandBlock.length + 48 : 0) +
     (empBlock ? empBlock.length + 40 : 0) +
     80;
   const ctxBudget = Math.min(520, Math.max(160, FLUX_IMAGE_PROMPT_MAX - overhead));
-  const ctxBlock = formatContextosBlock(campanhaRows, ctxBudget);
+  const ctxBlock = formatContextosBlock(campanhaForPrompt, ctxBudget);
 
   const headerParts = [intro];
+  if (logoCornerHint) headerParts.push(logoCornerHint);
   if (brandBlock) headerParts.push(`\n\n=== Brand identity ===\n${brandBlock}`);
   if (proposalBlock) headerParts.push(proposalBlock);
   if (empBlock) headerParts.push(`\n\n=== Empresa (cadastro) ===\n${empBlock}`);
@@ -226,16 +252,35 @@ export function buildFluxImagePrompt({
  * @param {Record<string, unknown> | null} empresaRow
  * @param {Array<Record<string, unknown>>} contextoRows
  */
-export function buildImagePreviewContextMeta(idEmpresa, empresaRow, contextoRows, postContextProposal, history) {
+export function buildImagePreviewContextMeta(
+  idEmpresa,
+  empresaRow,
+  contextoRows,
+  postContextProposal,
+  history,
+  focusCampanhaContextoId = null,
+) {
   const frase_na_imagem = resolveFraseNaImagem(postContextProposal, history || [], contextoRows);
   const { identidadeDados, campanhaRows } = partitionContextosIdentidade(contextoRows);
+  const focusId = focusCampanhaContextoId ? String(focusCampanhaContextoId).trim() : "";
+  const campanhaMeta =
+    focusId && campanhaRows.length
+      ? (() => {
+          const picked = campanhaRows.filter(
+            (r) => String(r.id_contexto_empresa ?? "").trim() === focusId,
+          );
+          return picked.length ? picked : campanhaRows;
+        })()
+      : campanhaRows;
   return {
     id_empresa: idEmpresa,
     empresa_nome_fantasia: empresaRow ? String(empresaRow.nome_fantasia ?? "").trim() || null : null,
     frase_na_imagem,
-    identidade_configurada: Boolean(identidadeDados?.cor_primaria || identidadeDados?.estilo_visual),
-    contextos_carregados: campanhaRows.length,
-    contextos: campanhaRows.map((r) => ({
+    identidade_configurada: Boolean(
+      identidadeDados?.cor_primaria || identidadeDados?.estilo_visual || identidadeDados?.id_midia_logo,
+    ),
+    contextos_carregados: campanhaMeta.length,
+    contextos: campanhaMeta.map((r) => ({
       id_contexto_empresa: r.id_contexto_empresa ?? null,
       nome: String(r.nome ?? "").trim() || null,
       descricao_preview: (() => {

@@ -3,15 +3,15 @@
 const PASSOS = [
   {
     titulo: "Envie fotos da marca",
-    texto: "Logo, posts do Instagram, produtos ou fachada — quanto mais variedade, melhor a Tuma entende seu visual.",
+    texto: "Envie post e produto (2–3 fotos). Defina a logo oficial abaixo (PNG sem fundo). Cores vêm da imagem; textos vêm do Tuma.",
   },
   {
-    titulo: "Analise com a Tuma",
+    titulo: "Analise com o Tuma",
     texto: "Cada foto é estudada para sugerir cores, estilo visual e tom de voz. Pode levar alguns minutos na primeira vez.",
   },
   {
     titulo: "Revise o resultado e salve",
-    texto: "Confira o que a Tuma sugeriu, altere o que quiser e clique em Salvar identidade no final da página.",
+    texto: "Confira o que o Tuma sugeriu, altere o que quiser e clique em Salvar identidade no final da página.",
   },
 ];
 

@@ -63,8 +63,58 @@ export function normalizeIdentidadeDados(raw) {
     exemplo_frase_marca: String(src.exemplo_frase_marca ?? src.exemplo_frase ?? "").trim().slice(0, 120),
     site_url: String(src.site_url ?? "").trim().slice(0, 500),
     id_midia_referencia_analise: String(src.id_midia_referencia_analise ?? "").trim() || null,
+    id_midia_logo: String(src.id_midia_logo ?? "").trim() || null,
     legenda_referencia: String(src.legenda_referencia ?? "").trim().slice(0, 2000),
   };
+}
+
+/**
+ * Refina sugestão da análise (texto + coerência com paleta).
+ * @param {Record<string, unknown>} raw
+ * @param {{ primary?: string | null, secondary?: string | null, accents?: string[] } | null} palette
+ * @param {{ nome_fantasia?: string, segmento?: string } | null} [empresaRow]
+ */
+export function refineIdentidadeFromAnalysis(raw, palette, empresaRow = null) {
+  const base = normalizeIdentidadeDados(raw && typeof raw === "object" ? raw : {});
+
+  if (palette?.primary) base.cor_primaria = palette.primary;
+  if (palette?.secondary) base.cor_secundaria = palette.secondary;
+
+  if (base.tom_voz) {
+    base.tom_voz = base.tom_voz
+      .split(/[,;|/]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 8)
+      .join(", ");
+  }
+
+  const nome = String(empresaRow?.nome_fantasia ?? "").trim();
+  if (!base.sobre_empresa && nome) {
+    base.sobre_empresa = `${nome} — negócio local.`.slice(0, 2000);
+  }
+  if (!base.segmento && empresaRow?.segmento) {
+    base.segmento = String(empresaRow.segmento).trim().slice(0, 200);
+  }
+
+  const cores = [base.cor_primaria, base.cor_secundaria].filter(Boolean);
+  if (cores.length && base.estilo_visual) {
+    const hasHex = /#[0-9A-Fa-f]{3,6}/.test(base.estilo_visual);
+    if (!hasHex) {
+      base.estilo_visual = `${base.estilo_visual.trim()} Paleta: ${cores.join(", ")}.`.slice(0, 800);
+    }
+  } else if (cores.length && !base.estilo_visual) {
+    base.estilo_visual = `Paleta de marca ${cores.join(" e ")}; visual alinhado ao material enviado.`.slice(
+      0,
+      800,
+    );
+  }
+
+  if (!base.evitar) {
+    base.evitar = "Copiar layout de posts antigos; fontes ilegíveis; poluição visual.";
+  }
+
+  return base;
 }
 
 /**

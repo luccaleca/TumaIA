@@ -1,0 +1,38 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  deriveFraseNaImagemFromHistory,
+  resolveFraseNaImagem,
+} from "../../backend/src/services/imageHeadline.js";
+
+describe("imageHeadline — frase na imagem", () => {
+  it("não puxa 500k do nome do contexto se o pedido recente é promo", () => {
+    const history = [
+      { role: "user", content: "quero comemorar 500 mil seguidores no insta" },
+      { role: "assistant", content: "ok" },
+      { role: "user", content: "agora quero arte black friday do whey até 40% off" },
+    ];
+    const proposal = { frase_na_imagem: "Parabéns pelos 500k!" };
+    const contextoRows = [{ nome: "Marco 500k seguidores", dados_json: { tipo: "data_comemorativa" } }];
+    const frase = resolveFraseNaImagem(proposal, history, contextoRows);
+    assert.ok(frase);
+    assert.match(frase, /40%|Black Friday|Promo/i);
+    assert.doesNotMatch(frase, /500\s*k/i);
+  });
+
+  it("usa 500k só quando o pedido recente menciona seguidores", () => {
+    const history = [{ role: "user", content: "post para 500k seguidores no instagram" }];
+    const frase = deriveFraseNaImagemFromHistory(history, []);
+    assert.equal(frase, "Parabéns pelos 500k!");
+  });
+
+  it("ignora linha automática de confirmação do painel", () => {
+    const history = [
+      { role: "user", content: "arte promo whey" },
+      { role: "user", content: "Confirmar e gerar prévia da imagem." },
+    ];
+    const frase = deriveFraseNaImagemFromHistory(history, []);
+    assert.ok(frase);
+    assert.match(frase, /Promo/i);
+  });
+});

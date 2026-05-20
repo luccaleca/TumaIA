@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import {
+  IDENTIDADE_ANALISE_TIMEOUT_MS,
   MAX_FOTOS_IDENTIDADE,
   calcCompletudeLocal,
   fetchPastaUploadRaiz,
@@ -190,14 +191,23 @@ export default function IdentidadeMarcaFotosTab({
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/identidade/analisar`, {
       method: "POST",
       body: JSON.stringify({ id_midia: idMidia }),
+      timeoutMs: IDENTIDADE_ANALISE_TIMEOUT_MS,
+      timeoutLabel: "identidade",
     });
     if (!result.ok || result.networkError) {
       const err =
-        result.networkError?.message || formatAuthError(result.json) || "A análise não concluiu.";
+        result.networkError?.message ||
+        formatAuthError(result.json) ||
+        (result.status ? `Erro ${result.status}` : "A análise não concluiu.");
       updateFilaItem(clientId, { status: "error", error: err });
-      return null;
+      return { error: err };
     }
-    return result.json;
+    if (!result.json?.sugestao) {
+      const err = "O Tuma não retornou sugestões para esta foto.";
+      updateFilaItem(clientId, { status: "error", error: err });
+      return { error: err };
+    }
+    return { data: result.json };
   }
 
   async function onInterpretFotos() {
@@ -209,10 +219,11 @@ export default function IdentidadeMarcaFotosTab({
     }
 
     setBatchRunning(true);
-    onMsg("A Tuma está analisando suas fotos — isso pode levar alguns minutos.", "ok");
+    onMsg("O Tuma está analisando suas fotos — isso pode levar alguns minutos.", "ok");
 
     let merged = { ...dados };
     let okCount = 0;
+    let firstError = null;
 
     for (let i = 0; i < toRun.length; i++) {
       const item = toRun[i];
@@ -237,23 +248,23 @@ export default function IdentidadeMarcaFotosTab({
         }
 
         const out = await analyzeOneMidia(idMidia, item.clientId);
-        if (!out?.sugestao) {
-          updateFilaItem(item.clientId, { status: "error", error: "A Tuma não retornou sugestões." });
+        if (out?.error) {
+          if (!firstError) firstError = out.error;
           continue;
         }
 
-        merged = mergeIdentidadeSugestao(merged, out.sugestao, lockedFields);
+        const payload = out?.data;
+        merged = mergeIdentidadeSugestao(merged, payload.sugestao, lockedFields);
         if (idMidia) merged.id_midia_referencia_analise = idMidia;
         const comp = calcCompletudeLocal(merged);
         setDados(() => merged);
-        setCompletude(out.completude || comp);
+        setCompletude(payload.completude || comp);
         updateFilaItem(item.clientId, { status: "done", error: undefined });
         okCount++;
       } catch (e) {
-        updateFilaItem(item.clientId, {
-          status: "error",
-          error: e instanceof Error ? e.message : "Erro ao processar foto.",
-        });
+        const errMsg = e instanceof Error ? e.message : "Erro ao processar foto.";
+        if (!firstError) firstError = errMsg;
+        updateFilaItem(item.clientId, { status: "error", error: errMsg });
       }
     }
 
@@ -265,6 +276,8 @@ export default function IdentidadeMarcaFotosTab({
       const siteRes = await authApiFetchWithToken(`/empresas/${empresaId}/identidade/analisar`, {
         method: "POST",
         body: JSON.stringify({ site_url: siteUrl }),
+        timeoutMs: IDENTIDADE_ANALISE_TIMEOUT_MS,
+        timeoutLabel: "identidade",
       });
       if (siteRes.ok && siteRes.json?.sugestao) {
         merged = mergeIdentidadeSugestao(merged, siteRes.json.sugestao, lockedFields);
@@ -283,7 +296,12 @@ export default function IdentidadeMarcaFotosTab({
         "ok",
       );
     } else {
-      onMsg("Nenhuma foto foi analisada com sucesso. Tente outras imagens.", "err");
+      onMsg(
+        firstError
+          ? `Nenhuma foto concluiu: ${firstError}`
+          : "Nenhuma foto foi analisada com sucesso. Veja o motivo em cada item da fila.",
+        "err",
+      );
     }
 
     setBatchLabel(null);

@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
+import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
 import Modal from "../../components/Modal";
 
 function toBase64WithoutPrefix(file) {
@@ -103,9 +104,11 @@ export default function MidiasPage() {
       setLoading(false);
       return;
     }
-    const primeira = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas[0] : null;
-    const idEmp = primeira?.empresa?.id_empresa || null;
-    const papel = String(primeira?.papel || "").toLowerCase();
+    const list = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas : [];
+    const idEmp = resolveEmpresaAtivaId(list);
+    const rowAtiva = idEmp ? empresaRowFromMinhas(list, idEmp) : null;
+    if (rowAtiva?.empresa) setEmpresaAtiva(rowAtiva.empresa);
+    const papel = String(rowAtiva?.papel || "").toLowerCase();
     setCanManageMidias(papel === "administrador" || papel === "editor");
     setEmpresaId(idEmp);
     if (!idEmp) {

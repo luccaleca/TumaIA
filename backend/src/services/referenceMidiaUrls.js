@@ -1,4 +1,6 @@
 import { env } from "../config.js";
+import { wantsLogoAsHero } from "./logoReferencePolicy.js";
+import { ensureReplicateImagePromptUrl } from "./replicateImagePromptPrep.js";
 
 /** Limite por chamada Replicate (1× image_prompt + demais só texto no prompt). */
 export const REFERENCE_MIDIA_MAX = 3;
@@ -70,12 +72,17 @@ function formatMidiaRowAsText(r) {
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {string} idEmpresa
  * @param {string[]} ids — até {@link REFERENCE_MIDIA_MAX} UUIDs (1ª = image_prompt no FLUX Pro; 2ª e 3ª = apoio textual)
- * @returns {Promise<{ primaryUrl: string | null, auxiliaryReferenceText: string | null, usedIds: string[] }>}
+ * @param {{ logoId?: string, userHint?: string, logoAsHero?: boolean }} [opts]
+ * @returns {Promise<{ primaryUrl: string | null, primaryKind: 'logo' | 'product', auxiliaryReferenceText: string | null, usedIds: string[] }>}
  */
-export async function resolveReferenceMidiasForReplicate(db, idEmpresa, ids) {
+export async function resolveReferenceMidiasForReplicate(db, idEmpresa, ids, opts = {}) {
   const clean = [...new Set(ids.map((x) => String(x || "").trim()).filter(Boolean))].slice(0, REFERENCE_MIDIA_MAX);
+  const logoId = String(opts.logoId || "").trim();
+  const logoAsHero =
+    opts.logoAsHero === true || wantsLogoAsHero(String(opts.userHint || ""));
+
   if (!clean.length) {
-    return { primaryUrl: null, auxiliaryReferenceText: null, usedIds: [] };
+    return { primaryUrl: null, primaryKind: "product", auxiliaryReferenceText: null, usedIds: [] };
   }
 
   const { data, error } = await db
@@ -94,25 +101,59 @@ export async function resolveReferenceMidiasForReplicate(db, idEmpresa, ids) {
   }
 
   const ordered = orderRowsLikeIds(rows, clean);
-  const imageRows = ordered.filter(isImageRow);
+  let imageRows = ordered.filter(isImageRow);
   if (!imageRows.length) {
     throw new Error("Nenhuma das mídias indicadas é imagem (jpeg/png/gif/webp) ativa.");
   }
 
-  const primaryUrl = await resolveFetchableImageUrlForMidia(db, imageRows[0]);
+  const isLogoRow = (row) => logoId && String(row.id_midia ?? "").trim() === logoId;
+  const logoRows = imageRows.filter(isLogoRow);
+  const productRows = imageRows.filter((r) => !isLogoRow(r));
+
+  /** Por padrão logo nunca é `image_prompt` — só cantinho via prompt/identidade. */
+  const primaryCandidates = logoAsHero ? imageRows : productRows.length ? productRows : logoAsHero ? logoRows : [];
+
+  let primaryUrl = null;
+  let primaryKind = "product";
+
+  if (primaryCandidates.length) {
+    const primaryRow = primaryCandidates[0];
+    const rawPrimaryUrl = await resolveFetchableImageUrlForMidia(db, primaryRow);
+    const primaryId = String(primaryRow.id_midia ?? "").trim();
+    primaryKind = logoAsHero && isLogoRow(primaryRow) ? "logo" : "product";
+    primaryUrl = await ensureReplicateImagePromptUrl(db, idEmpresa, rawPrimaryUrl, {
+      idMidia: primaryId || undefined,
+      kind: primaryKind,
+    });
+  }
+
+  const auxRows = logoAsHero
+    ? imageRows.filter((r) => String(r.id_midia) !== String(primaryCandidates[0]?.id_midia))
+    : [...productRows.slice(primaryCandidates.length ? 1 : 0), ...logoRows];
 
   let auxiliaryReferenceText = null;
-  if (imageRows.length > 1) {
+  if (auxRows.length) {
     const blocks = [];
-    for (let i = 1; i < imageRows.length; i++) {
-      const t = formatMidiaRowAsText(imageRows[i]);
-      if (t) blocks.push(`--- Referência ${i + 1} (acervo — apoio textual; só a 1ª imagem vai ao modelo como pixels) ---\n${t}`);
+    for (const row of auxRows) {
+      const t = formatMidiaRowAsText(row);
+      if (!t) continue;
+      const header = isLogoRow(row)
+        ? "--- Logo da marca (sempre PEQUENO num canto, ~10% da arte — nunca protagonista salvo pedido explícito) ---"
+        : "--- Outro asset do acervo (apoio textual; não copiar layout) ---";
+      blocks.push(`${header}\n${t}`);
     }
     auxiliaryReferenceText = blocks.length ? blocks.join("\n\n") : null;
+  } else if (logoRows.length && !logoAsHero) {
+    const t = formatMidiaRowAsText(logoRows[0]);
+    if (t) {
+      auxiliaryReferenceText =
+        "--- Logo da marca (sempre PEQUENO num canto, ~10% da arte) ---\n" + t;
+    }
   }
 
   return {
     primaryUrl,
+    primaryKind,
     auxiliaryReferenceText,
     usedIds: imageRows.map((r) => String(r.id_midia)),
   };
