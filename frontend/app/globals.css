@@ -101,6 +101,13 @@ html {
   transform-origin: center top;
 }
 
+.landing-cta-bg {
+  background-image: url("/imagens/imagem-final-pronto-instagram.jpg");
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
+}
+
 .landing-page::before {
   content: "";
   position: fixed;

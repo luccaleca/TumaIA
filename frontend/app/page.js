@@ -588,7 +588,7 @@ export default function Home() {
         <section className="mx-auto w-full max-w-6xl px-5 pb-20 pt-4 md:px-6">
           <ScrollReveal direction="scale">
             <div className="landing-dark-glass relative overflow-hidden rounded-3xl">
-            <div className="landing-hero-bg absolute inset-0 opacity-35" aria-hidden />
+            <div className="landing-cta-bg absolute inset-0 opacity-40" aria-hidden />
             <div
               className="absolute inset-0 bg-gradient-to-r from-slate-950/50 via-emerald-950/35 to-slate-950/45"
               aria-hidden
