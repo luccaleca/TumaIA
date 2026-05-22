@@ -5,6 +5,11 @@ import {
   podeGerenciarMidias,
 } from "../../modules/empresas/shared.js";
 import {
+  filterMidiasIdentidade,
+  ORIGEM_UPLOAD_IDENTIDADE_FOTO,
+  ORIGEM_UPLOAD_IDENTIDADE_LOGO,
+} from "../../modules/empresas/midiaOrigem.js";
+import {
   identidadeCompletude,
   identidadeFromContextoRow,
   normalizeIdentidadeDados,
@@ -24,6 +29,7 @@ const identidadeDadosBody = z.object({
   publico: z.string().max(500).optional(),
   cor_primaria: z.string().max(20).optional(),
   cor_secundaria: z.string().max(20).optional(),
+  cores_adicionais: z.array(z.string().max(20)).max(4).optional(),
   exemplo_frase_marca: z.string().max(120).optional(),
   site_url: z.string().max(500).optional(),
   id_midia_referencia_analise: z.string().uuid().nullable().optional(),
@@ -31,11 +37,19 @@ const identidadeDadosBody = z.object({
   legenda_referencia: z.string().max(2000).optional(),
 });
 
-const analisarBody = z.object({
-  site_url: z.string().max(500).optional(),
-  id_midia: z.string().uuid().optional(),
-  legenda_post: z.string().max(2000).optional(),
-});
+const analisarBody = z
+  .object({
+    site_url: z.string().max(500).optional(),
+    id_midia: z.string().uuid().optional(),
+    legenda_post: z.string().max(2000).optional(),
+    /** Imagem só para esta análise — não grava em Mídias. */
+    image_base64: z.string().min(20).max(14_000_000).optional(),
+    mime_type: z.string().max(80).optional(),
+    nome_arquivo: z.string().max(260).optional(),
+  })
+  .refine((d) => !(d.id_midia && d.image_base64), {
+    message: "Envie id_midia ou image_base64, não os dois.",
+  });
 
 export function registerIdentidadeRoutes(r) {
   r.get("/:idEmpresa/identidade", async (req, res) => {
@@ -79,6 +93,55 @@ export function registerIdentidadeRoutes(r) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro interno";
       console.error("empresas.getIdentidade:", e);
+      if (!res.headersSent) res.status(500).json({ error: msg });
+    }
+  });
+
+  r.get("/:idEmpresa/identidade/midias", async (req, res) => {
+    try {
+      const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+      if (!idEmpresa.success) {
+        res.status(400).json({ error: "id_empresa inválido" });
+        return;
+      }
+      const supabase = db();
+      if (!supabase) {
+        res.status(503).json({ error: "Supabase não configurado" });
+        return;
+      }
+      const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+        supabase,
+        idEmpresa.data,
+        req.usuario.id_usuario,
+      );
+      if (ePerm) {
+        res.status(500).json({ error: ePerm.message });
+        return;
+      }
+      if (!membro) {
+        res.status(403).json({ error: "Sem permissão" });
+        return;
+      }
+
+      const { data: midias, error: eList } = await supabase
+        .from("midia")
+        .select("*")
+        .eq("id_empresa", idEmpresa.data)
+        .eq("ativo", true)
+        .order("data_criacao", { ascending: false });
+      if (eList) {
+        res.status(500).json({ error: eList.message });
+        return;
+      }
+      const identidade = filterMidiasIdentidade(midias || []);
+      res.json({
+        midias: identidade.filter(
+          (m) => String(m.origem_upload || "").trim() === ORIGEM_UPLOAD_IDENTIDADE_LOGO,
+        ),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno";
+      console.error("empresas.getIdentidadeMidias:", e);
       if (!res.headersSent) res.status(500).json({ error: msg });
     }
   });
@@ -133,6 +196,50 @@ export function registerIdentidadeRoutes(r) {
     }
   });
 
+  r.post("/:idEmpresa/identidade/limpar-fotos-analise", async (req, res) => {
+    try {
+      const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+      if (!idEmpresa.success) {
+        res.status(400).json({ error: "id_empresa inválido" });
+        return;
+      }
+      const supabase = db();
+      if (!supabase) {
+        res.status(503).json({ error: "Supabase não configurado" });
+        return;
+      }
+      const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+        supabase,
+        idEmpresa.data,
+        req.usuario.id_usuario,
+      );
+      if (ePerm) {
+        res.status(500).json({ error: ePerm.message });
+        return;
+      }
+      if (!membro || !podeGerenciarMidias(membro.cargo)) {
+        res.status(403).json({ error: "Sem permissão" });
+        return;
+      }
+
+      const { error: eUp } = await supabase
+        .from("midia")
+        .update({ ativo: false })
+        .eq("id_empresa", idEmpresa.data)
+        .eq("ativo", true)
+        .eq("origem_upload", ORIGEM_UPLOAD_IDENTIDADE_FOTO);
+      if (eUp) {
+        res.status(500).json({ error: eUp.message });
+        return;
+      }
+      res.json({ ok: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno";
+      console.error("empresas.limparFotosAnaliseIdentidade:", e);
+      if (!res.headersSent) res.status(500).json({ error: msg });
+    }
+  });
+
   r.post("/:idEmpresa/identidade/analisar", async (req, res) => {
     try {
       const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
@@ -166,7 +273,7 @@ export function registerIdentidadeRoutes(r) {
 
       const { data: empresaRow } = await supabase
         .from("empresa")
-        .select("nome_fantasia, descricao, segmento")
+        .select("nome_fantasia, descricao, segmento, site_empresa")
         .eq("id_empresa", idEmpresa.data)
         .maybeSingle();
 

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  isIdentidadePromptLeak,
+  mergeBrandPaletteSources,
+  sanitizeEstiloVisualText,
+  sanitizeIdentidadeLlmOutput,
+} from "../../backend/src/modules/empresas/identidadeAnaliseLlm.js";
+import {
   formatBrandIdentityBlockForFlux,
   identidadeCompletude,
   isIdentidadeMarcaContexto,
@@ -119,6 +125,68 @@ describe("identidadeMarca — refineIdentidadeFromAnalysis", () => {
     assert.equal(d.cor_primaria, "#E31B23");
     assert.equal(d.cor_secundaria, "#1A1A1A");
     assert.equal(d.tom_voz, "animado, premium, direto");
-    assert.match(d.estilo_visual, /#E31B23/);
+    assert.equal(d.estilo_visual, "Limpo e moderno");
+    assert.equal(d.cor_primaria, "#E31B23");
+  });
+
+  it("prioriza cores_marca da visão sobre marrom de pixels", () => {
+    const d = refineIdentidadeFromAnalysis(
+      {
+        cores_marca: ["#14AE46", "#FFFFFF", "#0F1829", "#5EEAD4"],
+        estilo_visual: "Limpo, tech, premium",
+      },
+      {
+        primary: "#2B1104",
+        secondary: "#3E210E",
+        accents: ["#C4A574"],
+      },
+    );
+    assert.equal(d.cor_primaria, "#14AE46");
+    assert.ok(d.cores_adicionais.includes("#FFFFFF") || d.cor_secundaria === "#FFFFFF");
+    assert.ok(!d.cor_primaria.includes("2B1104"));
+  });
+
+  it("remove vazamento de instruções do prompt em evitar", () => {
+    const leak =
+      "cores de pele, pelo, mascote ilustrado — não confunda com a paleta da marca. Priorize cores de interface.";
+    const cleaned = sanitizeIdentidadeLlmOutput({ evitar: leak, estilo_visual: "premium" });
+    assert.equal(cleaned.evitar, "");
+    assert.equal(isIdentidadePromptLeak(leak), true);
+    const d = refineIdentidadeFromAnalysis(cleaned, null);
+    assert.equal(d.evitar, "Layout de posts antigos copiado; fontes ilegíveis; poluição visual.");
+  });
+
+  it("guarda cores adicionais da paleta extraída", () => {
+    const d = refineIdentidadeFromAnalysis(
+      { estilo_visual: "Tech e premium" },
+      {
+        primary: "#00E676",
+        secondary: "#0F172A",
+        accents: ["#FFFFFF", "#94A3B8", "#C4A574"],
+      },
+    );
+    assert.equal(d.cor_primaria, "#00E676");
+    assert.equal(d.cor_secundaria, "#0F172A");
+    assert.equal(d.cores_adicionais.length, 3);
+    assert.ok(d.cores_adicionais.includes("#FFFFFF"));
+  });
+});
+
+describe("identidadeAnaliseLlm — sanitizeEstiloVisualText", () => {
+  it("remove hex e nomes de cor", () => {
+    const s = sanitizeEstiloVisualText(
+      "Limpo, verde e azul, premium. Paleta: #14AE46, #0F1829.",
+    );
+    assert.equal(s, "Limpo, premium");
+  });
+});
+
+describe("identidadeAnaliseLlm — mergeBrandPaletteSources", () => {
+  it("pondera visão acima de pixels", () => {
+    const p = mergeBrandPaletteSources({
+      vision: ["#14AE46"],
+      pixels: ["#2B1104", "#3E210E"],
+    });
+    assert.equal(p.cor_primaria, "#14AE46");
   });
 });

@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import {
   calcCompletudeLocal,
   dadosFromApi,
   emptyDados,
+  fetchMidiasIdentidade,
+  limparFotosAnaliseIdentidade,
   temConteudoIdentidade,
 } from "../../../lib/identidadeMarcaUi";
 import IdentidadeMarcaFotosTab from "./IdentidadeMarcaFotosTab";
@@ -20,9 +22,9 @@ const TAB_CLASS =
   "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60";
 
 /**
- * @param {{ empresaId: string, canEdit: boolean }} props
+ * @param {{ empresaId: string, canEdit: boolean, siteEmpresa?: string }} props
  */
-export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
+export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa = "" }) {
   const [open, setOpen] = useState(false);
   const [modo, setModo] = useState(/** @type {'fotos' | 'manual'} */ ("fotos"));
   const [loading, setLoading] = useState(false);
@@ -31,8 +33,9 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
   const [msgKind, setMsgKind] = useState(/** @type {'ok' | 'err'} */ ("ok"));
   const [dados, setDados] = useState(emptyDados);
   const [completude, setCompletude] = useState(null);
-  const [midias, setMidias] = useState([]);
+  const [midiasIdentidade, setMidiasIdentidade] = useState([]);
   const [lockedFields, setLockedFields] = useState(() => new Set());
+  const limparFotosRef = useRef(/** @type {string | null} */ (null));
 
   const onMsg = useCallback((text, kind) => {
     setMsg(text);
@@ -53,18 +56,19 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
     setCompletude(id?.completude || null);
   }, [empresaId, onMsg]);
 
-  const loadMidias = useCallback(async () => {
+  const loadMidiasIdentidade = useCallback(async () => {
     if (!empresaId) return;
-    const result = await authApiFetchWithToken(`/empresas/${empresaId}/midias`);
-    if (!result.ok || result.networkError) return;
-    const list = Array.isArray(result.json?.midias) ? result.json.midias : [];
-    setMidias(list.filter((m) => String(m.tipo_midia || "").toLowerCase() === "imagem"));
+    setMidiasIdentidade(await fetchMidiasIdentidade(empresaId));
   }, [empresaId]);
 
   useEffect(() => {
     void loadIdentidade();
-    void loadMidias();
-  }, [loadIdentidade, loadMidias]);
+    void loadMidiasIdentidade();
+    if (empresaId && limparFotosRef.current !== empresaId) {
+      limparFotosRef.current = empresaId;
+      void limparFotosAnaliseIdentidade(empresaId).then(() => loadMidiasIdentidade());
+    }
+  }, [loadIdentidade, loadMidiasIdentidade, empresaId]);
 
   function onManualFieldChange(key, value) {
     setLockedFields((prev) => {
@@ -90,6 +94,47 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
       setCompletude(calcCompletudeLocal(next));
       return next;
     });
+  }
+
+  async function onRemoveLogo() {
+    if (!empresaId || !canEdit || saving) return;
+    const idMidia = String(dados.id_midia_logo ?? "").trim();
+    if (!idMidia) return;
+
+    setSaving(true);
+    onMsg("Removendo logo…", "ok");
+
+    const del = await authApiFetchWithToken(`/empresas/${empresaId}/midias/${idMidia}`, {
+      method: "DELETE",
+    });
+    if (!del.ok && !del.networkError && del.status !== 404) {
+      setSaving(false);
+      onMsg(del.networkError?.message || formatAuthError(del.json) || "Não foi possível remover o arquivo da logo.", "err");
+      return;
+    }
+
+    const nextDados = { ...dados, id_midia_logo: null };
+    const result = await authApiFetchWithToken(`/empresas/${empresaId}/identidade`, {
+      method: "PUT",
+      body: JSON.stringify(nextDados),
+    });
+    setSaving(false);
+
+    if (!result.ok || result.networkError) {
+      onMsg(result.networkError?.message || formatAuthError(result.json) || "Não foi possível atualizar a identidade.", "err");
+      return;
+    }
+
+    const id = result.json?.identidade;
+    setDados(dadosFromApi(id?.dados));
+    setCompletude(id?.completude || null);
+    setLockedFields((prev) => {
+      const next = new Set(prev);
+      next.add("id_midia_logo");
+      return next;
+    });
+    void loadMidiasIdentidade();
+    onMsg("Logo removida da identidade.", "ok");
   }
 
   async function onSave() {
@@ -188,7 +233,7 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
                 }`}
                 onClick={() => setModo("fotos")}
               >
-                Com fotos
+                Tuma analisa (fotos)
               </button>
               <button
                 type="button"
@@ -209,9 +254,11 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
               empresaId={empresaId}
               canEdit={canEdit}
               idMidiaLogo={dados.id_midia_logo}
-              midias={midias}
+              midias={midiasIdentidade}
+              busy={saving}
               onChange={onLogoChange}
-              onReloadMidias={loadMidias}
+              onRemove={onRemoveLogo}
+              onReloadMidias={loadMidiasIdentidade}
               onMsg={onMsg}
             />
 
@@ -219,14 +266,14 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit }) {
               <IdentidadeMarcaFotosTab
                 empresaId={empresaId}
                 canEdit={canEdit}
+                siteEmpresa={siteEmpresa}
                 dados={dados}
                 setDados={setDados}
                 onFieldChange={onManualFieldChange}
                 lockedFields={lockedFields}
                 completude={completude}
                 setCompletude={setCompletude}
-                midias={midias}
-                onReloadMidias={loadMidias}
+                onFieldChange={onManualFieldChange}
                 onMsg={onMsg}
                 temConteudoInicial={temConteudoIdentidade(dados)}
               />

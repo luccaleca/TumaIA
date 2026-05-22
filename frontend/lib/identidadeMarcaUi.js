@@ -1,6 +1,11 @@
 import { authApiFetchWithToken } from "./auth";
+import { assignRankedPalette, normalizeHexColor as normalizeHexBrand } from "./brandColorScore.js";
 
 export const MAX_FOTOS_IDENTIDADE = 8;
+
+/** Lado maior mínimo para logo nas artes (alinhado ao backend). */
+export const LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX = 512;
+export const LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX = 1024;
 
 /** Nome fixo do contexto de identidade (um por empresa) — não listar em /painel/contextos. */
 export const IDENTIDADE_CONTEXTO_NOME = "Identidade da marca";
@@ -38,6 +43,7 @@ export const emptyDados = {
   publico: "",
   cor_primaria: "",
   cor_secundaria: "",
+  cores_adicionais: [],
   exemplo_frase_marca: "",
   site_url: "",
   id_midia_referencia_analise: null,
@@ -83,8 +89,24 @@ const MERGE_KEYS = [
   "publico",
   "cor_primaria",
   "cor_secundaria",
+  "cores_adicionais",
   "exemplo_frase_marca",
 ];
+
+export const CORES_ADICIONAIS_MAX = 4;
+
+/** @param {unknown} raw */
+export function normalizeCoresAdicionaisList(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const item of list) {
+    const hex = normalizeHexColor(item);
+    if (!hex || out.includes(hex)) continue;
+    out.push(hex);
+    if (out.length >= CORES_ADICIONAIS_MAX) break;
+  }
+  return out;
+}
 
 export function dadosFromApi(raw) {
   if (!raw || typeof raw !== "object") return { ...emptyDados };
@@ -97,6 +119,7 @@ export function dadosFromApi(raw) {
     publico: raw.publico || "",
     cor_primaria: normalizeHexColor(raw.cor_primaria) || "",
     cor_secundaria: normalizeHexColor(raw.cor_secundaria) || "",
+    cores_adicionais: normalizeCoresAdicionaisList(raw.cores_adicionais),
     exemplo_frase_marca: raw.exemplo_frase_marca || "",
     site_url: raw.site_url || "",
     id_midia_referencia_analise: raw.id_midia_referencia_analise || null,
@@ -151,15 +174,32 @@ export function mergeIdentidadeSugestao(current, sugestao, lockedFields = new Se
     const next = sugestao[key];
     if (next == null || String(next).trim() === "") continue;
 
-    if (key === "cor_primaria" || key === "cor_secundaria") {
-      const hex = normalizeHexColor(next);
-      if (hex) out[key] = hex;
+    if (key === "cor_primaria" || key === "cor_secundaria" || key === "cores_adicionais") {
       continue;
     }
 
     const cur = String(out[key] ?? "").trim();
     if (!cur) out[key] = String(next).trim();
   }
+
+  if (
+    !lockedFields.has("cor_primaria") &&
+    !lockedFields.has("cor_secundaria") &&
+    !lockedFields.has("cores_adicionais")
+  ) {
+    const palette = assignRankedPalette([
+      out.cor_primaria,
+      out.cor_secundaria,
+      ...(Array.isArray(out.cores_adicionais) ? out.cores_adicionais : []),
+      sugestao.cor_primaria,
+      sugestao.cor_secundaria,
+      ...(Array.isArray(sugestao.cores_adicionais) ? sugestao.cores_adicionais : []),
+    ].map((c) => normalizeHexBrand(c) || normalizeHexColor(c)).filter(Boolean));
+    out.cor_primaria = palette.cor_primaria;
+    out.cor_secundaria = palette.cor_secundaria;
+    out.cores_adicionais = normalizeCoresAdicionaisList(palette.cores_adicionais);
+  }
+
   return out;
 }
 
@@ -193,17 +233,106 @@ function getTipoMidia(file) {
  * @param {File} file
  * @param {string | null} [idPasta]
  */
+/**
+ * Upload no acervo geral (painel Mídias).
+ * @param {string} empresaId
+ * @param {File} file
+ * @param {string | null} [idPasta]
+ */
 export async function uploadImagemMidia(empresaId, file, idPasta = null) {
+  return uploadImagemMidiaComOrigem(empresaId, file, {
+    id_pasta: idPasta,
+    origem_upload: "upload_manual",
+  });
+}
+
+/**
+ * @param {File} file
+ * @returns {Promise<{ width: number, height: number }>}
+ */
+export function readImageFileDimensions(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({
+        width: img.naturalWidth || 0,
+        height: img.naturalHeight || 0,
+      });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Não foi possível ler a imagem."));
+    };
+    img.src = url;
+  });
+}
+
+/**
+ * @param {number} width
+ * @param {number} height
+ * @returns {string | null} mensagem de erro ou null se ok
+ */
+export function validateLogoIdentidadeArquivo(width, height) {
+  const w = Math.max(0, Math.round(Number(width) || 0));
+  const h = Math.max(0, Math.round(Number(height) || 0));
+  if (w < 1 || h < 1) return "Não foi possível ler o tamanho da imagem.";
+  const ladoMaior = Math.max(w, h);
+  if (ladoMaior < LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX) {
+    return `Logo muito pequena (${w}×${h} px). Use PNG sem fundo com pelo menos ${LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX} px no lado maior (ideal ${LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px) para ficar nítida nas artes.`;
+  }
+  return null;
+}
+
+/**
+ * Remove fotos antigas gravadas só para análise (legado). Logo da identidade permanece.
+ * @param {string} empresaId
+ */
+export async function limparFotosAnaliseIdentidade(empresaId) {
+  await authApiFetchWithToken(`/empresas/${encodeURIComponent(empresaId)}/identidade/limpar-fotos-analise`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+/**
+ * Upload da logo da identidade (fica salva para artes). Fotos de análise não usam upload.
+ * @param {string} empresaId
+ * @param {File} file
+ * @param {'logo'} [kind]
+ */
+export async function uploadImagemIdentidade(empresaId, file, kind = "logo") {
+  const origem_upload = kind === "logo" ? "identidade_marca_logo" : "identidade_marca_foto";
+  if (kind === "logo") {
+    const mime = String(file.type || "").toLowerCase();
+    if (!mime.startsWith("image/")) {
+      throw new Error("Envie uma imagem (PNG sem fundo é o ideal).");
+    }
+    const { width, height } = await readImageFileDimensions(file);
+    const dimErr = validateLogoIdentidadeArquivo(width, height);
+    if (dimErr) throw new Error(dimErr);
+  }
+  return uploadImagemMidiaComOrigem(empresaId, file, { origem_upload });
+}
+
+/**
+ * @param {string} empresaId
+ * @param {File} file
+ * @param {{ id_pasta?: string | null, origem_upload: string }} opts
+ */
+async function uploadImagemMidiaComOrigem(empresaId, file, opts) {
   const base64_data = await toBase64WithoutPrefix(file);
   const result = await authApiFetchWithToken(`/empresas/${empresaId}/midias/upload-base64`, {
     method: "POST",
     body: JSON.stringify({
-      id_pasta: idPasta,
+      id_pasta: opts.id_pasta ?? null,
       nome_arquivo: file.name,
       nome_exibicao: file.name,
       mime_type: file.type || "image/jpeg",
       tipo_midia: getTipoMidia(file),
       base64_data,
+      origem_upload: opts.origem_upload,
     }),
   });
   if (!result.ok || result.networkError) {
@@ -223,4 +352,15 @@ export async function fetchPastaUploadRaiz(empresaId) {
   const result = await authApiFetchWithToken(`/empresas/${empresaId}/pastas`);
   if (!result.ok || result.networkError) return null;
   return result.json?.id_pasta_upload_raiz || null;
+}
+
+/**
+ * Logo salva na identidade da marca (não inclui fotos temporárias de análise).
+ * @param {string} empresaId
+ */
+export async function fetchMidiasIdentidade(empresaId) {
+  const result = await authApiFetchWithToken(`/empresas/${empresaId}/identidade/midias`);
+  if (!result.ok || result.networkError) return [];
+  const list = Array.isArray(result.json?.midias) ? result.json.midias : [];
+  return list.filter((m) => String(m.tipo_midia || "").toLowerCase() === "imagem");
 }

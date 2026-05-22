@@ -203,12 +203,15 @@ r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res
       idEmpresa: parsed.data.id_empresa,
       db,
     });
+    const ready = out.briefing_status !== "collecting";
     res.json({
       confirmation_message: out.confirmation_message,
       links: out.links,
       post_context_proposal: out.post_context_proposal,
+      briefing_status: out.briefing_status || (ready ? "ready" : "collecting"),
+      missing_slots: Array.isArray(out.missing_slots) ? out.missing_slots : [],
       meta: out._meta,
-      ui_actions: CONFIRM_IMAGE_UI,
+      ui_actions: ready ? CONFIRM_IMAGE_UI : [],
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao montar confirmação de contexto";

@@ -43,6 +43,14 @@ export function normalizeCnpjForApi(value) {
   return d || null;
 }
 
+/** URL do site — vazio vira null; sem esquema ganha https:// */
+export function normalizeSiteEmpresaForApi(value) {
+  let u = String(value || "").trim();
+  if (!u) return null;
+  if (!/^https?:\/\//i.test(u)) u = `https://${u}`;
+  return u.slice(0, 500);
+}
+
 export const emptyEmpresaFields = {
   nome_fantasia: "",
   razao_social: "",
@@ -52,6 +60,7 @@ export const emptyEmpresaFields = {
   segmento: "",
   cnpj: "",
   email_principal: "",
+  site_empresa: "",
 };
 
 export function formatEmpresaFormFromApi(empresa) {
@@ -75,6 +84,7 @@ export function empresaToFormFields(empresa) {
     segmento: empresa.segmento || "",
     cnpj: masked.cnpj || "",
     email_principal: empresa.email_principal || "",
+    site_empresa: empresa.site_empresa || "",
   };
 }
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  PASTA_IDENTIDADE_MARCA_NOME,
   PASTA_UPLOAD_RAIZ_NOME,
   coletarSubpastas,
   createPastaBody,
@@ -56,8 +57,9 @@ export function registerPastasRoutes(r) {
         res.status(500).json({ error: msg });
         return;
       }
+      const visiveis = (pastas || []).filter((p) => String(p.nome ?? "").trim() !== PASTA_IDENTIDADE_MARCA_NOME);
       res.json({
-        pastas: pastas || [],
+        pastas: visiveis,
         id_pasta_upload_raiz: idPastaUploadRaiz,
         pasta_upload_raiz_nome: PASTA_UPLOAD_RAIZ_NOME,
       });

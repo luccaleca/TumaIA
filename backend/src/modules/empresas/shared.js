@@ -3,6 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { getSupabaseAdmin } from "../../supabaseAdmin.js";
 import { env } from "../../config.js";
+import { PASTA_IDENTIDADE_MARCA_NOME } from "./midiaOrigem.js";
 
 export function db() {
   return getSupabaseAdmin();
@@ -35,6 +36,7 @@ export const createEmpresaBody = z.object({
     (v) => (v === "" || v === undefined ? null : v),
     z.union([z.null(), z.string().email().max(200)]),
   ),
+  site_empresa: z.string().max(500).optional().nullable(),
 });
 
 export const updateEmpresaBody = createEmpresaBody
@@ -86,6 +88,9 @@ export const uploadMidiaBody = z.object({
   base64_data: z.string().min(10),
   descricao: z.string().max(1000).optional().nullable(),
   alt_text: z.string().max(1000).optional().nullable(),
+  origem_upload: z
+    .enum(["upload_manual", "identidade_marca_foto", "identidade_marca_logo"])
+    .optional(),
 });
 
 export const midiaParam = z.object({
@@ -389,6 +394,51 @@ export function safeExt(filename) {
 }
 
 export const PASTA_UPLOAD_RAIZ_NOME = "Geral";
+
+export { PASTA_IDENTIDADE_MARCA_NOME } from "./midiaOrigem.js";
+
+export async function getOrCreatePastaIdentidadeMarca(supabase, idEmpresa) {
+  const nome = PASTA_IDENTIDADE_MARCA_NOME;
+  const { data: found, error: eFind } = await supabase
+    .from("pasta")
+    .select("id_pasta")
+    .eq("id_empresa", idEmpresa)
+    .is("id_pasta_pai", null)
+    .eq("nome", nome)
+    .eq("ativo", true)
+    .maybeSingle();
+  if (eFind) throw new Error(eFind.message);
+  if (found?.id_pasta) return found.id_pasta;
+
+  const { data: created, error: eIns } = await supabase
+    .from("pasta")
+    .insert({
+      id_empresa: idEmpresa,
+      id_pasta_pai: null,
+      nome,
+      ativo: true,
+    })
+    .select("id_pasta")
+    .single();
+
+  if (eIns) {
+    const msg = String(eIns.message || "");
+    if (/duplicate|unique/i.test(msg)) {
+      const { data: again, error: e2 } = await supabase
+        .from("pasta")
+        .select("id_pasta")
+        .eq("id_empresa", idEmpresa)
+        .is("id_pasta_pai", null)
+        .eq("nome", nome)
+        .eq("ativo", true)
+        .maybeSingle();
+      if (e2) throw new Error(e2.message);
+      if (again?.id_pasta) return again.id_pasta;
+    }
+    throw new Error(eIns.message);
+  }
+  return created.id_pasta;
+}
 
 export async function getOrCreatePastaUploadRaiz(supabase, idEmpresa) {
   const { data: found, error: eFind } = await supabase

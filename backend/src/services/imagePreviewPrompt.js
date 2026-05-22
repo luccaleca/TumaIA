@@ -1,3 +1,4 @@
+import { filterMidiasAcervo } from "../modules/empresas/midiaOrigem.js";
 import { resolveFraseNaImagem } from "./imageHeadline.js";
 import {
   formatBrandIdentityBlockForFlux,
@@ -56,7 +57,7 @@ export async function loadMidiasEmpresaResumo(db, idEmpresa, limit = 48) {
     .order("data_criacao", { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
-  return Array.isArray(data) ? data : [];
+  return filterMidiasAcervo(Array.isArray(data) ? data : []);
 }
 
 function compactJson(value, maxLen) {

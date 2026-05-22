@@ -2,8 +2,9 @@
 
 import { useRef, useState } from "react";
 import {
-  fetchPastaUploadRaiz,
-  uploadImagemMidia,
+  LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX,
+  LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX,
+  uploadImagemIdentidade,
 } from "../../../lib/identidadeMarcaUi";
 
 const BTN =
@@ -16,8 +17,10 @@ const BTN =
  *   idMidiaLogo: string | null,
  *   midias: Array<Record<string, unknown>>,
  *   onChange: (idMidia: string | null) => void,
+ *   onRemove?: () => void | Promise<void>,
  *   onReloadMidias?: () => void,
  *   onMsg?: (text: string, kind: 'ok' | 'err') => void,
+ *   busy?: boolean,
  * }} props
  */
 export default function IdentidadeMarcaLogoField({
@@ -26,11 +29,14 @@ export default function IdentidadeMarcaLogoField({
   idMidiaLogo,
   midias,
   onChange,
+  onRemove,
   onReloadMidias,
   onMsg,
+  busy: busyParent = false,
 }) {
   const inputRef = useRef(null);
-  const [busy, setBusy] = useState(false);
+  const [busyUpload, setBusyUpload] = useState(false);
+  const busy = busyUpload || busyParent;
 
   const logoMidia = idMidiaLogo
     ? midias.find((m) => String(m.id_midia) === String(idMidiaLogo))
@@ -44,17 +50,26 @@ export default function IdentidadeMarcaLogoField({
       onMsg?.("Envie uma imagem. PNG com fundo transparente é o ideal.", "err");
       return;
     }
-    setBusy(true);
+    setBusyUpload(true);
     try {
-      const idPasta = await fetchPastaUploadRaiz(empresaId);
-      const midia = await uploadImagemMidia(empresaId, file, idPasta);
+      const midia = await uploadImagemIdentidade(empresaId, file, "logo");
       onChange(String(midia.id_midia));
       onReloadMidias?.();
       onMsg?.("Logo enviada. Salve a identidade para confirmar.", "ok");
     } catch (err) {
       onMsg?.(err instanceof Error ? err.message : "Falha ao enviar logo.", "err");
     } finally {
-      setBusy(false);
+      setBusyUpload(false);
+    }
+  }
+
+  async function handleRemove() {
+    if (!canEdit || busy || !idMidiaLogo || !onRemove) return;
+    if (typeof window !== "undefined" && !window.confirm("Remover a logo da identidade da marca?")) return;
+    try {
+      await onRemove();
+    } catch (err) {
+      onMsg?.(err instanceof Error ? err.message : "Falha ao remover logo.", "err");
     }
   }
 
@@ -64,7 +79,8 @@ export default function IdentidadeMarcaLogoField({
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground">Logo para artes</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            PNG sem fundo é o ideal. Essa logo entra nas postagens da sua marca.
+            PNG sem fundo. Mínimo {LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX} px no lado maior (ideal{" "}
+            {LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px).
           </p>
         </div>
         {idMidiaLogo ? (
@@ -97,11 +113,11 @@ export default function IdentidadeMarcaLogoField({
         </div>
 
         {canEdit ? (
-          <>
+          <div className="flex flex-col gap-2">
             <input
               ref={inputRef}
               type="file"
-              accept="image/png,image/webp,image/jpeg"
+              accept="image/png,image/webp"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
@@ -109,10 +125,22 @@ export default function IdentidadeMarcaLogoField({
                 if (file) void uploadFile(file);
               }}
             />
-            <button type="button" disabled={busy} className={BTN} onClick={() => inputRef.current?.click()}>
-              {busy ? "Enviando…" : idMidiaLogo ? "Trocar logo" : "Enviar logo"}
-            </button>
-          </>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" disabled={busy} className={BTN} onClick={() => inputRef.current?.click()}>
+                {busyUpload ? "Enviando…" : idMidiaLogo ? "Trocar logo" : "Enviar logo"}
+              </button>
+              {idMidiaLogo && onRemove ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleRemove()}
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                >
+                  {busyParent && !busyUpload ? "Removendo…" : "Remover logo"}
+                </button>
+              ) : null}
+            </div>
+          </div>
         ) : null}
       </div>
     </div>

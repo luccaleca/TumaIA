@@ -1,5 +1,7 @@
 "use client";
 
+import IdentidadeMarcaCoresExtras from "./IdentidadeMarcaCoresExtras";
+
 const INPUT_CLASS =
   "w-full rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] focus:border-accent/55 focus:ring-2 focus:ring-accent/15 dark:focus:ring-accent/25 disabled:opacity-60";
 
@@ -8,7 +10,7 @@ const CAMPOS_MARCA = [
   ["sobre_empresa", "Sobre a empresa", true],
   ["segmento", "Segmento", false],
   ["tom_voz", "Tom de voz", false],
-  ["estilo_visual", "Estilo visual", false],
+  ["estilo_visual", "Estilo visual (sem nomes de cor)", false],
   ["publico", "Público-alvo", false],
   ["evitar", "Evitar nas artes", false],
   ["exemplo_frase_marca", "Frase de exemplo", false],
@@ -79,6 +81,12 @@ export default function IdentidadeMarcaManualTab({ dados, canEdit, onFieldChange
         />
       </div>
 
+      <IdentidadeMarcaCoresExtras
+        cores={dados.cores_adicionais}
+        canEdit={canEdit}
+        onChange={(cores) => onFieldChange("cores_adicionais", cores)}
+      />
+
       <div className="grid grid-cols-1 gap-3">
         {CAMPOS_MARCA.map(([key, placeholder, area]) =>
           area ? (
@@ -108,25 +116,17 @@ export default function IdentidadeMarcaManualTab({ dados, canEdit, onFieldChange
 
       <div className="border-t border-border pt-4">
         <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Opcional</p>
-        <div className="grid grid-cols-1 gap-3">
-          <input
-            id="site_url_manual"
-            type="url"
-            value={dados.site_url}
-            disabled={!canEdit}
-            onChange={(e) => onFieldChange("site_url", e.target.value)}
-            placeholder="https://suaempresa.com.br"
-            className={INPUT_CLASS}
-          />
-          <textarea
-            id="legenda_referencia_manual"
-            value={dados.legenda_referencia}
-            disabled={!canEdit}
-            onChange={(e) => onFieldChange("legenda_referencia", e.target.value)}
-            placeholder="Legenda de referência (opcional)"
-            className={`${INPUT_CLASS} min-h-16 resize-y`}
-          />
-        </div>
+        <label htmlFor="legenda_referencia_manual" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+          Legenda de referência
+        </label>
+        <textarea
+          id="legenda_referencia_manual"
+          value={dados.legenda_referencia}
+          disabled={!canEdit}
+          onChange={(e) => onFieldChange("legenda_referencia", e.target.value)}
+          placeholder="Texto de um post de referência (opcional)"
+          className={`${INPUT_CLASS} min-h-16 resize-y`}
+        />
       </div>
     </div>
   );

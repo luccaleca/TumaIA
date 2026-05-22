@@ -41,6 +41,10 @@ const envSchema = z.object({
   ),
   /** Modelo multimodal para análise de imagem (ex. `llava:7b` no Ollama). */
   LLAMA_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
+  /** Vision só para identidade da marca (ex. `llava:13b` ou `llama3.2-vision:11b`). */
+  IDENTIDADE_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
+  /** Texto só para identidade (site/legenda sem imagem). */
+  IDENTIDADE_ANALISE_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   LLAMA_API_KEY: z.preprocess(empty, z.string().optional()),
   LLAMA_DAILY_TOKEN_BUDGET: z.preprocess(empty, z.coerce.number().int().positive().optional()),
   MEDIA_BUCKET: z.preprocess(empty, z.string().optional()),

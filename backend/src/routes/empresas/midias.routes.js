@@ -1,9 +1,11 @@
 import path from "node:path";
+import sharp from "sharp";
 import { z } from "zod";
 import {
   MEDIA_BUCKET,
   db,
   getMembroAtivoEmpresa,
+  getOrCreatePastaIdentidadeMarca,
   getOrCreatePastaUploadRaiz,
   midiaParam,
   patchMidiaBody,
@@ -11,6 +13,13 @@ import {
   safeExt,
   uploadMidiaBody,
 } from "../../modules/empresas/shared.js";
+import {
+  ORIGEM_UPLOAD_IDENTIDADE_LOGO,
+  ORIGEM_UPLOAD_MANUAL,
+  filterMidiasAcervo,
+  isOrigemUploadIdentidade,
+  validateLogoIdentidadeDimensions,
+} from "../../modules/empresas/midiaOrigem.js";
 
 export function registerMidiasRoutes(r) {
   r.get("/:idEmpresa/midias", async (req, res) => {
@@ -60,7 +69,7 @@ export function registerMidiasRoutes(r) {
         res.status(500).json({ error: eList.message });
         return;
       }
-      res.json({ midias: midias || [] });
+      res.json({ midias: filterMidiasAcervo(midias || []) });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro interno";
       console.error("empresas.listMidias:", e);
@@ -101,15 +110,20 @@ export function registerMidiasRoutes(r) {
       }
 
       const b = parsed.data;
+      const origem = b.origem_upload ?? ORIGEM_UPLOAD_MANUAL;
+      const paraIdentidade = isOrigemUploadIdentidade(origem);
+
       let idPastaDestino = b.id_pasta ?? null;
-      if (!idPastaDestino) {
-        try {
+      try {
+        if (paraIdentidade) {
+          idPastaDestino = await getOrCreatePastaIdentidadeMarca(supabase, idEmpresa.data);
+        } else if (!idPastaDestino) {
           idPastaDestino = await getOrCreatePastaUploadRaiz(supabase, idEmpresa.data);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Erro ao resolver pasta de destino";
-          res.status(500).json({ error: msg });
-          return;
         }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao resolver pasta de destino";
+        res.status(500).json({ error: msg });
+        return;
       }
 
       const buffer = Buffer.from(b.base64_data, "base64");
@@ -117,10 +131,32 @@ export function registerMidiasRoutes(r) {
         res.status(400).json({ error: "base64_data inválido" });
         return;
       }
+
+      if (origem === ORIGEM_UPLOAD_IDENTIDADE_LOGO) {
+        const mime = String(b.mime_type || "").toLowerCase();
+        if (!mime.startsWith("image/")) {
+          res.status(400).json({ error: "Logo deve ser um arquivo de imagem." });
+          return;
+        }
+        try {
+          const meta = await sharp(buffer).metadata();
+          const check = validateLogoIdentidadeDimensions(meta.width, meta.height);
+          if (!check.ok) {
+            res.status(400).json({ error: check.error });
+            return;
+          }
+        } catch {
+          res.status(400).json({ error: "Não foi possível ler a imagem da logo." });
+          return;
+        }
+      }
+
       const ext = safeExt(b.nome_arquivo);
       const stamp = Date.now();
       const slug = b.nome_arquivo.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const caminhoStorage = `${idEmpresa.data}/${idPastaDestino}/${stamp}_${slug}`;
+      const caminhoStorage = paraIdentidade
+        ? `${idEmpresa.data}/_identidade/${stamp}_${slug}`
+        : `${idEmpresa.data}/${idPastaDestino}/${stamp}_${slug}`;
 
       const { error: eUpload } = await supabase.storage
         .from(MEDIA_BUCKET)
@@ -152,7 +188,7 @@ export function registerMidiasRoutes(r) {
         largura: null,
         altura: null,
         duracao_segundos: null,
-        origem_upload: "upload_manual",
+        origem_upload: origem,
         descricao: b.descricao ?? null,
         alt_text: b.alt_text ?? null,
         ativo: true,

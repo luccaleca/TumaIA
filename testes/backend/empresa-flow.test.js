@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { criarEmpresaParaUsuario } from "../../backend/src/modules/empresas/empresaCriacao.js";
+import {
+  criarEmpresaParaUsuario,
+  empresaCampoTextoParaDb,
+  montarRowInsertEmpresa,
+} from "../../backend/src/modules/empresas/empresaCriacao.js";
 import {
   executarCriacaoConviteAdmin,
   executarResgateConvite,
@@ -39,12 +43,22 @@ describe("empresa — montarListaMinhasEmpresas (dados para a página /minhas)",
     assert.equal(lista[0].responsavel_operacional, true);
   });
 
-  it("empresa null quando o id não está no mapa", () => {
+  it("omite vínculo sem empresa no mapa (lista vazia)", () => {
     const lista = montarListaMinhasEmpresas(
       [{ cargo: "membro", perfil_acesso: "editor", responsavel_operacional: false, receber_alertas: false, id_empresa: ID_EMP }],
       [],
     );
-    assert.equal(lista[0].empresa, null);
+    assert.equal(lista.length, 0);
+  });
+});
+
+describe("empresa — campos texto para o banco (NOT NULL)", () => {
+  it("converte null em string vazia nos opcionais", () => {
+    assert.equal(empresaCampoTextoParaDb(null), "");
+    assert.equal(empresaCampoTextoParaDb(undefined), "");
+    const row = montarRowInsertEmpresa({ nome_fantasia: "Loja" });
+    assert.equal(row.razao_social, "");
+    assert.equal(row.segmento, "");
   });
 });
 
@@ -95,6 +109,7 @@ describe("empresa — criarEmpresaParaUsuario (cadastro salvo + vínculo)", () =
           return {
             insert(row) {
               assert.equal(row.nome_fantasia, "Nova Marca");
+              assert.equal(row.razao_social, "");
               return {
                 select() {
                   return {

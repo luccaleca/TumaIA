@@ -83,7 +83,7 @@ export default function EmpresaFormulario({
           />
         </Field>
 
-        <Field id="segmento" label="Segmento" hint="Escolha na lista ou use outra categoria.">
+        <Field id="segmento" label="Segmento">
           <select
             id="segmento"
             value={segmentoSelectValor}
@@ -153,7 +153,20 @@ export default function EmpresaFormulario({
           />
         </Field>
 
-        <Field id="instagram_empresa" label="Instagram da empresa" hint="Perfil comercial no Instagram.">
+        <Field id="site_empresa" label="Site da empresa" className="md:col-span-2">
+          <input
+            id="site_empresa"
+            type="url"
+            autoComplete="url"
+            placeholder="https://suaempresa.com.br"
+            value={form.site_empresa}
+            onChange={(e) => setField("site_empresa", e.target.value)}
+            disabled={!canEdit}
+            className={INPUT_CLASS}
+          />
+        </Field>
+
+        <Field id="instagram_empresa" label="Instagram da empresa">
           <div className="flex overflow-hidden rounded-xl border border-border bg-surface-elevated shadow-sm focus-within:border-accent/55 focus-within:ring-2 focus-within:ring-accent/15 dark:focus-within:ring-accent/25">
             <span className="flex items-center border-r border-border bg-muted/50 px-3 text-sm text-muted-foreground">
               @

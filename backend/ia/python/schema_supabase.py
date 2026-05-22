@@ -283,7 +283,7 @@ def obter_empresa_cadastro_por_id(id_empresa: str) -> tuple[dict[str, object] | 
             cur.execute(
                 """
                 SELECT id_empresa, nome_fantasia, razao_social, segmento, descricao,
-                       email_principal, telefone_principal, instagram_empresa, cnpj, ativo
+                       email_principal, telefone_principal, instagram_empresa, site_empresa, cnpj, ativo
                 FROM public.empresa
                 WHERE id_empresa = %s::uuid AND ativo = true
                 LIMIT 1
@@ -322,6 +322,7 @@ def formatar_empresa_cadastro_prompt(row: dict[str, object] | None) -> str:
         f"- E-mail principal: {s('email_principal') or '—'}",
         f"- Telefone principal: {s('telefone_principal') or '—'}",
         f"- Instagram: {s('instagram_empresa') or '—'}",
+        f"- Site: {s('site_empresa') or '—'}",
         f"- CNPJ: {s('cnpj') or '—'}",
     ]
     return "\n".join(linhas).strip()

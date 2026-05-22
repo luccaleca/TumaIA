@@ -1,36 +1,26 @@
 import sharp from "sharp";
+import {
+  brandColorScoreRgb,
+  hueDegrees,
+  isLikelyFurOrSkinTone,
+  isNeutralUiColor,
+  luminance,
+  rankBrandHexColors,
+  saturation,
+} from "../lib/brandColorScore.js";
 
 /**
+ * Destaques de UI (verde/ciano em fundo escuro, texto claro).
  * @param {number} r
  * @param {number} g
  * @param {number} b
  */
-function luminance(r, g, b) {
-  return 0.299 * r + 0.587 * g + 0.114 * b;
-}
-
-/**
- * @param {number} r
- * @param {number} g
- * @param {number} b
- */
-function saturation(r, g, b) {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  if (max <= 0) return 0;
-  return (max - min) / max;
-}
-
-/**
- * @param {number} r
- * @param {number} g
- * @param {number} b
- */
-function isNeutralBackground(r, g, b) {
-  const lum = luminance(r, g, b);
+function isLikelyUiAccent(r, g, b) {
   const sat = saturation(r, g, b);
-  if (lum > 250 || lum < 8) return true;
-  if (sat < 0.12 && lum > 40 && lum < 245) return true;
+  const lum = luminance(r, g, b);
+  const h = hueDegrees(r, g, b);
+  if (sat >= 0.28 && lum >= 50 && lum <= 235 && h >= 85 && h <= 205) return true;
+  if (sat < 0.12 && lum > 215) return true;
   return false;
 }
 
@@ -42,20 +32,15 @@ function colorDistance(a, b) {
   return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2);
 }
 
-/**
- * @param {number} r
- * @param {number} g
- * @param {number} b
- */
-function rgbToHex(r, g, b) {
+function rgbToHexLocal(r, g, b) {
   return `#${[r, g, b].map((x) => Math.round(x).toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 }
 
 /**
- * @param {Array<{ r: number, g: number, b: number }>} pixels
+ * @param {Array<{ r: number, g: number, b: number, w?: number }>} pixels
  * @param {number} k
  */
-function kMeans(pixels, k) {
+function kMeansWeighted(pixels, k) {
   if (!pixels.length) return [];
   const kk = Math.min(k, pixels.length);
   /** @type {Array<{ r: number, g: number, b: number }>} */
@@ -65,9 +50,10 @@ function kMeans(pixels, k) {
     centroids.push({ ...pixels[Math.min(i * step, pixels.length - 1)] });
   }
 
-  for (let iter = 0; iter < 14; iter++) {
-    const sums = centroids.map(() => ({ r: 0, g: 0, b: 0, count: 0, satSum: 0 }));
+  for (let iter = 0; iter < 16; iter++) {
+    const sums = centroids.map(() => ({ r: 0, g: 0, b: 0, w: 0, scoreSum: 0 }));
     for (const p of pixels) {
+      const w = p.w ?? 1;
       let best = 0;
       let bestD = Infinity;
       for (let i = 0; i < centroids.length; i++) {
@@ -77,18 +63,18 @@ function kMeans(pixels, k) {
           best = i;
         }
       }
-      sums[best].r += p.r;
-      sums[best].g += p.g;
-      sums[best].b += p.b;
-      sums[best].count++;
-      sums[best].satSum += saturation(p.r, p.g, p.b);
+      sums[best].r += p.r * w;
+      sums[best].g += p.g * w;
+      sums[best].b += p.b * w;
+      sums[best].w += w;
+      sums[best].scoreSum += brandColorScoreRgb(p.r, p.g, p.b) * w;
     }
     let moved = false;
     for (let i = 0; i < centroids.length; i++) {
-      if (!sums[i].count) continue;
-      const nr = sums[i].r / sums[i].count;
-      const ng = sums[i].g / sums[i].count;
-      const nb = sums[i].b / sums[i].count;
+      if (!sums[i].w) continue;
+      const nr = sums[i].r / sums[i].w;
+      const ng = sums[i].g / sums[i].w;
+      const nb = sums[i].b / sums[i].w;
       if (colorDistance(centroids[i], { r: nr, g: ng, b: nb }) > 2) moved = true;
       centroids[i] = { r: nr, g: ng, b: nb };
     }
@@ -110,24 +96,30 @@ function kMeans(pixels, k) {
       return best === i;
     });
     if (!matched.length) continue;
-    let satSum = 0;
-    for (const p of matched) satSum += saturation(p.r, p.g, p.b);
+    let wSum = 0;
+    let scoreSum = 0;
+    for (const p of matched) {
+      const w = p.w ?? 1;
+      wSum += w;
+      scoreSum += brandColorScoreRgb(p.r, p.g, p.b) * w;
+    }
     out.push({
       r: centroids[i].r,
       g: centroids[i].g,
       b: centroids[i].b,
       count: matched.length,
-      avgSat: satSum / matched.length,
+      weight: wSum,
+      brandScore: scoreSum / Math.max(wSum, 1),
     });
   }
   return out;
 }
 
 /**
- * @param {{ r: number, g: number, b: number, count: number, avgSat: number }} c
+ * @param {{ r: number, g: number, b: number, count: number, weight: number, brandScore: number }} c
  */
-function clusterScore(c) {
-  return c.count * (1 + c.avgSat * 2.5);
+function clusterRank(c) {
+  return c.weight * (0.4 + c.brandScore * 1.8);
 }
 
 /**
@@ -138,31 +130,29 @@ async function preprocessImageBuffer(buffer) {
     return await sharp(buffer)
       .rotate()
       .trim({ threshold: 12 })
-      .resize(280, 280, { fit: "inside", withoutEnlargement: true })
+      .resize(360, 360, { fit: "inside", withoutEnlargement: true })
       .toBuffer();
   } catch {
     return sharp(buffer)
       .rotate()
-      .resize(280, 280, { fit: "inside", withoutEnlargement: true })
+      .resize(360, 360, { fit: "inside", withoutEnlargement: true })
       .toBuffer();
   }
 }
 
 /**
- * Extrai paleta de marca (primária + secundária) com k-means em pixels saturados.
+ * Pixels com peso: ignora pelo/marrom fraco; reforça verde/azul/neutros de UI.
  * @param {Buffer} buffer
- * @returns {Promise<{ primary: string | null, secondary: string | null, accents: string[] }>}
  */
-export async function extractBrandPaletteFromBuffer(buffer) {
-  if (!buffer?.length) return { primary: null, secondary: null, accents: [] };
-
+async function samplePixels(buffer) {
   const prepped = await preprocessImageBuffer(buffer);
   const { data, info } = await sharp(prepped).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-
   const { width, height, channels } = info;
+  /** @type {Array<{ r: number, g: number, b: number, w: number }>} */
+  const brand = [];
   /** @type {Array<{ r: number, g: number, b: number }>} */
-  const pixels = [];
-  const stride = Math.max(1, Math.floor((width * height) / 2500));
+  const neutrals = [];
+  const stride = Math.max(1, Math.floor((width * height) / 3200));
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -171,54 +161,118 @@ export async function extractBrandPaletteFromBuffer(buffer) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      if (isNeutralBackground(r, g, b)) continue;
-      pixels.push({ r, g, b });
+
+      if (isNeutralUiColor(r, g, b)) {
+        neutrals.push({ r, g, b });
+        continue;
+      }
+      if (isLikelyFurOrSkinTone(r, g, b)) continue;
+
+      let score = brandColorScoreRgb(r, g, b);
+      if (isLikelyUiAccent(r, g, b)) score *= 2.2;
+      if (score < 0.15) continue;
+
+      brand.push({ r, g, b, w: score });
     }
   }
 
-  if (!pixels.length) return { primary: null, secondary: null, accents: [] };
+  return { brand, neutrals };
+}
 
-  const clusters = kMeans(pixels, 6);
-  if (!clusters.length) return { primary: null, secondary: null, accents: [] };
+/**
+ * @param {Array<{ r: number, g: number, b: number }>} neutrals
+ */
+function pickKeyNeutrals(neutrals) {
+  /** @type {string[]} */
+  const out = [];
+  let bestLight = null;
+  let bestLightLum = 0;
+  let bestDark = null;
+  let bestDarkLum = 999;
+  /** @type {Map<string, { count: number, r: number, g: number, b: number }>} */
+  const midBuckets = new Map();
 
-  const ranked = [...clusters].sort((a, b) => clusterScore(b) - clusterScore(a));
-  const primaryC = ranked[0];
-  const primary = rgbToHex(primaryC.r, primaryC.g, primaryC.b);
+  for (const p of neutrals) {
+    const lum = luminance(p.r, p.g, p.b);
+    const sat = saturation(p.r, p.g, p.b);
+    if (sat >= 0.2) continue;
 
-  let secondaryC = null;
-  let bestSecondaryScore = 0;
-  for (let i = 1; i < ranked.length; i++) {
-    const c = ranked[i];
-    const dist = colorDistance(c, primaryC);
-    if (dist < 38) continue;
-    const score = dist * Math.sqrt(c.count) * (1 + c.avgSat);
-    if (score > bestSecondaryScore) {
-      bestSecondaryScore = score;
-      secondaryC = c;
+    if (lum > bestLightLum && lum > 200) {
+      bestLightLum = lum;
+      bestLight = p;
+    }
+    if (lum < bestDarkLum && lum < 70) {
+      bestDarkLum = lum;
+      bestDark = p;
+    }
+    if (lum >= 85 && lum <= 210) {
+      const key = `${Math.round(p.r / 12)}-${Math.round(p.g / 12)}-${Math.round(p.b / 12)}`;
+      const prev = midBuckets.get(key);
+      if (prev) {
+        prev.count += 1;
+        prev.r += p.r;
+        prev.g += p.g;
+        prev.b += p.b;
+      } else {
+        midBuckets.set(key, { count: 1, r: p.r, g: p.g, b: p.b });
+      }
     }
   }
 
-  if (!secondaryC && ranked.length > 1) {
-    secondaryC = ranked[1];
-  }
+  if (bestLight) out.push(rgbToHexLocal(bestLight.r, bestLight.g, bestLight.b));
+  if (bestDark) out.push(rgbToHexLocal(bestDark.r, bestDark.g, bestDark.b));
 
-  if (!secondaryC || colorDistance(secondaryC, primaryC) < 28) {
-    const lum = luminance(primaryC.r, primaryC.g, primaryC.b);
-    const factor = lum > 145 ? 0.42 : 1.55;
-    secondaryC = {
-      r: Math.min(255, primaryC.r * factor),
-      g: Math.min(255, primaryC.g * factor),
-      b: Math.min(255, primaryC.b * factor),
-      count: 0,
-      avgSat: primaryC.avgSat,
+  let bestMid = null;
+  let bestMidCount = 0;
+  for (const bucket of midBuckets.values()) {
+    if (bucket.count > bestMidCount) {
+      bestMidCount = bucket.count;
+      bestMid = {
+        r: bucket.r / bucket.count,
+        g: bucket.g / bucket.count,
+        b: bucket.b / bucket.count,
+      };
+    }
+  }
+  if (bestMid) out.push(rgbToHexLocal(bestMid.r, bestMid.g, bestMid.b));
+
+  return out;
+}
+
+/**
+ * Extrai paleta priorizando cores de logo/site (não pelo de mascote).
+ * @param {Buffer} buffer
+ * @returns {Promise<{ primary: string | null, secondary: string | null, accents: string[] }>}
+ */
+export async function extractBrandPaletteFromBuffer(buffer) {
+  if (!buffer?.length) return { primary: null, secondary: null, accents: [] };
+
+  const { brand, neutrals } = await samplePixels(buffer);
+  const pixels = brand.length ? brand : [];
+
+  if (!pixels.length) {
+    const neutralHex = pickKeyNeutrals(neutrals);
+    const ranked = rankBrandHexColors(neutralHex);
+    return {
+      primary: ranked[0] || null,
+      secondary: ranked[1] || null,
+      accents: ranked.slice(2, 6),
     };
   }
 
-  const secondary = rgbToHex(secondaryC.r, secondaryC.g, secondaryC.b);
-  const accents = ranked
-    .slice(0, 4)
-    .map((c) => rgbToHex(c.r, c.g, c.b))
-    .filter((hex, idx, arr) => arr.indexOf(hex) === idx && hex !== primary && hex !== secondary);
+  const clusters = kMeansWeighted(pixels, 8);
+  if (!clusters.length) return { primary: null, secondary: null, accents: [] };
 
-  return { primary, secondary, accents };
+  const ranked = [...clusters].sort((a, b) => clusterRank(b) - clusterRank(a));
+  const hexList = ranked.map((c) => rgbToHexLocal(c.r, c.g, c.b));
+  const neutralHex = pickKeyNeutrals(neutrals);
+  const merged = rankBrandHexColors([...hexList, ...neutralHex]);
+
+  return {
+    primary: merged[0] || null,
+    secondary: merged[1] || null,
+    accents: merged.slice(2, 6),
+  };
 }
+
+export { rgbToHexLocal as rgbToHex };

@@ -99,46 +99,51 @@ export async function upsertIdentidadeMarca(supabase, idEmpresa, idUsuario, dado
  *   midiaMeta?: { nome?: string, descricao?: string, alt_text?: string },
  *   legendaPost?: string,
  *   comImagemPixels?: boolean,
- *   paletteHint?: { primary?: string | null, secondary?: string | null },
+ *   paletteHint?: { primary?: string | null, secondary?: string | null, accents?: string[] },
  * }} input
  */
 function buildAnalisePrompt(input) {
   const comFoto = Boolean(input.comImagemPixels);
   const parts = [
-    "Você é o Tuma, especialista em identidade de marca para pequenos negócios no Brasil.",
-    "Analise o material e preencha o formulário. Responda APENAS um JSON válido, sem markdown.",
+    "Você analisa identidade de marca para pequenos negócios no Brasil.",
+    "Responda APENAS um JSON válido (sem markdown, sem texto fora do JSON).",
   ];
 
-  if (comFoto && input.paletteHint?.primary) {
+  if (comFoto) {
     parts.push(
-      'Chaves obrigatórias (NÃO inclua cor_primaria nem cor_secundaria — as cores já foram detectadas):',
-      '{"sobre_empresa":"string","segmento":"string","tom_voz":"string","estilo_visual":"string","evitar":"string","publico":"string","exemplo_frase_marca":"string"}',
-      `Paleta já detectada na imagem: primária ${input.paletteHint.primary}, secundária ${input.paletteHint.secondary || "—"}.`,
-      "Mencione essas cores em estilo_visual (mood, contraste, sensação).",
+      "Schema:",
+      '{"sobre_empresa":"1-2 frases","segmento":"categoria","tom_voz":"3-6 adjetivos, vírgula","estilo_visual":"1 frase mood/layout, sem cores","evitar":"2-4 itens curtos para o designer","publico":"público-alvo","exemplo_frase_marca":"máx 8 palavras","cores_marca":["#RRGGBB"]}',
+      "cores_marca: obrigatório, 4 a 6 hex — logo, botões, fundos e textos da interface (inclua branco/preto se forem da UI).",
+      "evitar: exemplos do que não colocar nas artes (fotos genéricas, fontes difíceis). Não repita estas instruções.",
+      "estilo_visual: mood e layout (limpo, premium, divertido…) — sem hex, sem nomes de cor (verde, azul…); cores vão só em cores_marca.",
     );
+    const hintHexes = [
+      input.paletteHint?.primary,
+      input.paletteHint?.secondary,
+      ...(Array.isArray(input.paletteHint?.accents) ? input.paletteHint.accents : []),
+    ].filter(Boolean);
+    if (hintHexes.length) {
+      parts.push(
+        "Sugestão automática por pixels (confirme ou corrija em cores_marca com o que você vê):",
+        hintHexes.join(", "),
+      );
+    }
   } else {
     parts.push(
-      "Chaves obrigatórias:",
-      '{"sobre_empresa":"string","segmento":"string","tom_voz":"string","estilo_visual":"string","evitar":"string","publico":"string","cor_primaria":"#RRGGBB ou vazio","cor_secundaria":"#RRGGBB ou vazio","exemplo_frase_marca":"string"}',
+      "Schema:",
+      '{"sobre_empresa":"","segmento":"","tom_voz":"","estilo_visual":"","evitar":"","publico":"","cor_primaria":"#RRGGBB ou vazio","cor_secundaria":"#RRGGBB ou vazio","exemplo_frase_marca":""}',
+      "cor_primaria/cor_secundaria: só se o site ou texto citar cores de forma clara.",
     );
   }
 
   parts.push(
-    "Regras:",
-    "- Português BR; seja específico ao que vê ou lê; não invente CNPJ, endereço ou prêmios.",
-    "- tom_voz: 3 a 6 adjetivos separados por vírgula (ex: acolhedor, direto, premium).",
-    "- estilo_visual: 1 frase sobre mood + layout (limpo, popular, luxo, divertido…).",
-    "- evitar: o que NÃO combina com a marca nas artes.",
-    "- exemplo_frase_marca: frase curta no tom da marca (máx 8 palavras).",
-    "- Não descreva o layout exato do post; extraia identidade reutilizável.",
+    "Regras gerais:",
+    "- Português BR; específico ao material; não invente CNPJ, endereço ou prêmios.",
+    "- tom_voz: adjetivos separados por vírgula.",
+    "- evitar: frases curtas para quem cria artes — nunca copie o texto deste prompt.",
+    "- exemplo_frase_marca: frase curta no tom da marca.",
+    "- Não descreva layout exato de um post; extraia identidade reutilizável.",
   );
-
-  if (comFoto) {
-    parts.push(
-      "Há uma imagem: descreva tom, público e estilo pelo que aparece (produto, tipografia, cenário).",
-      "Se for só preto e branco, foque no estilo sem inventar cores.",
-    );
-  }
   if (input.empresaNome) parts.push(`\nNome fantasia: ${input.empresaNome}`);
   if (input.empresaDescricao) parts.push(`\nCadastro empresa: ${input.empresaDescricao.slice(0, 800)}`);
   if (input.siteUrl) parts.push(`\nSite: ${input.siteUrl}`);
@@ -164,7 +169,14 @@ function buildAnalisePrompt(input) {
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} supabase
  * @param {string} idEmpresa
- * @param {{ site_url?: string, id_midia?: string, legenda_post?: string }} opts
+ * @param {{
+ *   site_url?: string,
+ *   id_midia?: string,
+ *   legenda_post?: string,
+ *   image_base64?: string,
+ *   mime_type?: string,
+ *   nome_arquivo?: string,
+ * }} opts
  * @param {Record<string, unknown> | null} empresaRow
  */
 export async function analisarIdentidadeMarca(supabase, idEmpresa, opts, empresaRow) {
@@ -174,6 +186,9 @@ export async function analisarIdentidadeMarca(supabase, idEmpresa, opts, empresa
 
   let siteText;
   let siteUrl = opts.site_url ? String(opts.site_url).trim() : "";
+  if (!siteUrl && empresaRow?.site_empresa) {
+    siteUrl = String(empresaRow.site_empresa).trim();
+  }
   if (siteUrl) {
     const fetched = await fetchWebsiteText(siteUrl);
     siteText = fetched.text;
@@ -184,8 +199,34 @@ export async function analisarIdentidadeMarca(supabase, idEmpresa, opts, empresa
   let imageDataUrl = null;
   /** @type {{ primary: string | null, secondary: string | null } | null} */
   let paletteFromPixels = null;
+  const imageB64 = opts.image_base64 ? String(opts.image_base64).trim() : "";
   const idMidia = opts.id_midia ? String(opts.id_midia).trim() : "";
-  if (idMidia) {
+
+  if (imageB64) {
+    let imageBuffer;
+    try {
+      imageBuffer = Buffer.from(imageB64, "base64");
+    } catch {
+      throw new Error("image_base64 inválido.");
+    }
+    if (!imageBuffer.length) throw new Error("Imagem vazia.");
+    const mime = String(opts.mime_type || "image/jpeg")
+      .trim()
+      .toLowerCase()
+      .split(";")[0];
+    const safeMime = mime.startsWith("image/") ? mime : "image/jpeg";
+    imageDataUrl = `data:${safeMime};base64,${imageBuffer.toString("base64")}`;
+    midiaMeta = {
+      nome: String(opts.nome_arquivo ?? "").trim() || "Imagem para análise",
+      descricao: "",
+      alt_text: "",
+    };
+    try {
+      paletteFromPixels = await extractBrandPaletteFromBuffer(imageBuffer);
+    } catch (err) {
+      console.warn("identidadeMarca.palette:", err instanceof Error ? err.message : err);
+    }
+  } else if (idMidia) {
     const { data: midia, error } = await supabase
       .from("midia")
       .select(
@@ -216,8 +257,8 @@ export async function analisarIdentidadeMarca(supabase, idEmpresa, opts, empresa
   }
 
   const legendaPost = String(opts.legenda_post ?? "").trim();
-  if (!siteText && !midiaMeta && !legendaPost && !empresaRow?.descricao) {
-    throw new Error("Informe o link do site, uma imagem do acervo ou a legenda de um post.");
+  if (!siteText && !imageDataUrl && !legendaPost && !empresaRow?.descricao) {
+    throw new Error("Informe o site, uma imagem ou a legenda de um post.");
   }
 
   const comImagemPixels = Boolean(imageDataUrl);
@@ -232,15 +273,20 @@ export async function analisarIdentidadeMarca(supabase, idEmpresa, opts, empresa
     paletteHint: paletteFromPixels,
   });
 
-  const textModel = (env.LLAMA_PROPOSAL_MODEL || env.LLAMA_MODEL || "llama3.2:3b").trim();
-  const visionModel = (env.LLAMA_VISION_MODEL || "llava:7b").trim();
+  const textModel = (
+    env.IDENTIDADE_ANALISE_MODEL ||
+    env.LLAMA_PROPOSAL_MODEL ||
+    env.LLAMA_MODEL ||
+    "llama3.2:3b"
+  ).trim();
+  const visionModel = (env.IDENTIDADE_VISION_MODEL || env.LLAMA_VISION_MODEL || "llava:7b").trim();
 
   const { parsed, model: modelUsed } = comImagemPixels
     ? await llamaChatCompletionVisionJson(prompt, [imageDataUrl], {
         model: visionModel,
-        temperature: 0.12,
+        temperature: 0.08,
       })
-    : await llamaChatCompletionJson(prompt, { model: textModel, temperature: 0.2 });
+    : await llamaChatCompletionJson(prompt, { model: textModel, temperature: 0.18 });
 
   const sugestao = refineIdentidadeFromAnalysis(
     typeof parsed === "object" && parsed ? parsed : {},
@@ -250,8 +296,7 @@ export async function analisarIdentidadeMarca(supabase, idEmpresa, opts, empresa
 
   const sugestaoFinal = normalizeIdentidadeDados({
     ...sugestao,
-    site_url: siteUrl || undefined,
-    id_midia_referencia_analise: idMidia || undefined,
+    id_midia_referencia_analise: idMidia && !imageB64 ? idMidia : undefined,
     legenda_referencia: legendaPost || undefined,
   });
 

@@ -12,72 +12,57 @@ const TIPOS = [
   { value: "personalizado", label: "Personalizado" },
 ];
 
-/** Label + texto da dica (painel ao passar o mouse ou focar no ?) */
 const PROMOCAO_FIELD_ROWS = [
-  ["nome", "Nome", "Como chamar essa campanha? Ex.: Black Friday 2026, Semana do Cliente"],
-  ["beneficio", "Benefício", "O que o cliente ganha? Ex.: 30% off, frete grátis, brinde"],
-  ["tipo", "Tipo", "Que tipo de ação é? Ex.: desconto %, leve 3 pague 2, cashback"],
-  ["detalhe", "Detalhe", "Algo importante para a IA saber? Ex.: só no app, só primeira compra"],
-  ["precoOferta", "Preço / oferta", "Valores ou condição? Ex.: de R$ 199 por R$ 149"],
-  ["validade", "Validade", "Até quando vale? Ex.: até 30/11, enquanto durar o estoque"],
-  ["onde", "Onde", "Onde vale a promoção? Ex.: site, loja física, marketplaces"],
-  ["publico", "Público", "Para quem é? Ex.: clientes VIP, novos cadastros, região Sul"],
-  ["cta", "CTA", "Chamada para ação? Ex.: compre agora, use o cupom X, saiba mais no link"],
-  ["restricoes", "Restrições", "Limites ou regras? Ex.: não cumulativo, máx. 2 unidades por CPF"],
+  ["nome", "Nome"],
+  ["beneficio", "Benefício"],
+  ["tipo", "Tipo"],
+  ["detalhe", "Detalhe"],
+  ["precoOferta", "Preço / oferta"],
+  ["validade", "Validade"],
+  ["onde", "Onde"],
+  ["publico", "Público"],
+  ["cta", "CTA"],
+  ["restricoes", "Restrições"],
 ];
 
 const LANCAMENTO_FIELD_ROWS = [
-  ["nome", "Nome", "Como chamar o lançamento? Ex.: linha Verão 2026, campanha de verão"],
-  ["problema", "Problema que resolve", "Qual dor resolve? Ex.: falta de tempo para postar"],
-  ["novidades", "O que há de novo", "Novidades em relação ao anterior? Ex.: checkout em 1 clique"],
-  ["diferencial", "Diferencial", "Por que escolher vocês? Ex.: único com garantia 90 dias"],
-  ["publico", "Público", "Quem é o público-alvo? Ex.: PMEs de beleza, baristas iniciantes"],
-  ["disponibilidade", "Disponibilidade", "Onde ou como compra? Ex.: pré-venda site, lojas parceiras"],
-  ["dataMomento", "Data / momento", "Quando acontece? Ex.: live 15/05 às 19h, pré-venda até domingo"],
-  ["tom", "Tom", "Tom de voz? Ex.: inspirador, técnico, descontraído"],
-  ["cta", "CTA", "O que pedir ao público? Ex.: cadastre-se na lista, reserve sua vaga"],
-  ["restricoes", "Restrições", "Avisos legais ou limites? Ex.: imagens meramente ilustrativas"],
+  ["nome", "Nome"],
+  ["problema", "Problema que resolve"],
+  ["novidades", "O que há de novo"],
+  ["diferencial", "Diferencial"],
+  ["publico", "Público"],
+  ["disponibilidade", "Disponibilidade"],
+  ["dataMomento", "Data / momento"],
+  ["tom", "Tom"],
+  ["cta", "CTA"],
+  ["restricoes", "Restrições"],
 ];
 
 const DATA_COMEMORATIVA_FIELD_ROWS = [
-  ["nome", "Nome / tema", "Título do conteúdo? Ex.: Natal em família, Dia das Mães 2026"],
-  ["ocasiao", "Ocasião", "Qual data ou celebração? Ex.: Páscoa, aniversário da marca"],
-  ["periodo", "Data / período", "Quando veicular? Ex.: 01–15/03, semana do Dia da Mulher"],
-  ["mensagem", "Mensagem central", "Qual mensagem principal? Ex.: gratidão, união, desconto especial"],
-  ["tom", "Tom", "Como falar? Ex.: emotivo, festivo, elegante"],
-  ["publico", "Público", "Para quem fala? Ex.: mães, jovens 18–25, B2B"],
-  ["conexaoMarca", "Conexão com a marca", "Como a marca entra na data? Ex.: mensagem institucional, causas"],
-  ["cta", "CTA", "O que pedir? Ex.: presenteie quem ama, aproveite o kit comemorativo"],
-  ["restricoes", "Restrições", "Cuidados? Ex.: sem menção a concorrentes, evitar termos religiosos"],
+  ["nome", "Nome / tema"],
+  ["ocasiao", "Ocasião"],
+  ["periodo", "Data / período"],
+  ["mensagem", "Mensagem central"],
+  ["tom", "Tom"],
+  ["publico", "Público"],
+  ["conexaoMarca", "Conexão com a marca"],
+  ["cta", "CTA"],
+  ["restricoes", "Restrições"],
 ];
-
-const HINT_FORM_TIPO =
-  "Promoção: regras da campanha (sem item específico). Lançamento: tom e posicionamento da novidade. Data comemorativa: datas sazonais. Personalizado: campos livres. Produto e oferta do dia você define ao pedir o post no chat.";
-const HINT_APOS_TIPO =
-  "Preencha só o que vale para todas as artes desse tipo. O que for específico de um post (produto, preço do dia, frase) você pede na conversa.";
-const HINT_FORM_NOME =
-  "Nome interno no painel (opcional). Ex.: Campanha Instagram março, Black Friday loja centro.";
-const HINT_FORM_DESCRICAO =
-  "Notas para a equipe (opcional). Ex.: foco em stories, não mencionar preço cheio, usar tom descontraído.";
-const HINT_PERSONAL_TITULO =
-  "Título deste bloco de informações livres. Ex.: Tom de voz, Persona do cliente, Restrições legais.";
-const HINT_PERSONAL_CAMPO_NOME =
-  "Nome do dado fixo da campanha. Ex.: Tom, Público-alvo, Restrições. Evite produto ou preço do dia.";
-const HINT_PERSONAL_CAMPO_VALOR =
-  "Conteúdo desse dado. Ex.: @minha_loja, não citar concorrentes, mulheres 25–40 anos na Grande SP.";
 
 /** Inputs/select do formulário (alinhado ao painel: superfície, borda, foco accent). */
 const CTX_CTRL_CLASS =
   "w-full rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] focus:border-accent/55 focus:ring-2 focus:ring-accent/15 dark:focus:ring-accent/25";
 
-/** Label + ajuda: botão discreto e painel de dica no estilo do site (hover ou foco no botão). */
 function LabelWithHint({ id, label, hint }) {
   const hintId = useId();
+  const help = String(hint || "").trim();
   return (
     <div className="mb-1.5 flex flex-wrap items-center gap-2">
       <label htmlFor={id} className="text-sm font-medium text-foreground">
         {label}
       </label>
+      {help ? (
       <div className="group/hint relative inline-flex shrink-0 align-middle">
         <button
           type="button"
@@ -93,9 +78,10 @@ function LabelWithHint({ id, label, hint }) {
           className="pointer-events-none invisible absolute left-0 top-full z-[70] mt-2 w-[min(22rem,calc(100vw-2.5rem))] overflow-hidden rounded-xl border border-border bg-surface text-left opacity-0 shadow-lg ring-1 ring-black/5 transition-[opacity,visibility] duration-200 dark:bg-surface dark:ring-white/10 group-hover/hint:visible group-hover/hint:opacity-100 group-hover/hint:pointer-events-auto group-focus-within/hint:visible group-focus-within/hint:opacity-100 group-focus-within/hint:pointer-events-auto"
         >
           <div className="h-1 bg-gradient-to-r from-accent/70 via-accent to-accent/80" aria-hidden />
-          <p className="px-3.5 py-3 text-sm leading-relaxed text-foreground">{hint}</p>
+          <p className="px-3.5 py-3 text-sm leading-relaxed text-foreground">{help}</p>
         </div>
       </div>
+      ) : null}
     </div>
   );
 }
@@ -522,7 +508,7 @@ export default function ContextosPage() {
         <form className="mt-4 grid grid-cols-1 gap-4" onSubmit={saveContexto}>
           <div className="max-w-md">
             <div>
-              <LabelWithHint id="ctx-form-tipo" label="Tipo de contexto" hint={HINT_FORM_TIPO} />
+              <LabelWithHint id="ctx-form-tipo" label="Tipo de contexto" />
               <select
                 id="ctx-form-tipo"
                 value={form.tipo}
@@ -541,12 +527,8 @@ export default function ContextosPage() {
 
           {form.tipo ? (
             <>
-              <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                {HINT_APOS_TIPO}
-              </p>
-
               <div>
-                <LabelWithHint id="ctx-form-nome" label="Nome (opcional)" hint={HINT_FORM_NOME} />
+                <LabelWithHint id="ctx-form-nome" label="Nome (opcional)" />
                 <input
                   id="ctx-form-nome"
                   value={form.nome}
@@ -556,7 +538,7 @@ export default function ContextosPage() {
               </div>
 
               <div>
-                <LabelWithHint id="ctx-form-descricao" label="Descrição (opcional)" hint={HINT_FORM_DESCRICAO} />
+                <LabelWithHint id="ctx-form-descricao" label="Descrição (opcional)" />
                 <input
                   id="ctx-form-descricao"
                   value={form.descricao}
@@ -569,11 +551,11 @@ export default function ContextosPage() {
 
           {form.tipo === "promocao" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {PROMOCAO_FIELD_ROWS.map(([field, label, hint]) => {
+              {PROMOCAO_FIELD_ROWS.map(([field, label]) => {
                 const fid = `ctx-promo-${field}`;
                 return (
                   <div key={field}>
-                    <LabelWithHint id={fid} label={label} hint={hint} />
+                    <LabelWithHint id={fid} label={label} />
                     <input
                       id={fid}
                       value={form.promocao[field]}
@@ -588,11 +570,11 @@ export default function ContextosPage() {
 
           {form.tipo === "lancamento" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {LANCAMENTO_FIELD_ROWS.map(([field, label, hint]) => {
+              {LANCAMENTO_FIELD_ROWS.map(([field, label]) => {
                 const fid = `ctx-lanc-${field}`;
                 return (
                   <div key={field}>
-                    <LabelWithHint id={fid} label={label} hint={hint} />
+                    <LabelWithHint id={fid} label={label} />
                     <input
                       id={fid}
                       value={form.lancamento[field]}
@@ -607,11 +589,11 @@ export default function ContextosPage() {
 
           {form.tipo === "data_comemorativa" ? (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {DATA_COMEMORATIVA_FIELD_ROWS.map(([field, label, hint]) => {
+              {DATA_COMEMORATIVA_FIELD_ROWS.map(([field, label]) => {
                 const fid = `ctx-data-${field}`;
                 return (
                   <div key={field}>
-                    <LabelWithHint id={fid} label={label} hint={hint} />
+                    <LabelWithHint id={fid} label={label} />
                     <input
                       id={fid}
                       value={form.dataComemorativa[field]}
@@ -627,7 +609,7 @@ export default function ContextosPage() {
           {form.tipo === "personalizado" ? (
             <div className="space-y-3">
               <div>
-                <LabelWithHint id="ctx-personal-titulo" label="Nome deste contexto" hint={HINT_PERSONAL_TITULO} />
+                <LabelWithHint id="ctx-personal-titulo" label="Nome deste contexto" />
                 <input
                   id="ctx-personal-titulo"
                   value={form.personalizado.titulo}
@@ -644,11 +626,7 @@ export default function ContextosPage() {
                 <div key={`campo-${idx}`} className="rounded-xl border border-border bg-surface-elevated/50 p-3 dark:bg-surface-elevated/30">
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div>
-                      <LabelWithHint
-                        id={`ctx-personal-${idx}-nome`}
-                        label="Nome do campo"
-                        hint={HINT_PERSONAL_CAMPO_NOME}
-                      />
+                      <LabelWithHint id={`ctx-personal-${idx}-nome`} label="Nome do campo" />
                       <input
                         id={`ctx-personal-${idx}-nome`}
                         value={campo.nome}
@@ -657,11 +635,7 @@ export default function ContextosPage() {
                       />
                     </div>
                     <div>
-                      <LabelWithHint
-                        id={`ctx-personal-${idx}-valor`}
-                        label="Valor"
-                        hint={HINT_PERSONAL_CAMPO_VALOR}
-                      />
+                      <LabelWithHint id={`ctx-personal-${idx}-valor`} label="Valor" />
                       <input
                         id={`ctx-personal-${idx}-valor`}
                         value={campo.valor}

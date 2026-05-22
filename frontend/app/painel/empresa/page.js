@@ -17,6 +17,7 @@ import {
   formatTelefone,
   normalizeCnpjForApi,
   normalizeInstagramForApi,
+  normalizeSiteEmpresaForApi,
   normalizeTelefoneForApi,
 } from "../../../lib/empresaFormMasks";
 import {
@@ -275,6 +276,7 @@ export default function EmpresaPage() {
       segmento: form.segmento.trim() || null,
       cnpj: cnpjDigits ? formatCnpj(cnpjDigits) : null,
       email_principal: form.email_principal.trim() || null,
+      site_empresa: normalizeSiteEmpresaForApi(form.site_empresa),
     };
 
     const path = postNova ? "/empresas" : `/empresas/${empresaId}`;
@@ -406,6 +408,7 @@ export default function EmpresaPage() {
       instagram_empresa: form.instagram_empresa,
       telefone_principal: form.telefone_principal,
       descricao: form.descricao,
+      site_empresa: form.site_empresa,
     };
   }, [criandoNovaEmpresa, empresasMinhas, empresaId, form]);
 
@@ -555,7 +558,11 @@ export default function EmpresaPage() {
       ) : null}
 
       {hasEmpresa && !criandoNovaEmpresa ? (
-        <IdentidadeMarcaSection empresaId={empresaId} canEdit={canEditEmpresa} />
+        <IdentidadeMarcaSection
+          empresaId={empresaId}
+          canEdit={canEditEmpresa}
+          siteEmpresa={String(form.site_empresa || empresaAtiva?.site_empresa || "").trim()}
+        />
       ) : null}
 
       {hasEmpresa && !criandoNovaEmpresa ? (

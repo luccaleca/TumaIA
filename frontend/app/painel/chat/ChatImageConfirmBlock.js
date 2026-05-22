@@ -14,12 +14,22 @@ export default function ChatImageConfirmBlock({
   onContextoChange,
   onFraseChange,
   disabled,
+  collecting = false,
 }) {
   const proposal = supplement?.post_context_proposal;
   const frase = fraseNaImagem ?? formatFraseNaImagemFromProposal(proposal);
   const links = Array.isArray(supplement?.links) ? supplement.links : [];
   const confirmation =
     typeof supplement?.confirmation_message === "string" ? supplement.confirmation_message.trim() : "";
+
+  if (collecting) {
+    if (!confirmation) return null;
+    return (
+      <div className="mt-3 rounded-xl border border-border bg-surface-elevated/60 px-3 py-2.5 text-sm leading-relaxed">
+        <p className="whitespace-pre-wrap text-foreground">{confirmation}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-3 space-y-3 rounded-xl border border-accent/35 bg-accent-muted/20 px-3 py-2.5 text-sm leading-relaxed">

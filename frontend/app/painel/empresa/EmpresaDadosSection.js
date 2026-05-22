@@ -16,6 +16,7 @@ function valorDetalhe(key, value) {
 const DETALHE_CAMPOS = [
   ["Razão social", "razao_social"],
   ["CNPJ", "cnpj"],
+  ["Site", "site_empresa"],
   ["Instagram", "instagram_empresa"],
   ["Telefone", "telefone_principal"],
   ["Descrição", "descricao"],

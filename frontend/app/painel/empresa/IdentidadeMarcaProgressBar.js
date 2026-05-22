@@ -10,8 +10,6 @@ export default function IdentidadeMarcaProgressBar({
   compact = false,
 }) {
   const pct = Math.min(100, Math.max(0, Number(percentual) || 0));
-  const defaultHint = "A barra sobe conforme o Tuma entende cores, estilo e tom da marca.";
-
   return (
     <div
       className={
@@ -25,9 +23,11 @@ export default function IdentidadeMarcaProgressBar({
           <p className={`font-medium text-foreground ${compact ? "text-xs" : "text-sm"}`}>
             Progresso da identidade
           </p>
-          <p className={`mt-0.5 text-muted-foreground ${compact ? "text-[11px] leading-snug" : "text-xs"}`}>
-            {batchLabel || defaultHint}
-          </p>
+          {batchLabel ? (
+            <p className={`mt-0.5 text-muted-foreground ${compact ? "text-[11px] leading-snug" : "text-xs"}`}>
+              {batchLabel}
+            </p>
+          ) : null}
         </div>
         <p className={`font-semibold tabular-nums text-foreground ${compact ? "text-lg" : "text-2xl"}`}>
           {pct}%

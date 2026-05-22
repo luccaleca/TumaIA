@@ -6,7 +6,10 @@ import {
   podeGerenciarMidias,
   updateEmpresaBody,
 } from "../../modules/empresas/shared.js";
-import { criarEmpresaParaUsuario } from "../../modules/empresas/empresaCriacao.js";
+import {
+  criarEmpresaParaUsuario,
+  montarRowPatchEmpresa,
+} from "../../modules/empresas/empresaCriacao.js";
 import {
   aplicarFotoPerfilEmpresa,
   removerFotoPerfilEmpresa,
@@ -221,16 +224,7 @@ export function registerEmpresaCoreRoutes(r) {
         return;
       }
 
-      const b = parsed.data;
-      const row = {};
-      if (b.nome_fantasia !== undefined) row.nome_fantasia = b.nome_fantasia;
-      if (b.razao_social !== undefined) row.razao_social = b.razao_social ?? null;
-      if (b.descricao !== undefined) row.descricao = b.descricao ?? null;
-      if (b.instagram_empresa !== undefined) row.instagram_empresa = b.instagram_empresa ?? null;
-      if (b.telefone_principal !== undefined) row.telefone_principal = b.telefone_principal ?? null;
-      if (b.segmento !== undefined) row.segmento = b.segmento ?? null;
-      if (b.cnpj !== undefined) row.cnpj = b.cnpj ?? null;
-      if (b.email_principal !== undefined) row.email_principal = b.email_principal ?? null;
+      const row = montarRowPatchEmpresa(parsed.data);
 
       const { data: updated, error: eUp } = await supabase
         .from("empresa")

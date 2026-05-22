@@ -1,7 +1,8 @@
-export const CHAT_PEDIDO_RESUMO_MSG =
-  "Confira o resumo do seu pedido abaixo. Quando estiver certo, gere a prévia da imagem.";
+export const CHAT_PEDIDO_RESUMO_MSG = "";
 
-export const CHAT_PEDIDO_AGUARDE_MSG = "Um momento, estamos preparando o resumo do seu pedido…";
+export const CHAT_PEDIDO_AGUARDE_MSG = "Preparando resumo…";
+
+export const CHAT_PEDIDO_COLETANDO_INTRO = "";
 
 export function formatFraseNaImagemFromProposal(proposal) {
   if (!proposal || typeof proposal !== "object") return null;

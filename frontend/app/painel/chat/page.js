@@ -11,6 +11,7 @@ import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "..
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
 import {
   CHAT_PEDIDO_AGUARDE_MSG,
+  CHAT_PEDIDO_COLETANDO_INTRO,
   CHAT_PEDIDO_RESUMO_MSG,
   formatFraseNaImagemFromProposal,
   patchMessageContextoSelection,
@@ -233,7 +234,17 @@ function fromApiMensagem(m) {
         post_supplementRaw.post_context_proposal && typeof post_supplementRaw.post_context_proposal === "object"
           ? post_supplementRaw.post_context_proposal
           : {};
-      post_supplement = { confirmation_message: cm, links, post_context_proposal };
+      post_supplement = {
+        confirmation_message: cm,
+        links,
+        post_context_proposal,
+        ...(post_supplementRaw.briefing_status === "collecting" || post_supplementRaw.briefing_status === "ready"
+          ? { briefing_status: post_supplementRaw.briefing_status }
+          : {}),
+        ...(Array.isArray(post_supplementRaw.missing_slots)
+          ? { missing_slots: post_supplementRaw.missing_slots }
+          : {}),
+      };
     }
   }
   const post_context_proposal =
@@ -576,6 +587,9 @@ export default function PainelChatPage() {
             : {};
         const confirmFromApi =
           typeof rawSup?.confirmation_message === "string" ? rawSup.confirmation_message.trim() : "";
+        const briefingStatus =
+          rawSup?.briefing_status === "collecting" ? "collecting" : "ready";
+        const collecting = briefingStatus === "collecting";
         const post_supplement =
           rawSup && (confirmFromApi.length >= 8 || Object.keys(proposalFromApi).length > 0)
             ? {
@@ -584,6 +598,8 @@ export default function PainelChatPage() {
                   ? rawSup.links.map(normalizeSupplementLink).filter(Boolean)
                   : [],
                 post_context_proposal: proposalFromApi,
+                briefing_status: briefingStatus,
+                missing_slots: Array.isArray(rawSup.missing_slots) ? rawSup.missing_slots : [],
               }
             : undefined;
         const rawUi = rawSup?.ui_actions;
@@ -598,7 +614,7 @@ export default function PainelChatPage() {
                 a.label.trim(),
             )
           : [];
-        if (!ui_actions.length && post_supplement) {
+        if (!collecting && !ui_actions.length && post_supplement) {
           ui_actions = [{ id: "confirm_generate_image", label: "Gerar prévia da imagem" }];
         }
         const proposalObj =
@@ -627,9 +643,9 @@ export default function PainelChatPage() {
             m.id === assistantMessageId
               ? {
                   ...m,
-                  content: CHAT_PEDIDO_RESUMO_MSG,
+                  content: collecting ? CHAT_PEDIDO_COLETANDO_INTRO : CHAT_PEDIDO_RESUMO_MSG,
                   post_supplement,
-                  ui_actions: ui_actions.length ? ui_actions : undefined,
+                  ui_actions: collecting ? undefined : ui_actions.length ? ui_actions : undefined,
                   ...(selectedId && UUID_RE.test(selectedId) ? { selected_contexto_id: selectedId } : {}),
                 }
               : m,
@@ -1308,9 +1324,9 @@ export default function PainelChatPage() {
                     <div className="min-w-0 max-w-[85%] rounded-2xl border border-border bg-background px-4 py-3 text-foreground shadow-sm md:max-w-[70%]">
                       {!hasSupplement ? (
                         <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{message.content}</p>
-                      ) : (
+                      ) : String(message.content || "").trim() ? (
                         <p className="mb-2 text-sm text-muted-foreground">{message.content}</p>
-                      )}
+                      ) : null}
                       {postContextLoadingId === message.id ? (
                         <div className="mt-3 rounded-xl border border-dashed border-accent/40 bg-accent-muted/15 px-3 py-2.5 text-sm text-muted-foreground">
                           Preparando o resumo…
@@ -1319,6 +1335,7 @@ export default function PainelChatPage() {
                       {hasSupplement ? (
                         <ChatImageConfirmBlock
                           supplement={message.post_supplement}
+                          collecting={message.post_supplement?.briefing_status === "collecting"}
                           contextosCampanha={contextosCampanha}
                           selectedContextoId={
                             message.selected_contexto_id ||

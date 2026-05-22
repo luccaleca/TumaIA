@@ -10,6 +10,7 @@ import {
 import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
 import { deriveFraseNaImagemFromHistory, normalizeFraseNaImagem } from "./imageHeadline.js";
 import { pickBestProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
+import { applyBriefingGate } from "./postBriefingSlots.js";
 
 const linkItemSchema = z.object({
   kind: z.enum(["contexto", "midia"]),
@@ -472,13 +473,25 @@ ${formatHistoryForPrompt(history)}
       .slice(0, 3);
   }
 
-  return {
+  const base = {
     confirmation_message: safe.data.confirmation_message.trim(),
     links,
     post_context_proposal,
+  };
+
+  const gated = applyBriefingGate(history, base);
+
+  return {
+    confirmation_message: gated.confirmation_message,
+    links: gated.links,
+    post_context_proposal: gated.post_context_proposal,
+    briefing_status: gated.briefing_status,
+    missing_slots: gated.missing_slots,
     _meta: {
       contextos_carregados: contextoRows.length,
       midias_carregadas: midiaRows.length,
+      briefing_status: gated.briefing_status,
+      missing_slots: gated.missing_slots,
       ...(fallbackMeta ? { fallback: fallbackMeta } : {}),
     },
   };

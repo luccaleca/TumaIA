@@ -1,3 +1,11 @@
+import { assignRankedPalette } from "../../lib/brandColorScore.js";
+import {
+  extractCoresMarcaFromLlm,
+  mergeBrandPaletteSources,
+  sanitizeEstiloVisualText,
+  sanitizeIdentidadeLlmOutput,
+} from "./identidadeAnaliseLlm.js";
+
 /** Nome fixo do contexto de identidade (um por empresa). */
 export const IDENTIDADE_CONTEXTO_NOME = "Identidade da marca";
 export const IDENTIDADE_TIPO = "identidade_marca";
@@ -21,6 +29,40 @@ export function normalizeHexColor(v) {
     s = `#${r}${r}${g}${g}${b}${b}`;
   }
   return s.toUpperCase();
+}
+
+export const CORES_ADICIONAIS_MAX = 4;
+
+/**
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+export function normalizeCoresAdicionais(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (const item of list) {
+    const hex = normalizeHexColor(item);
+    if (!hex || out.includes(hex)) continue;
+    out.push(hex);
+    if (out.length >= CORES_ADICIONAIS_MAX) break;
+  }
+  return out;
+}
+
+/**
+ * @param {Record<string, unknown>} dados
+ * @returns {string[]}
+ */
+export function allBrandColorsFromIdentidade(dados) {
+  const d = normalizeIdentidadeDados(dados || {});
+  const seen = new Set();
+  const out = [];
+  for (const hex of [d.cor_primaria, d.cor_secundaria, ...d.cores_adicionais]) {
+    if (!hex || seen.has(hex)) continue;
+    seen.add(hex);
+    out.push(hex);
+  }
+  return out;
 }
 
 /**
@@ -55,11 +97,12 @@ export function normalizeIdentidadeDados(raw) {
     sobre_empresa: String(src.sobre_empresa ?? "").trim().slice(0, 2000),
     segmento: String(src.segmento ?? src.segmento_inferido ?? "").trim().slice(0, 200),
     tom_voz: tom_voz.slice(0, 500),
-    estilo_visual: String(src.estilo_visual ?? "").trim().slice(0, 800),
+    estilo_visual: sanitizeEstiloVisualText(String(src.estilo_visual ?? "")).slice(0, 800),
     evitar: String(src.evitar ?? "").trim().slice(0, 800),
     publico: String(src.publico ?? "").trim().slice(0, 500),
     cor_primaria: normalizeHexColor(src.cor_primaria) || "",
     cor_secundaria: normalizeHexColor(src.cor_secundaria) || "",
+    cores_adicionais: normalizeCoresAdicionais(src.cores_adicionais),
     exemplo_frase_marca: String(src.exemplo_frase_marca ?? src.exemplo_frase ?? "").trim().slice(0, 120),
     site_url: String(src.site_url ?? "").trim().slice(0, 500),
     id_midia_referencia_analise: String(src.id_midia_referencia_analise ?? "").trim() || null,
@@ -75,10 +118,23 @@ export function normalizeIdentidadeDados(raw) {
  * @param {{ nome_fantasia?: string, segmento?: string } | null} [empresaRow]
  */
 export function refineIdentidadeFromAnalysis(raw, palette, empresaRow = null) {
-  const base = normalizeIdentidadeDados(raw && typeof raw === "object" ? raw : {});
+  const cleaned = sanitizeIdentidadeLlmOutput(raw && typeof raw === "object" ? raw : {});
+  const base = normalizeIdentidadeDados(cleaned);
 
-  if (palette?.primary) base.cor_primaria = palette.primary;
-  if (palette?.secondary) base.cor_secundaria = palette.secondary;
+  const fromPixels = [
+    palette?.primary,
+    palette?.secondary,
+    ...(Array.isArray(palette?.accents) ? palette.accents : []),
+  ].filter(Boolean);
+  const fromVision = extractCoresMarcaFromLlm(cleaned);
+  const fromLlm = [base.cor_primaria, base.cor_secundaria, ...base.cores_adicionais].filter(Boolean);
+  const ranked = mergeBrandPaletteSources(
+    { vision: fromVision, pixels: fromPixels, legacy: fromLlm },
+    2 + CORES_ADICIONAIS_MAX,
+  );
+  base.cor_primaria = ranked.cor_primaria;
+  base.cor_secundaria = ranked.cor_secundaria;
+  base.cores_adicionais = ranked.cores_adicionais;
 
   if (base.tom_voz) {
     base.tom_voz = base.tom_voz
@@ -97,24 +153,36 @@ export function refineIdentidadeFromAnalysis(raw, palette, empresaRow = null) {
     base.segmento = String(empresaRow.segmento).trim().slice(0, 200);
   }
 
-  const cores = [base.cor_primaria, base.cor_secundaria].filter(Boolean);
-  if (cores.length && base.estilo_visual) {
-    const hasHex = /#[0-9A-Fa-f]{3,6}/.test(base.estilo_visual);
-    if (!hasHex) {
-      base.estilo_visual = `${base.estilo_visual.trim()} Paleta: ${cores.join(", ")}.`.slice(0, 800);
-    }
-  } else if (cores.length && !base.estilo_visual) {
-    base.estilo_visual = `Paleta de marca ${cores.join(" e ")}; visual alinhado ao material enviado.`.slice(
-      0,
-      800,
-    );
+  if (base.estilo_visual) {
+    base.estilo_visual = sanitizeEstiloVisualText(base.estilo_visual).slice(0, 800);
+  } else if (allBrandColorsFromIdentidade(base).length) {
+    base.estilo_visual = "Visual alinhado ao material enviado (logo e interface).".slice(0, 800);
   }
 
   if (!base.evitar) {
-    base.evitar = "Copiar layout de posts antigos; fontes ilegíveis; poluição visual.";
+    base.evitar = "Layout de posts antigos copiado; fontes ilegíveis; poluição visual.";
   }
 
   return base;
+}
+
+/**
+ * Une paletas de várias análises (fotos) priorizando verde/azul/neutros sobre marrom de mascote.
+ * @param {Record<string, unknown>} current
+ * @param {Record<string, unknown>} incoming
+ */
+export function mergeIdentidadePaletteFields(current, incoming) {
+  const cur = normalizeIdentidadeDados(current || {});
+  const inc = normalizeIdentidadeDados(incoming || {});
+  const hexes = [
+    cur.cor_primaria,
+    cur.cor_secundaria,
+    ...cur.cores_adicionais,
+    inc.cor_primaria,
+    inc.cor_secundaria,
+    ...inc.cores_adicionais,
+  ];
+  return assignRankedPalette(hexes, 2 + CORES_ADICIONAIS_MAX);
 }
 
 /**
@@ -161,9 +229,9 @@ export function identidadeFromContextoRow(row) {
 export function formatBrandIdentityBlockForFlux(dados, maxLen = 420) {
   const d = normalizeIdentidadeDados(dados || {});
   const parts = [];
-  const cores = [d.cor_primaria, d.cor_secundaria].filter(Boolean);
+  const cores = allBrandColorsFromIdentidade(d);
   if (cores.length) {
-    parts.push(`Brand colors (use for background and accents): ${cores.join(", ")}.`);
+    parts.push(`Brand color palette (background, accents, typography): ${cores.join(", ")}.`);
   }
   if (d.estilo_visual) parts.push(`Visual style: ${d.estilo_visual}.`);
   if (d.tom_voz) parts.push(`Tone/mood: ${d.tom_voz}.`);

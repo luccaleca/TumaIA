@@ -1,5 +1,7 @@
 "use client";
 
+import IdentidadeMarcaCoresExtras from "./IdentidadeMarcaCoresExtras";
+
 const INPUT_CLASS =
   "w-full rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] focus:border-accent/55 focus:ring-2 focus:ring-accent/15 dark:focus:ring-accent/25 disabled:opacity-60";
 
@@ -7,7 +9,7 @@ const INPUT_CLASS =
 const CAMPOS = [
   ["cor_primaria", "Cor primária", "color"],
   ["cor_secundaria", "Cor secundária", "color"],
-  ["estilo_visual", "Estilo visual", false],
+  ["estilo_visual", "Estilo visual (sem nomes de cor)", false],
   ["tom_voz", "Tom de voz", false],
   ["sobre_empresa", "Sobre a empresa", true],
   ["segmento", "Segmento", false],
@@ -67,23 +69,16 @@ export default function IdentidadeMarcaResultado({ dados, canEdit, onFieldChange
     return (
       <div className="rounded-xl border border-dashed border-border bg-surface-elevated/30 px-4 py-8 text-center">
         <p className="text-sm font-medium text-foreground">Resultado da análise</p>
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-          Depois de analisar suas fotos, o Tuma mostra aqui cores, estilo e tom sugeridos. Você pode revisar e
-          alterar tudo antes de salvar.
-        </p>
       </div>
     );
   }
 
   return (
     <div className="rounded-xl border border-border bg-surface-elevated/50 p-4 sm:p-5">
-      <div className="mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Resultado da análise</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Sugestões do Tuma com base nas fotos. Ajuste qualquer campo — o que você mudar não será substituído na
-          próxima análise.
-        </p>
-      </div>
+      <h3 className="text-sm font-semibold text-foreground">Resultado da análise</h3>
+      <p className="mb-4 mt-1 text-xs text-muted-foreground">
+        Revise o que o Tuma extraiu — você pode editar antes de salvar.
+      </p>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {CAMPOS.filter(([, , t]) => t === "color").map(([key, label]) => (
@@ -96,6 +91,14 @@ export default function IdentidadeMarcaResultado({ dados, canEdit, onFieldChange
             onChange={(v) => onFieldChange(key, v)}
           />
         ))}
+      </div>
+
+      <div className="mt-3">
+        <IdentidadeMarcaCoresExtras
+          cores={dados.cores_adicionais}
+          canEdit={canEdit}
+          onChange={(cores) => onFieldChange("cores_adicionais", cores)}
+        />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3">

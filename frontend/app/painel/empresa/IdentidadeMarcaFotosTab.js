@@ -6,12 +6,11 @@ import {
   IDENTIDADE_ANALISE_TIMEOUT_MS,
   MAX_FOTOS_IDENTIDADE,
   calcCompletudeLocal,
-  fetchPastaUploadRaiz,
   mergeIdentidadeSugestao,
   temConteudoIdentidade,
-  uploadImagemMidia,
+  toBase64WithoutPrefix,
 } from "../../../lib/identidadeMarcaUi";
-import IdentidadeMarcaComoFunciona from "./IdentidadeMarcaComoFunciona";
+import IdentidadeMarcaAnaliseProgress from "./IdentidadeMarcaAnaliseProgress";
 import IdentidadeMarcaProgressBar from "./IdentidadeMarcaProgressBar";
 import IdentidadeMarcaResultado from "./IdentidadeMarcaResultado";
 
@@ -28,7 +27,6 @@ const BTN_PRIMARIO =
  * @typedef {'pending' | 'uploading' | 'analyzing' | 'done' | 'error'} FotoStatus
  * @typedef {{
  *   clientId: string,
- *   id_midia?: string,
  *   nome: string,
  *   previewUrl?: string | null,
  *   status: FotoStatus,
@@ -63,23 +61,21 @@ function isImageFile(file) {
  *   lockedFields: Set<string>,
  *   completude: { percentual?: number, pronto_para_imagem?: boolean } | null,
  *   setCompletude: (c: ReturnType<typeof calcCompletudeLocal>) => void,
- *   midias: Array<Record<string, unknown>>,
- *   onReloadMidias: () => Promise<void>,
  *   onMsg: (text: string, kind: 'ok' | 'err') => void,
  *   temConteudoInicial?: boolean,
+ *   siteEmpresa?: string,
  * }} props
  */
 export default function IdentidadeMarcaFotosTab({
   empresaId,
   canEdit,
+  siteEmpresa = "",
   dados,
   setDados,
   onFieldChange,
   lockedFields,
   completude,
   setCompletude,
-  midias,
-  onReloadMidias,
   onMsg,
   temConteudoInicial = false,
 }) {
@@ -87,20 +83,18 @@ export default function IdentidadeMarcaFotosTab({
   const pendingFilesRef = useRef(/** @type {Map<string, File>} */ (new Map()));
   const [fila, setFila] = useState(/** @type {FotoFilaItem[]} */ ([]));
   const [batchRunning, setBatchRunning] = useState(false);
-  const [batchLabel, setBatchLabel] = useState(/** @type {string | null} */ (null));
-  const [showAcervo, setShowAcervo] = useState(false);
+  const [analiseProgress, setAnaliseProgress] = useState(
+    /** @type {{ fotoTotal: number, fotoConcluidas: number, fotoAtual: number, fase: 'foto' | 'upload' | 'site', incluiSite: boolean } | null} */ (
+      null,
+    ),
+  );
+  const [analiseFinishing, setAnaliseFinishing] = useState(false);
   const [zoneHover, setZoneHover] = useState(false);
-  const [pastaRaiz, setPastaRaiz] = useState(/** @type {string | null} */ (null));
   const [temResultado, setTemResultado] = useState(temConteudoInicial);
 
   useEffect(() => {
     if (temConteudoIdentidade(dados)) setTemResultado(true);
   }, [dados]);
-
-  useEffect(() => {
-    if (!empresaId) return;
-    void fetchPastaUploadRaiz(empresaId).then(setPastaRaiz);
-  }, [empresaId]);
 
   useEffect(() => {
     return () => {
@@ -122,29 +116,6 @@ export default function IdentidadeMarcaFotosTab({
     setFila((prev) => prev.map((f) => (f.clientId === clientId ? { ...f, ...patch } : f)));
   }, []);
 
-  const addAcervo = useCallback(
-    (midia) => {
-      const id = String(midia.id_midia || "");
-      if (!id) return;
-      if (fila.length >= MAX_FOTOS_IDENTIDADE) {
-        onMsg(`Máximo de ${MAX_FOTOS_IDENTIDADE} fotos por vez.`, "err");
-        return;
-      }
-      if (fila.some((f) => f.id_midia === id)) return;
-      setFila((prev) => [
-        ...prev,
-        {
-          clientId: newClientId(),
-          id_midia: id,
-          nome: String(midia.nome_exibicao || midia.nome_arquivo || "Imagem"),
-          previewUrl: typeof midia.url_arquivo === "string" ? midia.url_arquivo : null,
-          status: "pending",
-        },
-      ]);
-    },
-    [fila, onMsg],
-  );
-
   const addFiles = useCallback(
     (files) => {
       const list = Array.from(files || []).filter(isImageFile);
@@ -152,27 +123,29 @@ export default function IdentidadeMarcaFotosTab({
         onMsg("Envie apenas imagens (JPEG, PNG, WebP…).", "err");
         return;
       }
-      setFila((prev) => {
-        const room = MAX_FOTOS_IDENTIDADE - prev.length;
-        const slice = list.slice(0, Math.max(0, room));
-        if (slice.length < list.length) {
-          onMsg(`Só ${MAX_FOTOS_IDENTIDADE} fotos por vez — algumas foram ignoradas.`, "err");
-        }
-        const added = slice.map((file) => {
-          const clientId = newClientId();
-          pendingFilesRef.current.set(clientId, file);
-          return {
+      const room = Math.max(0, MAX_FOTOS_IDENTIDADE - fila.length);
+      const slice = list.slice(0, room);
+      if (slice.length < list.length) {
+        onMsg(`Máximo de ${MAX_FOTOS_IDENTIDADE} fotos por análise — algumas foram ignoradas.`, "err");
+      }
+      if (!slice.length) return;
+
+      for (const file of slice) {
+        const clientId = newClientId();
+        pendingFilesRef.current.set(clientId, file);
+        setFila((prev) => [
+          ...prev,
+          {
             clientId,
             nome: file.name,
             previewUrl: URL.createObjectURL(file),
-            status: /** @type {FotoStatus} */ ("pending"),
+            status: "pending",
             revokeOnUnmount: true,
-          };
-        });
-        return [...prev, ...added];
-      });
+          },
+        ]);
+      }
     },
-    [onMsg],
+    [fila.length, onMsg],
   );
 
   function removeFromFila(clientId) {
@@ -186,11 +159,24 @@ export default function IdentidadeMarcaFotosTab({
     });
   }
 
-  async function analyzeOneMidia(idMidia, clientId) {
-    updateFilaItem(clientId, { status: "analyzing", error: undefined });
+  async function analyzeOneItem(item) {
+    updateFilaItem(item.clientId, { status: "analyzing", error: undefined });
+
+    const file = pendingFilesRef.current.get(item.clientId);
+    if (!file) {
+      updateFilaItem(item.clientId, { status: "error", error: "Arquivo ausente." });
+      return { error: "Arquivo ausente." };
+    }
+    /** @type {Record<string, string>} */
+    const body = {
+      image_base64: await toBase64WithoutPrefix(file),
+      mime_type: file.type || "image/jpeg",
+      nome_arquivo: file.name,
+    };
+
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/identidade/analisar`, {
       method: "POST",
-      body: JSON.stringify({ id_midia: idMidia }),
+      body: JSON.stringify(body),
       timeoutMs: IDENTIDADE_ANALISE_TIMEOUT_MS,
       timeoutLabel: "identidade",
     });
@@ -199,12 +185,12 @@ export default function IdentidadeMarcaFotosTab({
         result.networkError?.message ||
         formatAuthError(result.json) ||
         (result.status ? `Erro ${result.status}` : "A análise não concluiu.");
-      updateFilaItem(clientId, { status: "error", error: err });
+      updateFilaItem(item.clientId, { status: "error", error: err });
       return { error: err };
     }
     if (!result.json?.sugestao) {
       const err = "O Tuma não retornou sugestões para esta foto.";
-      updateFilaItem(clientId, { status: "error", error: err });
+      updateFilaItem(item.clientId, { status: "error", error: err });
       return { error: err };
     }
     return { data: result.json };
@@ -219,35 +205,37 @@ export default function IdentidadeMarcaFotosTab({
     }
 
     setBatchRunning(true);
+    setAnaliseFinishing(false);
     onMsg("O Tuma está analisando suas fotos — isso pode levar alguns minutos.", "ok");
 
     let merged = { ...dados };
+    const siteUrl = String(siteEmpresa || "").trim();
+    const incluiSite = Boolean(siteUrl);
     let okCount = 0;
     let firstError = null;
 
+    setAnaliseProgress({
+      fotoTotal: toRun.length,
+      fotoConcluidas: 0,
+      fotoAtual: 1,
+      fase: "foto",
+      incluiSite,
+    });
+
     for (let i = 0; i < toRun.length; i++) {
       const item = toRun[i];
-      setBatchLabel(`Tuma analisando foto ${i + 1} de ${toRun.length}…`);
+      const fotoNum = i + 1;
 
-      let idMidia = item.id_midia;
+      setAnaliseProgress({
+        fotoTotal: toRun.length,
+        fotoConcluidas: i,
+        fotoAtual: fotoNum,
+        fase: "foto",
+        incluiSite,
+      });
+
       try {
-        if (!idMidia) {
-          const file = pendingFilesRef.current.get(item.clientId);
-          if (!file) {
-            updateFilaItem(item.clientId, { status: "error", error: "Arquivo ausente." });
-            continue;
-          }
-          updateFilaItem(item.clientId, { status: "uploading", error: undefined });
-          const created = await uploadImagemMidia(empresaId, file, pastaRaiz);
-          idMidia = String(created.id_midia);
-          updateFilaItem(item.clientId, {
-            id_midia: idMidia,
-            previewUrl: created.url_arquivo || item.previewUrl,
-            status: "pending",
-          });
-        }
-
-        const out = await analyzeOneMidia(idMidia, item.clientId);
+        const out = await analyzeOneItem(item);
         if (out?.error) {
           if (!firstError) firstError = out.error;
           continue;
@@ -255,12 +243,18 @@ export default function IdentidadeMarcaFotosTab({
 
         const payload = out?.data;
         merged = mergeIdentidadeSugestao(merged, payload.sugestao, lockedFields);
-        if (idMidia) merged.id_midia_referencia_analise = idMidia;
         const comp = calcCompletudeLocal(merged);
         setDados(() => merged);
         setCompletude(payload.completude || comp);
         updateFilaItem(item.clientId, { status: "done", error: undefined });
         okCount++;
+        setAnaliseProgress({
+          fotoTotal: toRun.length,
+          fotoConcluidas: fotoNum,
+          fotoAtual: fotoNum,
+          fase: "foto",
+          incluiSite,
+        });
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : "Erro ao processar foto.";
         if (!firstError) firstError = errMsg;
@@ -268,14 +262,17 @@ export default function IdentidadeMarcaFotosTab({
       }
     }
 
-    await onReloadMidias();
-
-    const siteUrl = merged.site_url?.trim();
     if (siteUrl && okCount > 0) {
-      setBatchLabel("Tuma lendo o site…");
+      setAnaliseProgress({
+        fotoTotal: toRun.length,
+        fotoConcluidas: toRun.length,
+        fotoAtual: toRun.length,
+        fase: "site",
+        incluiSite: true,
+      });
       const siteRes = await authApiFetchWithToken(`/empresas/${empresaId}/identidade/analisar`, {
         method: "POST",
-        body: JSON.stringify({ site_url: siteUrl }),
+        body: JSON.stringify({}),
         timeoutMs: IDENTIDADE_ANALISE_TIMEOUT_MS,
         timeoutLabel: "identidade",
       });
@@ -291,8 +288,8 @@ export default function IdentidadeMarcaFotosTab({
       setTemResultado(true);
       onMsg(
         finalComp.pronto_para_imagem
-          ? "Análise concluída. Revise o resultado abaixo e salve."
-          : `${okCount} foto(s) analisada(s). Veja o resultado — envie mais fotos ou ajuste os campos.`,
+          ? "Análise concluída — revise abaixo e salve a identidade."
+          : `${okCount} foto(s) analisada(s). Revise os campos abaixo ou envie mais fotos.`,
         "ok",
       );
     } else {
@@ -304,20 +301,45 @@ export default function IdentidadeMarcaFotosTab({
       );
     }
 
-    setBatchLabel(null);
+    if (okCount > 0) {
+      setAnaliseFinishing(true);
+      await new Promise((r) => setTimeout(r, 700));
+    }
+    setAnaliseProgress(null);
+    setAnaliseFinishing(false);
     setBatchRunning(false);
+
+    if (okCount > 0) {
+      setFila([]);
+      pendingFilesRef.current.clear();
+    }
   }
 
   return (
     <div className="space-y-5">
-      <IdentidadeMarcaComoFunciona />
-
-      <IdentidadeMarcaProgressBar
-        percentual={pct}
-        prontoParaImagem={pronto}
-        dados={dados}
-        batchLabel={batchLabel}
+      <IdentidadeMarcaAnaliseProgress
+        ativo={batchRunning || analiseFinishing}
+        progress={analiseProgress}
+        finishing={analiseFinishing}
       />
+
+      {!batchRunning ? (
+        <IdentidadeMarcaProgressBar
+          percentual={pct}
+          prontoParaImagem={pronto}
+          dados={dados}
+          batchLabel={null}
+        />
+      ) : null}
+
+      {temResultado && !batchRunning ? (
+        <IdentidadeMarcaResultado
+          dados={dados}
+          canEdit={canEdit}
+          onFieldChange={onFieldChange}
+          visible
+        />
+      ) : null}
 
       {canEdit ? (
         <div
@@ -333,12 +355,12 @@ export default function IdentidadeMarcaFotosTab({
           onDrop={(e) => {
             e.preventDefault();
             setZoneHover(false);
-            addFiles(e.dataTransfer?.files);
+            void addFiles(e.dataTransfer?.files);
           }}
         >
           <p className="text-sm font-medium text-foreground">Suas fotos</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Arraste ou escolha imagens — até {MAX_FOTOS_IDENTIDADE} por análise
+            Só para extrair cores e estilo — não fica salvo. Use Mídias se quiser guardar arquivos.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
@@ -349,14 +371,6 @@ export default function IdentidadeMarcaFotosTab({
             >
               Escolher arquivos
             </button>
-            <button
-              type="button"
-              className={BTN_SECUNDARIO}
-              disabled={batchRunning}
-              onClick={() => setShowAcervo((v) => !v)}
-            >
-              {showAcervo ? "Ocultar acervo" : "Escolher do acervo"}
-            </button>
           </div>
           <input
             ref={fileRef}
@@ -365,51 +379,10 @@ export default function IdentidadeMarcaFotosTab({
             multiple
             className="sr-only"
             onChange={(e) => {
-              addFiles(e.target.files);
+              void addFiles(e.target.files);
               e.target.value = "";
             }}
           />
-        </div>
-      ) : null}
-
-      {showAcervo && midias.length > 0 ? (
-        <div>
-          <p className="mb-2 text-xs text-muted-foreground">Toque para incluir na fila de análise</p>
-          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-            {midias.slice(0, 24).map((m) => {
-              const id = String(m.id_midia);
-              const selected = fila.some((f) => f.id_midia === id);
-              const thumb = typeof m.url_arquivo === "string" ? m.url_arquivo : null;
-              return (
-                <li key={id}>
-                  <button
-                    type="button"
-                    disabled={!canEdit || batchRunning || selected}
-                    onClick={() => addAcervo(m)}
-                    className={`relative aspect-square w-full overflow-hidden rounded-lg border transition ${
-                      selected
-                        ? "border-accent ring-2 ring-accent/30"
-                        : "border-border hover:border-accent/40"
-                    } disabled:opacity-50`}
-                  >
-                    {thumb ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={thumb} alt="" className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="flex h-full items-center justify-center bg-muted text-xs text-muted-foreground">
-                        IMG
-                      </span>
-                    )}
-                    {selected ? (
-                      <span className="absolute right-1 top-1 rounded bg-accent px-1 text-[10px] text-accent-foreground">
-                        ✓
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
         </div>
       ) : null}
 
@@ -469,28 +442,6 @@ export default function IdentidadeMarcaFotosTab({
           </ul>
         </div>
       ) : null}
-
-      <div>
-        <label htmlFor="site_url_fotos" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-          Site da empresa (opcional)
-        </label>
-        <input
-          id="site_url_fotos"
-          type="url"
-          value={dados.site_url}
-          disabled={!canEdit || batchRunning}
-          onChange={(e) => setDados((s) => ({ ...s, site_url: e.target.value }))}
-          placeholder="https://suaempresa.com.br — ajuda a preencher o “sobre” depois das fotos"
-          className={INPUT_CLASS}
-        />
-      </div>
-
-      <IdentidadeMarcaResultado
-        dados={dados}
-        canEdit={canEdit}
-        onFieldChange={onFieldChange}
-        visible={temResultado}
-      />
     </div>
   );
 }
