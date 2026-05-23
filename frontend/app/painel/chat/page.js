@@ -12,7 +12,7 @@ import {
 import { IDENTIDADE_CONTEXTO_NOME, isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
 import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
-import ChatArteBriefCard from "./ChatArteBriefCard";
+import ChatFormatoBar from "./ChatFormatoBar";
 import ChatGeneratedImagePreview from "./ChatGeneratedImagePreview";
 import { arteBriefReady, emptyArteBrief, normalizeArteBrief } from "../../../lib/arteFormatPresets";
 import {
@@ -248,6 +248,10 @@ function lastConversaStorageKey(empresaId) {
 
 function arteBriefStorageKey(empresaId) {
   return `tuma_arte_brief_${empresaId || "none"}`;
+}
+
+function formatoBarCollapsedStorageKey(empresaId) {
+  return `tuma_chat_formato_collapsed_${empresaId || "none"}`;
 }
 
 function fromApiMensagem(m) {
@@ -1485,28 +1489,6 @@ export default function PainelChatPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 md:px-4 md:py-4">
             <div className="space-y-4">
-              {empresaId ? (
-                <div className="mb-2">
-                  {arteBriefLoading ? (
-                    <div className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
-                      Carregando formato e cores…
-                    </div>
-                  ) : (
-                    <ChatArteBriefCard
-                      brief={arteBriefDraft}
-                      brandColors={brandColors}
-                      disabled={chatBusy}
-                      onBriefChange={(b) => {
-                        const next = normalizeArteBrief(b, brandColors);
-                        setArteBriefDraft(next);
-                        persistArteBriefDraft(next);
-                      }}
-                      onSave={() => persistArteBriefDraft(arteBriefDraftRef.current)}
-                    />
-                  )}
-                </div>
-              ) : null}
-
               {messages.length === 0 && empresaId ? (
                 <p className="text-center text-sm text-muted-foreground">Digite abaixo para começar.</p>
               ) : null}
@@ -1628,13 +1610,32 @@ export default function PainelChatPage() {
             </div>
           </div>
 
-          <footer className="shrink-0 border-t border-border bg-surface-elevated/90 p-2 backdrop-blur-sm md:p-3">
+          <footer className="shrink-0 border-t border-border bg-surface-elevated/90 backdrop-blur-sm">
+            {empresaId ? (
+              arteBriefLoading ? (
+                <p className="border-b border-border/60 px-3 py-2 text-center text-xs text-muted-foreground md:px-4">
+                  Carregando formato…
+                </p>
+              ) : (
+                <ChatFormatoBar
+                  brief={arteBriefDraft}
+                  brandColors={brandColors}
+                  disabled={chatBusy}
+                  collapseStorageKey={formatoBarCollapsedStorageKey(empresaId)}
+                  onBriefChange={(b) => {
+                    const next = normalizeArteBrief(b, brandColors);
+                    setArteBriefDraft(next);
+                    persistArteBriefDraft(next);
+                  }}
+                />
+              )
+            ) : null}
             {busyStatusLabel ? (
-              <p className="mb-2 text-center text-xs font-medium text-muted-foreground" aria-live="polite">
+              <p className="px-3 py-2 text-center text-xs font-medium text-muted-foreground md:px-4" aria-live="polite">
                 {busyStatusLabel}… pode levar até 2 minutos.
               </p>
             ) : null}
-            <form className="flex items-end gap-2" onSubmit={onSubmit}>
+            <form className="flex items-end gap-2 p-2 md:p-3" onSubmit={onSubmit}>
               <button
                 type="button"
                 disabled

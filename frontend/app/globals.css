@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tema escuro do painel é controlado pela classe `.dark` (não só prefers-color-scheme). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #f3f4f6;
   --foreground: #0f172a;

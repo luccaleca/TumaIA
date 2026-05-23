@@ -16,8 +16,8 @@ export default function EmpresaWorkspaceCard({
     <div
       className={`flex w-full gap-3 rounded-xl border p-4 shadow-sm transition-[border-color,background-color,box-shadow] duration-150 ${
         emUsoNoPainel
-          ? "border-emerald-600/45 bg-emerald-50 ring-1 ring-emerald-500/25 dark:border-emerald-500/40 dark:bg-emerald-950/40 dark:ring-emerald-500/20"
-          : "border-border bg-background hover:border-accent/45 hover:bg-muted/40 hover:shadow-md"
+          ? "border-accent/45 bg-accent-muted ring-1 ring-accent/25"
+          : "border-border bg-surface hover:border-accent/40 hover:bg-muted/50 hover:shadow-md"
       }`}
     >
       <button

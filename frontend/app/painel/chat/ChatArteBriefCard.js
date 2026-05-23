@@ -27,6 +27,7 @@ const REDE_OPTIONS = [
  *   onGenerate?: () => void,
  *   generateDisabled?: boolean,
  *   generateLabel?: string,
+ *   hideFormato?: boolean,
  * }} props
  */
 export default function ChatArteBriefCard({
@@ -39,10 +40,10 @@ export default function ChatArteBriefCard({
   onGenerate,
   generateDisabled,
   generateLabel = "Gerar prévia da imagem",
+  hideFormato = false,
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
-  const [tab, setTab] = useState("proporcao");
 
   const brief = normalizeArteBrief(briefIn, brandColors);
   const editBrief = editing && draft ? draft : brief;
@@ -50,7 +51,6 @@ export default function ChatArteBriefCard({
   function startEdit() {
     setDraft({ ...brief });
     setEditing(true);
-    setTab("proporcao");
   }
 
   function cancelEdit() {
@@ -79,7 +79,9 @@ export default function ChatArteBriefCard({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-accent/20 px-3 py-2.5">
         <div>
           <p className="font-semibold text-foreground">Resumo da arte</p>
-          <p className="text-xs text-muted-foreground">Formato e cores antes de conversar com a IA</p>
+          <p className="text-xs text-muted-foreground">
+            {hideFormato ? "Tema, cores e textos da arte" : "Formato e cores antes de conversar com a IA"}
+          </p>
         </div>
         {!editing ? (
           <button
@@ -113,27 +115,7 @@ export default function ChatArteBriefCard({
       <div className="space-y-3 px-3 py-3">
         {editing ? (
           <>
-            <div className="flex gap-1 border-b border-border">
-              {[
-                ["proporcao", "Proporção"],
-                ["estilo", "Estilo"],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`border-b-2 px-3 py-1.5 text-xs font-medium transition-colors ${
-                    tab === id
-                      ? "border-accent text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                  onClick={() => setTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {tab === "proporcao" ? (
+            {!hideFormato ? (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Formato</span>
                 <div className="mt-2">
@@ -155,30 +137,7 @@ export default function ChatArteBriefCard({
                   />
                 </div>
               </div>
-            ) : (
-              <>
-                <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Estilo visual</span>
-                  <input
-                    type="text"
-                    className={INPUT_CLASS}
-                    value={editBrief.estilo || ""}
-                    placeholder="Ex.: minimalista, gradiente verde"
-                    onChange={(e) => patch({ estilo: e.target.value })}
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-muted-foreground">Observações</span>
-                  <textarea
-                    rows={2}
-                    className={INPUT_CLASS}
-                    value={editBrief.observacoes || ""}
-                    placeholder="Instruções extras para a imagem"
-                    onChange={(e) => patch({ observacoes: e.target.value })}
-                  />
-                </label>
-              </>
-            )}
+            ) : null}
 
             <ArteBriefPalette
               cores={editBrief.cores || []}
@@ -248,13 +207,15 @@ export default function ChatArteBriefCard({
           </>
         ) : (
           <dl className="grid gap-2 text-sm">
-            <div className="flex flex-wrap gap-x-2">
-              <dt className="text-muted-foreground">Formato</dt>
-              <dd className="font-medium text-foreground">
-                {f.label} {f.subtitle ? `· ${f.subtitle}` : ""} ({f.ratio}
-                {f.pixels && f.pixels !== "—" ? `, ${f.pixels}` : ""})
-              </dd>
-            </div>
+            {!hideFormato ? (
+              <div className="flex flex-wrap gap-x-2">
+                <dt className="text-muted-foreground">Formato</dt>
+                <dd className="font-medium text-foreground">
+                  {f.label} {f.subtitle ? `· ${f.subtitle}` : ""} ({f.ratio}
+                  {f.pixels && f.pixels !== "—" ? `, ${f.pixels}` : ""})
+                </dd>
+              </div>
+            ) : null}
             {brief.tema ? (
               <div className="flex flex-wrap gap-x-2">
                 <dt className="text-muted-foreground">Tema</dt>
@@ -298,12 +259,6 @@ export default function ChatArteBriefCard({
               <div className="flex flex-wrap gap-x-2">
                 <dt className="text-muted-foreground">Texto</dt>
                 <dd>{brief.texto}</dd>
-              </div>
-            ) : null}
-            {brief.estilo ? (
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="text-muted-foreground">Estilo</dt>
-                <dd>{brief.estilo}</dd>
               </div>
             ) : null}
           </dl>
