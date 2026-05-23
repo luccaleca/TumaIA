@@ -1,8 +1,9 @@
-export const CHAT_PEDIDO_RESUMO_MSG = "";
+/** Texto salvo no histórico (API exige conteúdo não vazio); o bloco visual usa post_supplement. */
+export const CHAT_PEDIDO_RESUMO_MSG = "Resumo do pedido para a arte:";
 
 export const CHAT_PEDIDO_AGUARDE_MSG = "Preparando resumo…";
 
-export const CHAT_PEDIDO_COLETANDO_INTRO = "";
+export const CHAT_PEDIDO_COLETANDO_INTRO = "Falta só completar o pedido:";
 
 export function formatFraseNaImagemFromProposal(proposal) {
   if (!proposal || typeof proposal !== "object") return null;

@@ -4,15 +4,22 @@ import { ensureChatWorkerReady, shutdownChatWorker } from "./services/chatPython
 
 const app = createApp();
 
-if (env.REPLICATE_API_TOKEN && !env.REPLICATE_ALLOW_BILLING) {
-  console.warn(
-    "[replicate] REPLICATE_API_TOKEN está definido, mas REPLICATE_ALLOW_BILLING não está ativo — nenhuma rota de imagem debitará até você definir REPLICATE_ALLOW_BILLING=true.",
-  );
+const imageProvider = env.IMAGE_PROVIDER || "replicate";
+if (imageProvider === "openai") {
+  if (!env.OPENAI_API_KEY) {
+    console.warn("[openai-image] OPENAI_API_KEY ausente — /ia/image-preview retornará 503.");
+  } else if (!env.OPENAI_ALLOW_BILLING) {
+    console.warn("[openai-image] Defina OPENAI_ALLOW_BILLING=true.");
+  }
+} else if (!env.REPLICATE_API_TOKEN) {
+  console.warn("[replicate] REPLICATE_API_TOKEN ausente — use o token de replicate.com/openai/gpt-image-2");
+} else if (!env.REPLICATE_ALLOW_BILLING) {
+  console.warn("[replicate] Defina REPLICATE_ALLOW_BILLING=true para gerar imagens.");
+} else if (imageProvider === "replicate") {
+  console.info("[image] Replicate openai/gpt-image-2 (REPLICATE_API_TOKEN)");
 }
-if (env.REPLICATE_ALLOW_BILLING && env.REPLICATE_DAILY_SUCCESS_CAP === 0) {
-  console.warn(
-    "[replicate] REPLICATE_DAILY_SUCCESS_CAP=0 — sem teto diário de gerações com sucesso; monitore o painel da Replicate.",
-  );
+if (env.IMAGE_PIPELINE === "raw") {
+  console.info("[image] IMAGE_PIPELINE=raw — prompt de imagem = só pedido do usuário; proposta sem Llama.");
 }
 
 const server = app.listen(env.PORT, () => {

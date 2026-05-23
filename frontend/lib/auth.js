@@ -136,6 +136,9 @@ function messageForFetchTimeout(timeoutMs, requestLabel) {
   if (label === "post-context") {
     return "O resumo demorou mais que o esperado. Tente de novo em instantes.";
   }
+  if (label === "image-preview") {
+    return "A geração da imagem demorou mais que o limite (cerca de 5 minutos). Aguarde e tente de novo.";
+  }
   if (label === "identidade") {
     return "A análise demorou demais. Aguarde um instante e tente de novo.";
   }

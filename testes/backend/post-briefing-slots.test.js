@@ -53,4 +53,35 @@ describe("postBriefingSlots", () => {
     assert.equal(filled.periodo, true);
     assert.equal(filled.frase_imagem, true);
   });
+
+  it("reconhece frase com dois-pontos sem aspas", () => {
+    const msg =
+      "Post quadrado para Instagram, fundo na cor da marca, frase: TumaIA entende seu negócio";
+    const filled = detectFilledSlots(msg);
+    assert.equal(filled.frase_imagem, true);
+    assert.equal(listMissingBriefingSlots([{ role: "user", content: msg }]).length, 0);
+  });
+
+  it("post institucional confuso fica pronto com intent no proposal", () => {
+    const msg = "quero um post ai pro insta, fundo cor da marca, frase: minha loja abre segunda";
+    const missing = listMissingBriefingSlots([{ role: "user", content: msg }], {
+      intent_summary: msg,
+      frase_na_imagem: "minha loja abre segunda",
+    });
+    assert.equal(missing.length, 0);
+  });
+
+  it("prioriza pergunta natural da IA em collecting", () => {
+    const gated = applyBriefingGate(
+      [{ role: "user", content: "quero promo" }],
+      {
+        confirmation_message: "Qual produto entra na promo e qual o desconto?",
+        briefing_status: "collecting",
+        missing_slots: ["produto", "beneficio"],
+        post_context_proposal: {},
+      },
+    );
+    assert.equal(gated.briefing_status, "collecting");
+    assert.match(gated.confirmation_message, /produto|desconto/i);
+  });
 });

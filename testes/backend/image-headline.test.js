@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   deriveFraseNaImagemFromHistory,
+  extractFraseFromUserText,
   resolveFraseNaImagem,
 } from "../../backend/src/services/imageHeadline.js";
 
@@ -24,6 +25,13 @@ describe("imageHeadline — frase na imagem", () => {
     const history = [{ role: "user", content: "post para 500k seguidores no instagram" }];
     const frase = deriveFraseNaImagemFromHistory(history, []);
     assert.equal(frase, "Parabéns pelos 500k!");
+  });
+
+  it("extrai frase após dois-pontos", () => {
+    const frase = extractFraseFromUserText(
+      "Post quadrado para Instagram, fundo na cor da marca, frase: TumaIA entende seu negócio",
+    );
+    assert.equal(frase, "TumaIA entende seu negócio");
   });
 
   it("ignora linha automática de confirmação do painel", () => {

@@ -1,17 +1,47 @@
+import { env } from "../config.js";
 import { filterMidiasAcervo } from "../modules/empresas/midiaOrigem.js";
-import { resolveFraseNaImagem } from "./imageHeadline.js";
+import { resolveFraseNaImagem, resolvePedidoCliente } from "./imageHeadline.js";
+import { aspectRatioFromArteBrief, promptFromArteBrief } from "./rawImageArteBrief.js";
 import {
   formatBrandIdentityBlockForFlux,
+  formatBrandIdentityCompact,
   partitionContextosIdentidade,
 } from "../modules/empresas/identidadeMarca.js";
 
-/** Limite do schema FLUX Schnell (`fluxSchnellInputSchema.prompt`). */
+/** Limite legado FLUX. */
 export const FLUX_IMAGE_PROMPT_MAX = 2000;
+
+export const FLUX_IMAGE_PROMPT_COMPACT_TARGET = 520;
+
+/**
+ * Prompt cru para GPT Image 2: só o pedido do cliente (sem regras, sem identidade injetada).
+ *
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {Record<string, unknown> | null | undefined} postContextProposal
+ */
+export function buildRawImagePrompt(history, postContextProposal) {
+  const proposal =
+    postContextProposal && typeof postContextProposal === "object" ? postContextProposal : null;
+  const arteBrief = proposal?.arte_brief;
+  if (arteBrief && typeof arteBrief === "object") {
+    const fromBrief = promptFromArteBrief(/** @type {Record<string, unknown>} */ (arteBrief));
+    if (fromBrief.trim()) return fromBrief.slice(0, 32_000);
+  }
+  const pedido = resolvePedidoCliente(postContextProposal, history, 32_000);
+  if (pedido) return pedido;
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m?.role === "user") {
+      const t = String(m.content ?? "").trim();
+      if (t) return t.slice(0, 32_000);
+    }
+  }
+  return "Instagram marketing image";
+}
 
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {string} idEmpresa
- * @returns {Promise<Array<Record<string, unknown>>>}
  */
 export async function loadContextosEmpresaAtivos(db, idEmpresa) {
   const { data, error } = await db
@@ -25,11 +55,6 @@ export async function loadContextosEmpresaAtivos(db, idEmpresa) {
   return Array.isArray(data) ? data : [];
 }
 
-/**
- * @param {import("@supabase/supabase-js").SupabaseClient} db
- * @param {string} idEmpresa
- * @returns {Promise<Record<string, unknown> | null>}
- */
 export async function loadEmpresaResumoParaImagem(db, idEmpresa) {
   const { data, error } = await db
     .from("empresa")
@@ -40,12 +65,6 @@ export async function loadEmpresaResumoParaImagem(db, idEmpresa) {
   return data && typeof data === "object" ? data : null;
 }
 
-/**
- * @param {import("@supabase/supabase-js").SupabaseClient} db
- * @param {string} idEmpresa
- * @param {number} [limit]
- * @returns {Promise<Array<Record<string, unknown>>>}
- */
 export async function loadMidiasEmpresaResumo(db, idEmpresa, limit = 48) {
   const { data, error } = await db
     .from("midia")
@@ -60,73 +79,29 @@ export async function loadMidiasEmpresaResumo(db, idEmpresa, limit = 48) {
   return filterMidiasAcervo(Array.isArray(data) ? data : []);
 }
 
-function compactJson(value, maxLen) {
-  try {
-    const s = JSON.stringify(value ?? null);
-    if (s.length <= maxLen) return s;
-    return `${s.slice(0, maxLen - 1)}…`;
-  } catch {
-    return "";
-  }
-}
-
-/**
- * @param {Array<Record<string, unknown>>} rows
- * @param {number} budgetChars
- */
-function formatContextosBlock(rows, budgetChars) {
-  if (!rows.length || budgetChars < 80) return "";
-  const lines = [];
-  let used = 0;
-  const per = Math.max(120, Math.floor(budgetChars / Math.min(rows.length, 8)));
-  for (const row of rows.slice(0, 12)) {
-    const nome = String(row.nome ?? "").trim() || "(sem nome)";
-    const desc = String(row.descricao ?? "").trim();
-    const dados = compactJson(row.dados_json, Math.min(420, per));
-    const schema = compactJson(row.schema_json, 120);
-    let chunk = `- ${nome}`;
-    if (desc) chunk += `\n  descrição: ${desc.slice(0, 280)}${desc.length > 280 ? "…" : ""}`;
-    if (dados && dados !== "null") chunk += `\n  dados: ${dados}`;
-    if (schema && schema !== "null" && schema !== "{}") chunk += `\n  schema: ${schema}`;
-    chunk += "\n";
-    if (used + chunk.length > budgetChars) break;
-    lines.push(chunk);
-    used += chunk.length;
-  }
-  if (!lines.length) return "";
-  return lines.join("\n");
-}
-
-/**
- * @param {Record<string, unknown> | null} emp
- * @param {number} maxLen
- */
-function formatEmpresaBlock(emp, maxLen) {
-  if (!emp) return "";
-  const parts = [];
-  const nf = String(emp.nome_fantasia ?? "").trim();
-  if (nf) parts.push(`nome: ${nf}`);
-  const seg = String(emp.segmento ?? "").trim();
-  if (seg) parts.push(`segmento: ${seg}`);
-  const ig = String(emp.instagram_empresa ?? "").trim();
-  if (ig) parts.push(`instagram: ${ig}`);
-  const desc = String(emp.descricao ?? "").trim();
-  if (desc) parts.push(`sobre: ${desc.slice(0, 500)}${desc.length > 500 ? "…" : ""}`);
-  let s = parts.join("\n");
-  if (s.length > maxLen) s = s.slice(0, maxLen - 1) + "…";
+function compressPedidoVisual(pedido, maxLen = 240) {
+  let s = String(pedido ?? "")
+    .replace(/frase\s*:\s*.+?(?=\s*[,;]|$)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (s.length > maxLen) s = `${s.slice(0, maxLen - 1)}…`;
   return s;
 }
 
-function formatConversationBlock(history, maxLen) {
-  const tail = history.slice(-8);
-  const block = tail
-    .map((m) => {
-      const cap = m.role === "user" ? 220 : 120;
-      return `${m.role === "user" ? "Cliente" : "Assistente"}: ${String(m.content).slice(0, cap)}`;
-    })
-    .join("\n");
-  if (block.length <= maxLen) return block;
-  return "…" + block.slice(block.length - maxLen + 1);
+function formatPedidoBlock(pedido, frase, maxLen) {
+  const lines = [];
+  const p = String(pedido ?? "").trim();
+  if (p) lines.push(p);
+  if (frase) {
+    const needle = frase.toLowerCase().slice(0, Math.min(24, frase.length));
+    if (!p || !p.toLowerCase().includes(needle)) {
+      lines.push(`Frase na imagem: «${frase}»`);
+    }
+  }
+  if (!lines.length) return "";
+  let s = lines.join("\n");
+  if (s.length > maxLen) s = `${s.slice(0, maxLen - 1)}…`;
+  return s;
 }
 
 function introWithFrase(frase, hasReferenceImage, referenceKind = "product") {
@@ -141,158 +116,157 @@ function introWithFrase(frase, hasReferenceImage, referenceKind = "product") {
     return (
       `Create a NEW Instagram key visual. ${refRule} ` +
       textRule +
-      " Fresh marketing composition aligned with the brand brief."
+      " Follow the Client request and Brand identity sections only."
     );
   }
   return (
     "Professional marketing key visual for Instagram (square). Clean, high quality. " +
     textRule +
-    " No watermarks, no gibberish."
+    " Follow the Client request and Brand identity sections only. No watermarks, no gibberish."
   );
 }
 
-/**
- * Monta o prompt final respeitando `FLUX_IMAGE_PROMPT_MAX`, priorizando intro + empresa + contextos e truncando a conversa por último.
- *
- * @param {{
- *   history: Array<{ role: string, content: string }>,
- *   empresaRow: Record<string, unknown> | null,
- *   contextoRows: Array<Record<string, unknown>>,
- *   postContextProposal?: Record<string, unknown> | null,
- *   focusCampanhaContextoId?: string | null,
- *   referenceKind?: 'logo' | 'product' | null,
- * }} p
- */
-export function buildFluxImagePrompt({
-  history,
-  empresaRow,
-  contextoRows,
-  postContextProposal,
-  hasReferenceImage = false,
-  focusCampanhaContextoId = null,
-  referenceKind = null,
+function buildCompactImagePrompt({
+  pedido,
+  frase,
+  brandCompact,
+  hasReferenceImage,
+  referenceKind,
+  logoConfigured,
+  logoAsHero,
 }) {
-  const intent =
-    postContextProposal && typeof postContextProposal === "object"
-      ? String(postContextProposal.intent_summary ?? "").trim().slice(0, 200)
-      : "";
-  const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, contextoRows);
-  const proposalSection = [
-    intent ? `Resumo do pedido: ${intent}` : "",
-    fraseNaImagem ? `Frase obrigatória na imagem (tipografia legível): "${fraseNaImagem}"` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-  const proposalBlock = proposalSection
-    ? `\n\n=== Brief visual ===\n${proposalSection}`
-    : "";
+  const chunks = ["Square 1:1 Instagram ad, premium, clean, high quality."];
 
-  const { identidadeDados, campanhaRows } = partitionContextosIdentidade(contextoRows);
-  const focusId = focusCampanhaContextoId ? String(focusCampanhaContextoId).trim() : "";
-  const campanhaForPrompt =
-    focusId && campanhaRows.length
-      ? (() => {
-          const picked = campanhaRows.filter(
-            (r) => String(r.id_contexto_empresa ?? "").trim() === focusId,
-          );
-          return picked.length ? picked : campanhaRows;
-        })()
-      : campanhaRows;
+  if (hasReferenceImage) {
+    chunks.push(
+      referenceKind === "logo"
+        ? "Use reference as small corner logo only."
+        : "Hero product from reference image, new layout.",
+    );
+  } else if (logoConfigured) {
+    chunks.push(logoAsHero ? "Brand logo as focal point." : "Small brand logo bottom-right corner.");
+  }
+
+  const visual = compressPedidoVisual(pedido, 260);
+  if (visual) chunks.push(visual);
+  if (brandCompact) chunks.push(brandCompact);
+  if (frase) chunks.push(`Headline text exactly in Portuguese: "${frase}".`);
+  else chunks.push("Minimal or no text.");
+  chunks.push("No watermark, no gibberish, no misspelled words.");
+
+  let full = chunks.join(" ");
+  if (full.length > FLUX_IMAGE_PROMPT_COMPACT_TARGET) {
+    full = `${full.slice(0, FLUX_IMAGE_PROMPT_COMPACT_TARGET - 1)}…`;
+  }
+  return full;
+}
+
+function buildFullImagePrompt({
+  pedido,
+  fraseNaImagem,
+  identidadeDados,
+  hasReferenceImage,
+  referenceKind,
+}) {
+  const pedidoBudget = identidadeDados ? 780 : 1100;
+  const pedidoBlock = formatPedidoBlock(pedido, fraseNaImagem, pedidoBudget);
   const brandBlock = identidadeDados
-    ? formatBrandIdentityBlockForFlux(identidadeDados, 480)
+    ? formatBrandIdentityBlockForFlux(identidadeDados, 560)
     : "";
 
-  const empBlock = formatEmpresaBlock(empresaRow, 280);
   const kind = referenceKind === "logo" ? "logo" : "product";
   const intro = introWithFrase(fraseNaImagem, hasReferenceImage, hasReferenceImage ? kind : "product");
   const logoCornerHint = identidadeDados?.id_midia_logo
     ? referenceKind === "logo"
       ? "\n\nBrand logo is the HERO element (client requested); still avoid illegible stretching."
-      : "\n\nBrand logo: ALWAYS a small mark in a corner (bottom-right or top-left, ~8–12% of frame). Never centered, never full-bleed, unless the brief explicitly says logo as hero."
+      : "\n\nBrand logo: ALWAYS a small mark in a corner (bottom-right or top-left, ~8–12% of frame). Never centered, never full-bleed, unless the Client request explicitly says logo as hero."
     : "";
-  const overhead =
-    intro.length +
-    logoCornerHint.length +
-    proposalBlock.length +
-    (brandBlock ? brandBlock.length + 48 : 0) +
-    (empBlock ? empBlock.length + 40 : 0) +
-    80;
-  const ctxBudget = Math.min(520, Math.max(160, FLUX_IMAGE_PROMPT_MAX - overhead));
-  const ctxBlock = formatContextosBlock(campanhaForPrompt, ctxBudget);
 
-  const headerParts = [intro];
-  if (logoCornerHint) headerParts.push(logoCornerHint);
-  if (brandBlock) headerParts.push(`\n\n=== Brand identity ===\n${brandBlock}`);
-  if (proposalBlock) headerParts.push(proposalBlock);
-  if (empBlock) headerParts.push(`\n\n=== Empresa (cadastro) ===\n${empBlock}`);
-  if (ctxBlock) headerParts.push(`\n\n=== Contextos de campanha ===\n${ctxBlock}`);
-  const header = headerParts.join("");
+  const parts = [intro];
+  if (logoCornerHint) parts.push(logoCornerHint);
+  if (pedidoBlock) parts.push(`\n\n=== Client request ===\n${pedidoBlock}`);
+  if (brandBlock) parts.push(`\n\n=== Brand identity ===\n${brandBlock}`);
 
-  const reserved = header.length + 20;
-  let convBudget = Math.max(200, FLUX_IMAGE_PROMPT_MAX - reserved);
-  let conv = formatConversationBlock(history, convBudget);
-  let full = `${header}\n\n=== Conversa recente ===\n${conv}`;
-
-  while (full.length > FLUX_IMAGE_PROMPT_MAX && convBudget > 120) {
-    convBudget -= 150;
-    conv = formatConversationBlock(history, convBudget);
-    full = `${header}\n\n=== Conversa recente ===\n${conv}`;
-  }
-
+  let full = parts.join("");
   if (full.length > FLUX_IMAGE_PROMPT_MAX) {
     full = full.slice(0, FLUX_IMAGE_PROMPT_MAX - 1) + "…";
   }
-
   return full;
 }
 
 /**
- * Metadados seguros para o cliente validar o primeiro fluxo (sem prompt inteiro).
- *
- * @param {string} idEmpresa
- * @param {Record<string, unknown> | null} empresaRow
- * @param {Array<Record<string, unknown>>} contextoRows
+ * Monta prompt para geração de imagem.
+ * Padrão (`IMAGE_PIPELINE=raw`): só pedido do usuário.
  */
+export function buildFluxImagePrompt({
+  history,
+  contextoRows,
+  postContextProposal,
+  hasReferenceImage = false,
+  referenceKind = null,
+  promptStyle,
+  pipeline,
+}) {
+  const pipe = pipeline ?? env.IMAGE_PIPELINE ?? "raw";
+  if (pipe === "raw") {
+    return buildRawImagePrompt(history, postContextProposal);
+  }
+
+  const pedido = resolvePedidoCliente(postContextProposal, history);
+  const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, contextoRows);
+  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
+  const style = promptStyle ?? env.IMAGE_PROMPT_STYLE ?? "compact";
+  const kind = referenceKind === "logo" ? "logo" : "product";
+
+  if (style === "full") {
+    return buildFullImagePrompt({
+      pedido,
+      fraseNaImagem,
+      identidadeDados,
+      hasReferenceImage,
+      referenceKind: kind,
+    });
+  }
+
+  const brandCompact = identidadeDados ? formatBrandIdentityCompact(identidadeDados) : "";
+  return buildCompactImagePrompt({
+    pedido,
+    frase: fraseNaImagem,
+    brandCompact,
+    hasReferenceImage,
+    referenceKind: kind,
+    logoConfigured: Boolean(identidadeDados?.id_midia_logo),
+    logoAsHero: kind === "logo",
+  });
+}
+
 export function buildImagePreviewContextMeta(
   idEmpresa,
   empresaRow,
   contextoRows,
   postContextProposal,
   history,
-  focusCampanhaContextoId = null,
 ) {
-  const frase_na_imagem = resolveFraseNaImagem(postContextProposal, history || [], contextoRows);
-  const { identidadeDados, campanhaRows } = partitionContextosIdentidade(contextoRows);
-  const focusId = focusCampanhaContextoId ? String(focusCampanhaContextoId).trim() : "";
-  const campanhaMeta =
-    focusId && campanhaRows.length
-      ? (() => {
-          const picked = campanhaRows.filter(
-            (r) => String(r.id_contexto_empresa ?? "").trim() === focusId,
-          );
-          return picked.length ? picked : campanhaRows;
-        })()
-      : campanhaRows;
+  const pipeline = env.IMAGE_PIPELINE || "raw";
+  const frase_na_imagem =
+    pipeline === "raw" ? null : resolveFraseNaImagem(postContextProposal, history || [], contextoRows);
+  const pedido_resumo = resolvePedidoCliente(postContextProposal, history || [], 280);
+  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   return {
     id_empresa: idEmpresa,
     empresa_nome_fantasia: empresaRow ? String(empresaRow.nome_fantasia ?? "").trim() || null : null,
+    pedido_resumo: pedido_resumo || null,
     frase_na_imagem,
     identidade_configurada: Boolean(
       identidadeDados?.cor_primaria || identidadeDados?.estilo_visual || identidadeDados?.id_midia_logo,
     ),
-    contextos_carregados: campanhaMeta.length,
-    contextos: campanhaMeta.map((r) => ({
-      id_contexto_empresa: r.id_contexto_empresa ?? null,
-      nome: String(r.nome ?? "").trim() || null,
-      descricao_preview: (() => {
-        const d = String(r.descricao ?? "").trim();
-        if (!d) return null;
-        return d.length > 220 ? `${d.slice(0, 220)}…` : d;
-      })(),
-      dados_preview: (() => {
-        const raw = compactJson(r.dados_json, 320);
-        return raw.length > 320 ? `${raw.slice(0, 319)}…` : raw;
-      })(),
-    })),
+    prompt_style: pipeline === "raw" ? "raw" : env.IMAGE_PROMPT_STYLE ?? "compact",
+    image_provider: env.IMAGE_PROVIDER || "replicate",
+    image_model:
+      env.IMAGE_PROVIDER === "openai"
+        ? env.OPENAI_IMAGE_MODEL || "gpt-image-2"
+        : env.IMAGE_PROVIDER === "flux"
+          ? "black-forest-labs/flux-schnell"
+          : "openai/gpt-image-2",
   };
 }

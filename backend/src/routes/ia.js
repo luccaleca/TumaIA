@@ -5,24 +5,20 @@ import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { requireUsuario } from "../middleware/requireUsuario.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { ensureChatWorkerReady, runChatSerialized } from "../services/chatPythonWorker.js";
-import { shouldOfferDeliveryButtons } from "../services/chatDeliveryUi.js";
-import { executeFlux11Pro, flux11ProInputSchema } from "../services/flux11ProService.js";
-import { executeFluxSchnell, fluxSchnellInputSchema } from "../services/fluxSchnellService.js";
-import {
-  FLUX_IMAGE_PROMPT_MAX,
-  buildFluxImagePrompt,
-  buildImagePreviewContextMeta,
-  loadContextosEmpresaAtivos,
-  loadEmpresaResumoParaImagem,
-} from "../services/imagePreviewPrompt.js";
-import { collectReferenceMidiaIds } from "../services/referenceMidiaFromProposal.js";
-import { rankReferenceMidiaIds } from "../services/referenceMidiaRanking.js";
-import { wantsLogoAsHero } from "../services/logoReferencePolicy.js";
-import { friendlyImageGenerationError } from "../services/replicateImagePromptPrep.js";
-import { REFERENCE_MIDIA_MAX, resolveReferenceMidiasForReplicate } from "../services/referenceMidiaUrls.js";
-import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
+import { detectImageGenerationIntentFromHistory } from "../services/chatDeliveryUi.js";
 import { generatePostContextProposal } from "../services/postContextProposalService.js";
-import { assertReplicateBillingAllowed, assertReplicateBurst, assertReplicateDailySuccessCap } from "../services/replicateUsage.js";
+import { loadContextosEmpresaAtivos } from "../services/imagePreviewPrompt.js";
+import {
+  allBrandColorsFromIdentidade,
+  partitionContextosIdentidade,
+} from "../modules/empresas/identidadeMarca.js";
+import { ARTE_FORMAT_PRESETS } from "../services/arteFormatPresets.js";
+import { defaultArteBrief } from "../services/rawImageArteBrief.js";
+import {
+  guessImageDownloadFilename,
+  isAllowedImageDownloadUrl,
+} from "../services/imageDownloadUrl.js";
+import { handleImagePreview } from "./ia.imagePreview.js";
 
 const r = Router();
 
@@ -92,10 +88,10 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
 
   try {
     const db = getSupabaseAdmin();
-    const needsPostSupplement =
-      shouldOfferDeliveryButtons(parsed.data.question) &&
+    const route_image_generation =
       Boolean(parsed.data.id_empresa) &&
-      Boolean(db);
+      Boolean(db) &&
+      detectImageGenerationIntentFromHistory(parsed.data.history, parsed.data.question);
 
     const result = await runChatSerialized(parsed.data);
 
@@ -106,53 +102,23 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
     const answer = String(result.result || "");
     const source_documents = Array.isArray(result.source_documents) ? result.source_documents : [];
 
-    /** O painel chama `POST /ia/post-context-proposal` em seguida (Ollama pode levar ~1–2 min). */
-    const offer_post_context = needsPostSupplement;
-
     res.json({
       answer,
       source_documents,
-      ...(offer_post_context ? { offer_post_context: true } : {}),
+      ...(route_image_generation
+        ? {
+            route_image_generation: true,
+            offer_post_context: true,
+            image_provider: env.IMAGE_PROVIDER || "replicate",
+            image_pipeline: env.IMAGE_PIPELINE || "raw",
+          }
+        : {}),
     });
   } catch (err) {
     res.status(500).json({
       error: err instanceof Error ? err.message : "Erro ao consultar IA",
     });
   }
-});
-
-const imagePreviewSchema = z.object({
-  history: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant"]),
-        content: z.string().trim().min(1).max(8000),
-      }),
-    )
-    .min(1)
-    .max(36),
-  /** Obrigatório: contextos e cadastro vêm desta empresa (vínculo validado). */
-  id_empresa: z.string().uuid(),
-  aspect_ratio: fluxSchnellInputSchema.shape.aspect_ratio.optional(),
-  /** Preenchido pelo painel após o passo "Confirmar contexto" (alinha imagem ao que foi combinado). */
-  post_context_proposal: z.record(z.string(), z.unknown()).optional(),
-  /** Links do `post_supplement` (kind midia) — usados se `reference_midia_ids` vier vazio. */
-  post_supplement_links: z
-    .array(
-      z.object({
-        kind: z.enum(["contexto", "midia"]),
-        id: z.string().uuid(),
-      }),
-    )
-    .max(8)
-    .optional(),
-  /**
-   * Mídias de imagem do acervo (UUID) para referência visual na Replicate.
-   * A primeira vira `image_prompt` no FLUX 1.1 Pro (composição); a segunda entra como texto no prompt.
-   */
-  reference_midia_ids: z.array(z.string().uuid()).max(3).optional(),
-  /** Contexto de campanha escolhido no painel antes de gerar (só este entra no bloco de campanha). */
-  focus_contexto_id: z.string().uuid().optional(),
 });
 
 const postContextProposalBodySchema = z.object({
@@ -166,14 +132,47 @@ const postContextProposalBodySchema = z.object({
     .min(1)
     .max(36),
   id_empresa: z.string().uuid(),
+  arte_brief: z.record(z.string(), z.unknown()).optional(),
 });
 
-function normalizeFluxOutputUrls(output) {
-  if (output == null) return [];
-  if (Array.isArray(output)) return output.filter((u) => typeof u === "string" && u.trim());
-  if (typeof output === "string" && output.trim()) return [output.trim()];
-  return [];
-}
+const arteBriefDefaultsQuerySchema = z.object({
+  id_empresa: z.string().uuid(),
+});
+
+/**
+ * Brief inicial da arte (formato + cores da marca) — exibido no início do chat.
+ */
+r.get("/arte-brief-defaults", requireUserJwt, requireUsuario, async (req, res) => {
+  const parsed = arteBriefDefaultsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+  try {
+    const contextoRows = await loadContextosEmpresaAtivos(db, parsed.data.id_empresa);
+    const { identidadeDados } = partitionContextosIdentidade(contextoRows);
+    const brandColors = identidadeDados ? allBrandColorsFromIdentidade(identidadeDados) : [];
+    res.json({
+      arte_brief: defaultArteBrief(brandColors),
+      format_presets: ARTE_FORMAT_PRESETS,
+      brand_colors: brandColors,
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Erro ao carregar brief da arte",
+    });
+  }
+});
 
 /**
  * Llama (API OpenAI-compatível) + Supabase: mensagem de confirmação do tipo de post alinhada a `contexto_empresa` e referências de `midia`.
@@ -202,6 +201,7 @@ r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res
       history: parsed.data.history,
       idEmpresa: parsed.data.id_empresa,
       db,
+      arteBriefDraft: parsed.data.arte_brief,
     });
     const ready = out.briefing_status !== "collecting";
     res.json({
@@ -220,245 +220,53 @@ r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res
   }
 });
 
-/**
- * Prévia FLUX autenticada (JWT). Exige `id_empresa`, carrega `contexto_empresa` ativo + resumo de `empresa` no Supabase e injeta no prompt (além do `history`). Exige `REPLICATE_ALLOW_BILLING=true` e token; mesmos limites que `/internal/replicate/flux-schnell`.
- */
-r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
-  const parsed = imagePreviewSchema.safeParse(req.body);
+const imageDownloadQuerySchema = z.object({
+  url: z.string().url().max(4000),
+});
+
+/** Proxy de download da prévia (URLs externas com CORS restrito). */
+r.get("/image-download", requireUserJwt, requireUsuario, async (req, res) => {
+  const parsed = imageDownloadQuerySchema.safeParse(req.query);
   if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten() });
+    res.status(400).json({ error: "URL inválida." });
     return;
   }
-
-  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
-  if (!v.ok) {
-    res.status(v.status).json({ error: v.error });
+  const target = parsed.data.url;
+  if (!isAllowedImageDownloadUrl(target)) {
+    res.status(400).json({ error: "Origem da imagem não permitida para download." });
     return;
   }
-
-  const billing = assertReplicateBillingAllowed();
-  if (!billing.ok) {
-    res.status(billing.status).json({ error: billing.error });
-    return;
+  const controller = new AbortController();
+  const tid = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const upstream = await fetch(target, { signal: controller.signal });
+    clearTimeout(tid);
+    if (!upstream.ok) {
+      res.status(502).json({ error: "Não foi possível buscar a imagem na origem." });
+      return;
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    const type = upstream.headers.get("content-type") || "image/png";
+    const filename = guessImageDownloadFilename(target);
+    res.setHeader("Content-Type", type.split(";")[0].trim() || "image/png");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(buf);
+  } catch (err) {
+    clearTimeout(tid);
+    const msg = err instanceof Error ? err.message : "Erro ao baixar imagem";
+    res.status(500).json({ error: msg });
   }
+});
 
-  const dailyCap = env.REPLICATE_DAILY_SUCCESS_CAP;
-  const capCheck = await assertReplicateDailySuccessCap(dailyCap);
-  if (!capCheck.ok) {
-    res.status(429).json({
-      error:
-        "Limite diário de gerações de imagem atingido. Tente outro dia ou peça ao administrador para ajustar o teto.",
-      successes: capCheck.successes,
-      cap: capCheck.cap,
-    });
-    return;
-  }
-
-  const token = env.REPLICATE_API_TOKEN;
-  if (!token) {
-    res.status(503).json({ error: "Geração de imagem não configurada no servidor (REPLICATE_API_TOKEN)." });
-    return;
-  }
-
-  const idEmpresa = parsed.data.id_empresa;
+/** Prévia de imagem: GPT Image 2 (padrão) ou FLUX legado (`IMAGE_PROVIDER=replicate`). */
+r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
   const db = getSupabaseAdmin();
   if (!db) {
     res.status(503).json({ error: "Supabase não configurado no servidor" });
     return;
   }
-
-  let empresaRow;
-  let contextoRows;
-  try {
-    [empresaRow, contextoRows] = await Promise.all([
-      loadEmpresaResumoParaImagem(db, idEmpresa),
-      loadContextosEmpresaAtivos(db, idEmpresa),
-    ]);
-  } catch (err) {
-    res.status(500).json({
-      error: err instanceof Error ? err.message : "Erro ao carregar contextos da empresa",
-    });
-    return;
-  }
-
-  const fromBody = (parsed.data.reference_midia_ids || []).map((x) => String(x).trim()).filter(Boolean);
-  const fromProposal = collectReferenceMidiaIds(
-    parsed.data.post_context_proposal,
-    parsed.data.post_supplement_links,
-  );
-  let refIds = [...new Set([...fromBody, ...fromProposal])].slice(0, REFERENCE_MIDIA_MAX);
-
-  const userHint = parsed.data.history
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join(" ")
-    .slice(-400);
-
-  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
-  const excludeRefIds = identidadeDados?.id_midia_referencia_analise
-    ? [String(identidadeDados.id_midia_referencia_analise)]
-    : [];
-
-  const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
-  if (logoId && !excludeRefIds.includes(logoId) && !refIds.includes(logoId)) {
-    refIds = [...refIds, logoId].slice(0, REFERENCE_MIDIA_MAX);
-  }
-
-  let referenceMeta = null;
-  /** @type {string | null} */
-  let primaryRefUrl = null;
-  /** @type {'logo' | 'product'} */
-  let primaryRefKind = "product";
-
-  if (refIds.length) {
-    try {
-      const { data: midiaRows } = await db
-        .from("midia")
-        .select(
-          "id_midia, nome_exibicao, nome_arquivo, descricao, alt_text, tipo_midia, formato_arquivo, extensao",
-        )
-        .eq("id_empresa", idEmpresa)
-        .eq("ativo", true)
-        .in("id_midia", refIds);
-      if (Array.isArray(midiaRows) && midiaRows.length) {
-        refIds = rankReferenceMidiaIds(refIds, midiaRows, userHint, excludeRefIds, logoId);
-      }
-    } catch {
-      /* segue ordem original */
-    }
-  }
-
-  const focusContextoId = parsed.data.focus_contexto_id ?? null;
-
-  let prompt = buildFluxImagePrompt({
-    history: parsed.data.history,
-    empresaRow,
-    contextoRows,
-    postContextProposal: parsed.data.post_context_proposal,
-    hasReferenceImage: false,
-    focusCampanhaContextoId: focusContextoId,
-  });
-
-  if (refIds.length) {
-    try {
-      const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds, {
-        logoId,
-        userHint,
-        logoAsHero: wantsLogoAsHero(userHint),
-      });
-      primaryRefUrl = resolved.primaryUrl;
-      primaryRefKind = resolved.primaryKind === "logo" ? "logo" : "product";
-      if (primaryRefUrl) {
-        prompt = buildFluxImagePrompt({
-          history: parsed.data.history,
-          empresaRow,
-          contextoRows,
-          postContextProposal: parsed.data.post_context_proposal,
-          hasReferenceImage: true,
-          focusCampanhaContextoId: focusContextoId,
-          referenceKind: primaryRefKind,
-        });
-        if (resolved.auxiliaryReferenceText) {
-          const add = `\n\n=== Outros assets do acervo (só contexto; não copiar layout) ===\n${resolved.auxiliaryReferenceText}`;
-          prompt = (prompt + add).slice(0, FLUX_IMAGE_PROMPT_MAX);
-        }
-        referenceMeta = {
-          mode: "flux-1.1-pro-reference",
-          reference_midia_ids: resolved.usedIds,
-        };
-      }
-    } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : "Referência de mídia inválida",
-      });
-      return;
-    }
-  }
-
-  if (env.IMAGE_PREVIEW_LOG_PROMPT) {
-    console.info("[ia/image-preview] prompt length=", prompt.length, "\n", prompt);
-  }
-
-  const postBurstLimit = env.REPLICATE_BURST_PER_MINUTE;
-  const burst = assertReplicateBurst("post", postBurstLimit);
-  if (!burst.ok) {
-    res
-      .status(429)
-      .set("Retry-After", String(Math.max(1, burst.retryAfterSec ?? 60)))
-      .json({ error: "Muitas gerações por minuto; aguarde um instante." });
-    return;
-  }
-
-  const aspect = parsed.data.aspect_ratio ?? "1:1";
-  let out;
-
-  const runSchnellOnly = () =>
-    executeFluxSchnell(
-      token,
-      fluxSchnellInputSchema.parse({
-        prompt,
-        aspect_ratio: aspect,
-        num_outputs: 1,
-        output_format: "png",
-        output_quality: 80,
-      }),
-    );
-
-  if (primaryRefUrl) {
-    const fluxProInput = flux11ProInputSchema.parse({
-      prompt,
-      image_prompt: primaryRefUrl,
-      aspect_ratio: aspect,
-      output_format: "png",
-      output_quality: 85,
-      image_prompt_strength: primaryRefKind === "logo" ? 0.12 : 0.22,
-    });
-    out = await executeFlux11Pro(token, fluxProInput);
-    const refTooSmall = !out.ok && /256\s*x\s*256|at least 256/i.test(String(out.error || ""));
-    if (refTooSmall) {
-      console.warn("[ia/image-preview] referência <256px após prep; fallback Schnell sem image_prompt");
-      if (referenceMeta && typeof referenceMeta === "object") {
-        referenceMeta = { ...referenceMeta, fallback: "schnell_sem_referencia_pixels" };
-      }
-      prompt = buildFluxImagePrompt({
-        history: parsed.data.history,
-        empresaRow,
-        contextoRows,
-        postContextProposal: parsed.data.post_context_proposal,
-        hasReferenceImage: false,
-        focusCampanhaContextoId: focusContextoId,
-      });
-      out = await runSchnellOnly();
-    }
-  } else {
-    out = await runSchnellOnly();
-  }
-
-  if (!out.ok) {
-    res.status(out.status || 500).json({
-      error: friendlyImageGenerationError(out.error),
-      raw: out.raw,
-    });
-    return;
-  }
-
-  const image_urls = normalizeFluxOutputUrls(out.output);
-  const contexto_geracao = buildImagePreviewContextMeta(
-    idEmpresa,
-    empresaRow,
-    contextoRows,
-    parsed.data.post_context_proposal,
-    parsed.data.history,
-    focusContextoId,
-  );
-  res.json({
-    prediction_id: out.prediction_id,
-    status: out.status,
-    model: out.model,
-    image_urls,
-    contexto_geracao,
-    ...(referenceMeta ? { image_generation: referenceMeta } : {}),
-  });
+  await handleImagePreview(req, res, db, assertEmpresaVinculo);
 });
 
 export default r;

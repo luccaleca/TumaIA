@@ -83,7 +83,7 @@ const nextConfig = {
    * Alinhar com `timeoutMs` em `frontend/lib/auth.js` e nas chamadas do painel de chat.
    */
   experimental: {
-    proxyTimeout: 320_000,
+    proxyTimeout: 330_000,
   },
 
   /**

@@ -1,8 +1,12 @@
 /**
- * Briefing adaptativo para posts: contexto = playbook fixo; chat = variáveis do episódio.
+ * Briefing adaptativo: a IA interpreta o pedido (texto solto); regras só completam lacunas óbvias.
  */
 
+import { extractFraseFromUserText, normalizeFraseNaImagem } from "./imageHeadline.js";
+
 /** @typedef {'produto' | 'beneficio' | 'periodo' | 'frase_imagem'} BriefingSlotId */
+
+const VALID_SLOTS = new Set(["produto", "beneficio", "periodo", "frase_imagem"]);
 
 /** @type {Record<BriefingSlotId, { label: string, ask: string }>} */
 export const BRIEFING_SLOT_META = {
@@ -20,7 +24,7 @@ export const BRIEFING_SLOT_META = {
   },
   frase_imagem: {
     label: "frase na imagem",
-    ask: 'Qual frase deve aparecer na imagem? (Ex.: «Até 40% OFF». Se não quiser texto na arte, diga «sem texto».)',
+    ask: "Qual frase deve aparecer na imagem? (Ex.: «Até 40% OFF». Se não quiser texto na arte, diga «sem texto».)",
   },
 };
 
@@ -29,6 +33,9 @@ const PROMO_HINT =
 
 const SEM_PRODUTO_HINT =
   /\b(sem\s+produto|s[oó]\s+institucional|institucional|marca\s+apenas|n[aã]o\s+tem\s+produto|sem\s+item)\b/i;
+
+const INSTITUTIONAL_HINT =
+  /\b(institucional|identidade\s+da\s+marca|fundo\s+(na\s+)?cor|cor\s+da\s+marca|logo|post\s+quadrado|feed|só\s+a\s+marca|marca\s+apenas)\b/i;
 
 const PRODUTO_HINT =
   /\b(produto|kit|linha|whey|creatina|camiseta|vestido|sapato|curso|plano|servi[cç]o|combo|embalagem|modelo\s+\w+)\b/i;
@@ -40,7 +47,10 @@ const PERIODO_HINT =
   /(de\s+\d{1,2}\s*[/\-]\s*\d{1,2}(?:\s+a\s+\d{1,2}\s*[/\-]\s*\d{1,2})?|at[eé]\s+\d{1,2}\s*[/\-]?\s*\d{1,2}|\d{1,2}\s*[/\-]\s*\d{1,2}(?:\s*[/\-]\s*\d{2,4})?|validade|v[aá]lido\s+at[eé]|enquanto\s+durar|at[eé]\s+domingo|at[eé]\s+s[aá]bado)/i;
 
 const FRASE_HINT =
-  /(frase\s+(na\s+)?(imagem|arte)|texto\s+na\s+(imagem|arte)|sem\s+texto|sem\s+frase|n[aã]o\s+quero\s+texto|frase\s+[«"][^»"]{2,40}[»"]|«[^»]{2,40}»)/i;
+  /(frase\s+(na\s+)?(imagem|arte)|texto\s+na\s+(imagem|arte)|sem\s+texto|sem\s+frase|n[aã]o\s+quero\s+texto|frase\s*:\s*[^\n,;]{2,}|texto\s*:\s*[^\n,;]{2,}|frase\s+[«"][^»"]{2,56}[»"]|«[^»]{2,56}»)/i;
+
+const SEM_FRASE_IMAGEM_HINT =
+  /\b(sem\s+texto|sem\s+frase|n[aã]o\s+quero\s+texto|sem\s+legenda\s+na\s+arte)\b/i;
 
 /**
  * @param {Array<{ role: string, content: string }>} history
@@ -54,34 +64,77 @@ function userTextFromHistory(history) {
 }
 
 /**
+ * @param {unknown} raw
+ * @returns {BriefingSlotId[]}
+ */
+function normalizeMissingSlots(raw) {
+  if (!Array.isArray(raw)) return [];
+  /** @type {BriefingSlotId[]} */
+  const out = [];
+  for (const item of raw) {
+    const id = String(item ?? "").trim();
+    if (VALID_SLOTS.has(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
  * @param {string} text
+ * @param {Record<string, unknown>} [proposal]
+ */
+function frasePreenchida(text, proposal = {}) {
+  if (SEM_FRASE_IMAGEM_HINT.test(text)) return true;
+  if (FRASE_HINT.test(text)) return true;
+  if (extractFraseFromUserText(text)) return true;
+  const fromProposal = normalizeFraseNaImagem(proposal.frase_na_imagem);
+  return Boolean(fromProposal);
+}
+
+/**
+ * @param {string} text
+ * @param {Record<string, unknown>} [proposal]
+ */
+function produtoPreenchido(text, proposal = {}) {
+  if (SEM_PRODUTO_HINT.test(text)) return true;
+  if (PRODUTO_HINT.test(text)) return true;
+  if (!PROMO_HINT.test(text)) {
+    if (INSTITUTIONAL_HINT.test(text)) return true;
+    const intent = String(proposal.intent_summary ?? "").trim();
+    if (intent.length >= 10) return true;
+  }
+  return false;
+}
+
+/**
+ * @param {string} text
+ * @param {Record<string, unknown>} [proposal]
  * @returns {Record<BriefingSlotId, boolean>}
  */
-export function detectFilledSlots(text) {
+export function detectFilledSlots(text, proposal = {}) {
   const t = String(text || "");
   const promo = PROMO_HINT.test(t);
-  const semProduto = SEM_PRODUTO_HINT.test(t);
 
   return {
-    produto: semProduto || PRODUTO_HINT.test(t) || !promo,
-    beneficio: BENEFICIO_HINT.test(t) || (!promo && /institucional/i.test(t)),
-    periodo: PERIODO_HINT.test(t) || (!promo && /institucional/i.test(t)),
-    frase_imagem: FRASE_HINT.test(t),
+    produto: produtoPreenchido(t, proposal),
+    beneficio: BENEFICIO_HINT.test(t) || (!promo && (INSTITUTIONAL_HINT.test(t) || produtoPreenchido(t, proposal))),
+    periodo: PERIODO_HINT.test(t) || (!promo && (INSTITUTIONAL_HINT.test(t) || produtoPreenchido(t, proposal))),
+    frase_imagem: frasePreenchida(t, proposal),
   };
 }
 
 /**
  * @param {Array<{ role: string, content: string }>} history
+ * @param {Record<string, unknown>} [proposal]
  * @returns {BriefingSlotId[]}
  */
-export function listMissingBriefingSlots(history) {
+export function listMissingBriefingSlots(history, proposal = {}) {
   const userText = userTextFromHistory(history);
   if (userText.length < 8) {
     return ["produto", "beneficio", "periodo", "frase_imagem"];
   }
 
   const promo = PROMO_HINT.test(userText);
-  const filled = detectFilledSlots(userText);
+  const filled = detectFilledSlots(userText, proposal);
   /** @type {BriefingSlotId[]} */
   const missing = [];
 
@@ -96,6 +149,26 @@ export function listMissingBriefingSlots(history) {
   }
 
   return missing;
+}
+
+/**
+ * @param {{
+ *   confirmation_message?: string,
+ *   post_context_proposal?: Record<string, unknown>,
+ *   briefing_status?: unknown,
+ *   missing_slots?: unknown,
+ * }} proposalOut
+ */
+function parseLlmBriefing(proposalOut) {
+  const root = proposalOut && typeof proposalOut === "object" ? proposalOut : {};
+  const nested =
+    root.post_context_proposal && typeof root.post_context_proposal === "object"
+      ? root.post_context_proposal
+      : {};
+  const status = String(root.briefing_status ?? nested.briefing_status ?? "").trim();
+  if (status !== "ready" && status !== "collecting") return null;
+  const missing = normalizeMissingSlots(root.missing_slots ?? nested.missing_slots);
+  return { status, missing };
 }
 
 /**
@@ -122,32 +195,83 @@ export function buildBriefingQuestionsMessage(missing, proposal) {
 }
 
 /**
+ * @param {string} msg
+ */
+function looksLikeNaturalBriefingQuestion(msg) {
+  const m = String(msg || "").trim();
+  if (m.length < 18) return false;
+  if (/^confira o resumo/i.test(m)) return false;
+  return /\?|qual |quais |me diga|preciso saber|falta/i.test(m);
+}
+
+/**
  * @param {Array<{ role: string, content: string }>} history
  * @param {{
  *   confirmation_message: string,
  *   post_context_proposal: Record<string, unknown>,
  *   links?: unknown[],
+ *   briefing_status?: unknown,
+ *   missing_slots?: unknown,
  * }} proposalOut
  */
 export function applyBriefingGate(history, proposalOut) {
-  const missing = listMissingBriefingSlots(history);
+  const root = proposalOut && typeof proposalOut === "object" ? proposalOut : {};
+  const proposal =
+    root.post_context_proposal && typeof root.post_context_proposal === "object"
+      ? { ...root.post_context_proposal }
+      : {};
 
-  if (missing.length === 0) {
+  const userText = userTextFromHistory(history);
+  const extracted = extractFraseFromUserText(userText);
+  if (extracted) {
+    proposal.frase_na_imagem = extracted;
+    if (!proposal.facts_for_image || typeof proposal.facts_for_image !== "object") {
+      proposal.facts_for_image = {};
+    }
+    proposal.facts_for_image.frase_na_imagem = extracted;
+  }
+
+  const regexMissing = listMissingBriefingSlots(history, proposal);
+  const llm = parseLlmBriefing(root);
+
+  let status = regexMissing.length === 0 ? "ready" : "collecting";
+  let finalMissing = regexMissing;
+
+  if (llm) {
+    if (llm.status === "ready" && regexMissing.length === 0) {
+      status = "ready";
+      finalMissing = [];
+    } else if (llm.status === "collecting") {
+      status = "collecting";
+      finalMissing = llm.missing.length ? llm.missing : regexMissing;
+    } else if (llm.status === "ready" && regexMissing.length > 0) {
+      status = "collecting";
+      finalMissing = regexMissing;
+    }
+  }
+
+  if (status === "ready") {
     return {
       briefing_status: "ready",
       missing_slots: [],
-      confirmation_message: proposalOut.confirmation_message,
-      post_context_proposal: proposalOut.post_context_proposal,
-      links: proposalOut.links,
+      confirmation_message: root.confirmation_message,
+      post_context_proposal: proposal,
+      links: root.links,
     };
   }
 
-  const questions = buildBriefingQuestionsMessage(missing, proposalOut.post_context_proposal);
+  const templated = buildBriefingQuestionsMessage(finalMissing, proposal);
+  const llmMsg = String(root.confirmation_message ?? "").trim();
+  const confirmation_message =
+    llm?.status === "collecting" && looksLikeNaturalBriefingQuestion(llmMsg)
+      ? llmMsg.slice(0, 900)
+      : templated || llmMsg;
+
   return {
     briefing_status: "collecting",
-    missing_slots: missing,
-    confirmation_message: questions || proposalOut.confirmation_message,
-    post_context_proposal: proposalOut.post_context_proposal,
-    links: proposalOut.links,
+    missing_slots: finalMissing,
+    confirmation_message,
+    post_context_proposal: proposal,
+    links: root.links,
   };
 }

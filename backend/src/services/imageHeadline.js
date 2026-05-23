@@ -6,6 +6,51 @@ const HIDDEN_USER_LINES = new Set([
   "gerar arte com contextos e fotos do painel.",
 ]);
 
+/** Mensagens automáticas do painel — não entram no pedido único. */
+const ASSISTANT_NOISE_PREFIXES = [
+  "preparando resumo",
+  "resumo do pedido para a arte",
+  "prévia da imagem gerada",
+  "não encontrei o resumo",
+  "falta só completar o pedido",
+];
+
+/**
+ * @param {string} role
+ * @param {string} content
+ */
+export function isPanelNoiseMessage(role, content) {
+  const t = String(content ?? "").trim().toLowerCase();
+  if (!t) return true;
+  if (role === "user") {
+    const norm = t.replace(/\s+/g, " ");
+    return HIDDEN_USER_LINES.has(norm);
+  }
+  if (role === "assistant") {
+    return ASSISTANT_NOISE_PREFIXES.some((p) => t.startsWith(p));
+  }
+  return false;
+}
+
+/**
+ * Pedido único para geração de imagem: proposta confirmada ou última mensagem real do cliente.
+ *
+ * @param {Record<string, unknown> | null | undefined} proposal
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {number} [maxLen]
+ */
+export function resolvePedidoCliente(proposal, history, maxLen = 720) {
+  const fromProposal =
+    proposal && typeof proposal === "object"
+      ? String(proposal.intent_summary ?? "").trim()
+      : "";
+  if (fromProposal) return fromProposal.slice(0, maxLen);
+
+  const recent = recentUserTexts(history, 1);
+  const t = recent.join(" ").trim();
+  return t ? t.slice(0, maxLen) : "";
+}
+
 const FOLLOWER_RE =
   /(\d{1,3}(?:[.,]\d{3})*|\d+)\s*(?:k|mil|m|milh[oõ]es?)?\s*(?:de\s+)?seguidores?|seguidores?\s*(?:no\s+)?(?:instagram|insta)?/i;
 
@@ -37,6 +82,26 @@ function parseFollowerMilestone(text) {
   if (/500\s*k|500\s*mil|500\.?000/.test(lower)) return "500k";
   if (/400\s*k|400\s*mil|400\.?000/.test(lower)) return "400k";
   if (/1\s*m|1\s*milh[aã]o|um\s+milh[aã]o/.test(lower)) return "1M";
+  return null;
+}
+
+/**
+ * Extrai frase explícita do pedido (ex.: "frase: TumaIA entende seu negócio").
+ * @param {string} text
+ */
+export function extractFraseFromUserText(text) {
+  const t = String(text || "");
+  const patterns = [
+    /frase\s*:\s*(.+?)(?:\s*[,;]|$)/i,
+    /texto\s+(?:na\s+)?(?:imagem|arte)\s*:\s*(.+?)(?:\s*[,;]|$)/i,
+    /frase\s+(?:na\s+)?(?:imagem|arte)\s*(?:é|seria|será)\s*[«"]?(.+?)[«"]?(?:\s*[,;]|$)/i,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    if (!m?.[1]) continue;
+    const n = normalizeFraseNaImagem(m[1]);
+    if (n) return n;
+  }
   return null;
 }
 
@@ -128,6 +193,9 @@ export function deriveFraseNaImagemFromHistory(history, contextoRows = []) {
     return normalizeFraseNaImagem("Feliz Dia das Mães!");
   }
   if (/natal|christmas/i.test(lower)) return normalizeFraseNaImagem("Feliz Natal!");
+
+  const explicit = extractFraseFromUserText(recent);
+  if (explicit) return explicit;
 
   return null;
 }

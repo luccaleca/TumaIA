@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildFluxImagePrompt, FLUX_IMAGE_PROMPT_MAX } from "../../backend/src/services/imagePreviewPrompt.js";
+import {
+  buildFluxImagePrompt,
+  buildRawImagePrompt,
+  FLUX_IMAGE_PROMPT_MAX,
+} from "../../backend/src/services/imagePreviewPrompt.js";
 import { sanitizePostSupplementLinks } from "../../backend/src/services/postContextProposalService.js";
 
 const CTX_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -49,12 +53,44 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
     };
     const prompt = buildFluxImagePrompt({
       history: [{ role: "user", content: "Quero um post comemorando 500 mil seguidores." }],
-      empresaRow: { nome_fantasia: "Loja Demo", descricao: "Moda" },
-      contextoRows: [{ id_contexto_empresa: CTX_ID, nome: "Data comemorativa", dados_json: { tipo: "data_comemorativa" } }],
+      contextoRows: [
+        {
+          nome: "Identidade da marca",
+          schema_json: { tipo: "identidade_marca" },
+          dados_json: {
+            tipo: "identidade_marca",
+            cor_primaria: "#00B341",
+            estilo_visual: "limpo, premium",
+            tom_voz: "confiante",
+          },
+        },
+        { id_contexto_empresa: CTX_ID, nome: "Data comemorativa", dados_json: { tipo: "data_comemorativa" } },
+      ],
       postContextProposal: proposal,
     });
-    assert.match(prompt, /Alinhamento confirmado/);
-    assert.match(prompt, /500k|500 mil|intent_summary/i);
-    assert.ok(prompt.length <= FLUX_IMAGE_PROMPT_MAX);
+    assert.match(prompt, /500k seguidores/i);
+    assert.doesNotMatch(prompt, /Brand identity|Client request/i);
+    assert.ok(prompt.length < 400, "pipeline raw = só pedido");
+  });
+
+  it("buildRawImagePrompt repete intent_summary", () => {
+    const p = buildRawImagePrompt(
+      [{ role: "user", content: "Post planos TumaIA" }],
+      { intent_summary: "Post planos Starter Pro Business" },
+    );
+    assert.equal(p, "Post planos Starter Pro Business");
+  });
+
+  it("modo full ainda monta seções longas", () => {
+    const prompt = buildFluxImagePrompt({
+      history: [{ role: "user", content: "Post institucional" }],
+      contextoRows: [],
+      postContextProposal: { intent_summary: "Post institucional" },
+      pipeline: "standard",
+      promptStyle: "full",
+      postContextProposal: { intent_summary: "Post institucional" },
+    });
+    assert.match(prompt, /Client request/);
+    assert.match(prompt, /Brand identity|Professional marketing/i);
   });
 });

@@ -5,10 +5,16 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
-import { shouldOfferPostContext } from "../../../lib/chatDeliveryUi";
+import {
+  detectImageGenerationIntent,
+  detectImageGenerationIntentFromHistory,
+} from "../../../lib/chatDeliveryUi";
 import { IDENTIDADE_CONTEXTO_NOME, isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
 import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
+import ChatArteBriefCard from "./ChatArteBriefCard";
+import ChatGeneratedImagePreview from "./ChatGeneratedImagePreview";
+import { arteBriefReady, emptyArteBrief, normalizeArteBrief } from "../../../lib/arteFormatPresets";
 import {
   CHAT_PEDIDO_AGUARDE_MSG,
   CHAT_PEDIDO_COLETANDO_INTRO,
@@ -18,8 +24,10 @@ import {
   patchMessageFrase,
 } from "./chatImageConfirmUtils";
 
-/** Alinhado ao polling do backend (~120s) + margem. */
-const IMAGE_PREVIEW_TIMEOUT_MS = 150_000;
+/** Alinhado a REPLICATE_GPT_IMAGE_TIMEOUT_MS no backend (300s) + margem. */
+const IMAGE_PREVIEW_TIMEOUT_MS = 310_000;
+/** Salvar conversa durante geração longa de imagem. */
+const SYNC_MENSAGENS_TIMEOUT_MS = 90_000;
 /** Chat com contextos + mídias no prompt (backend: 120s). */
 /** Painel imediato ~3s; com Llama no .env até ~32s + margem. */
 const POST_CONTEXT_TIMEOUT_MS = 55_000;
@@ -56,22 +64,32 @@ function shouldGenerateImagePreviewDirectly(text) {
 }
 
 /** Mensagem da IA que já tem resumo confirmável (evita pular confirmação com proposta antiga). */
-function findLatestConfirmedProposalAnchor(msgs) {
+function findLatestConfirmedProposalAnchor(msgs, arteDraft) {
   for (let i = msgs.length - 1; i >= 0; i--) {
     const m = msgs[i];
     if (m.role !== "assistant") continue;
     const sup = m.post_supplement;
     const proposal = sup?.post_context_proposal;
-    const confirmed =
+    const hasConfirmText =
       typeof sup?.confirmation_message === "string" && sup.confirmation_message.trim().length >= 8;
+    const hasImageAction = Array.isArray(m.ui_actions) && m.ui_actions.some((a) => a?.id === "confirm_generate_image");
+    const confirmed = hasConfirmText || hasImageAction;
     if (confirmed && proposal && typeof proposal === "object" && Object.keys(proposal).length > 0) {
       return {
-        proposal,
+        proposal: proposalWithArteDraft(proposal, arteDraft),
         supplement: sup,
         messageId: m.id,
         selected_contexto_id: m.selected_contexto_id,
       };
     }
+  }
+  if (arteDraft && arteBriefReady(arteDraft)) {
+    return {
+      proposal: proposalWithArteDraft({}, arteDraft),
+      supplement: null,
+      messageId: null,
+      selected_contexto_id: null,
+    };
   }
   return null;
 }
@@ -89,6 +107,12 @@ function normalizeSupplementLink(l) {
         ? `/painel/contextos?contexto=${encodeURIComponent(id)}`
         : `/painel/midias?midia=${encodeURIComponent(id)}`;
   return { kind, id, label, href };
+}
+
+function historyFromMessages(msgs) {
+  return msgs
+    .filter((m) => m && !m.hidden && !isHiddenUserMessage(m))
+    .map((m) => ({ role: m.role, content: messageConteudoForApi(m) }));
 }
 
 function findLatestImageProposalObject(msgs) {
@@ -137,7 +161,32 @@ function referenceMidiaIdsFromProposal(proposal, supplementLinks) {
   return ids.slice(0, 3);
 }
 
-function buildImagePreviewRequestBody({ history, empresaId, proposal, supplementLinks, focusContextoId }) {
+function aspectRatioForImageApi(brief) {
+  const r = String(brief?.formato?.ratio ?? "").trim();
+  const map = { "4:5": "2:3", "4:3": "3:2" };
+  const mapped = map[r] || r;
+  const allowed = new Set(["1:1", "16:9", "9:16", "3:2", "2:3"]);
+  return allowed.has(mapped) ? mapped : "1:1";
+}
+
+function proposalWithArteDraft(proposal, arteDraft) {
+  const base = proposal && typeof proposal === "object" ? { ...proposal } : {};
+  const draft = normalizeArteBrief(arteDraft);
+  const merged = normalizeArteBrief({
+    ...(base.arte_brief && typeof base.arte_brief === "object" ? base.arte_brief : {}),
+    ...draft,
+  });
+  return { ...base, arte_brief: merged, intent_summary: base.intent_summary || merged.tema };
+}
+
+function buildImagePreviewRequestBody({
+  history,
+  empresaId,
+  proposal,
+  supplementLinks,
+  focusContextoId,
+  arteDraft,
+}) {
   const reference_midia_ids = referenceMidiaIdsFromProposal(proposal, supplementLinks);
   const linksForApi = Array.isArray(supplementLinks)
     ? supplementLinks
@@ -149,12 +198,18 @@ function buildImagePreviewRequestBody({ history, empresaId, proposal, supplement
     focusContextoId && UUID_RE.test(String(focusContextoId).trim())
       ? String(focusContextoId).trim()
       : null;
+  const prop =
+    proposal && typeof proposal === "object" && Object.keys(proposal).length
+      ? proposalWithArteDraft(proposal, arteDraft)
+      : arteDraft
+        ? proposalWithArteDraft({}, arteDraft)
+        : null;
+  const aspect = prop?.arte_brief ? aspectRatioForImageApi(prop.arte_brief) : null;
   return {
     history,
     id_empresa: empresaId,
-    ...(proposal && typeof proposal === "object" && Object.keys(proposal).length
-      ? { post_context_proposal: proposal }
-      : {}),
+    ...(prop && Object.keys(prop).length ? { post_context_proposal: prop } : {}),
+    ...(aspect ? { aspect_ratio: aspect } : {}),
     ...(linksForApi.length ? { post_supplement_links: linksForApi } : {}),
     ...(reference_midia_ids.length ? { reference_midia_ids } : {}),
     ...(focus ? { focus_contexto_id: focus } : {}),
@@ -164,34 +219,35 @@ function buildImagePreviewRequestBody({ history, empresaId, proposal, supplement
 function buildImageContextNote(cg) {
   if (!cg || typeof cg !== "object") return "";
   const lines = [];
+  const pedido =
+    typeof cg.pedido_resumo === "string" && cg.pedido_resumo.trim()
+      ? cg.pedido_resumo.trim()
+      : null;
+  if (pedido) {
+    const curto = pedido.length > 120 ? `${pedido.slice(0, 119)}…` : pedido;
+    lines.push(`Pedido: ${curto}`);
+  }
   const frase =
     typeof cg.frase_na_imagem === "string" && cg.frase_na_imagem.trim()
       ? cg.frase_na_imagem.trim()
       : null;
   if (frase) lines.push(`Frase na imagem: «${frase}»`);
-  const nomes = Array.isArray(cg.contextos)
-    ? cg.contextos
-        .map((c) => (c && typeof c.nome === "string" ? c.nome.trim() : ""))
-        .filter(Boolean)
-        .filter((nome) => nome.toLowerCase() !== IDENTIDADE_CONTEXTO_NOME.toLowerCase())
-    : [];
-  const n = nomes.length;
-  if (n > 0) {
-    const lista = nomes.slice(0, 3).join(", ");
-    const mais = nomes.length > 3 ? "…" : "";
-    lines.push(`Contexto: ${lista}${mais}`);
-  }
   return lines.length ? `\n\n(${lines.join(" · ")})` : "";
 }
 
-function imagePreviewSuccessLine(urls) {
+function imagePreviewSuccessLine(urls, model) {
+  const modelLabel = typeof model === "string" && model.trim() ? ` (${model.trim()})` : "";
   return urls.length > 0
-    ? "Prévia da imagem (o link pode expirar depois de um tempo):"
+    ? `Prévia da imagem${modelLabel} — o link pode expirar depois de um tempo:`
     : "A geração terminou sem imagem. Tente de novo ou ajuste o pedido no chat.";
 }
 
 function lastConversaStorageKey(empresaId) {
   return `tuma_chat_last_conversa_${empresaId || "none"}`;
+}
+
+function arteBriefStorageKey(empresaId) {
+  return `tuma_arte_brief_${empresaId || "none"}`;
 }
 
 function fromApiMensagem(m) {
@@ -245,6 +301,16 @@ function fromApiMensagem(m) {
           ? { missing_slots: post_supplementRaw.missing_slots }
           : {}),
       };
+    } else if (
+      post_supplementRaw.post_context_proposal?.arte_brief &&
+      typeof post_supplementRaw.post_context_proposal.arte_brief === "object"
+    ) {
+      post_supplement = {
+        confirmation_message: String(post_supplementRaw.confirmation_message ?? "").trim(),
+        links: [],
+        post_context_proposal: post_supplementRaw.post_context_proposal,
+        ...(post_supplementRaw.briefing_status ? { briefing_status: post_supplementRaw.briefing_status } : {}),
+      };
     }
   }
   const post_context_proposal =
@@ -275,14 +341,32 @@ function fromApiMensagem(m) {
   return out;
 }
 
+function messageConteudoForApi(m) {
+  const raw = String(m?.content ?? "").trim();
+  if (raw) return raw;
+  const sup =
+    m?.post_supplement &&
+    typeof m.post_supplement.confirmation_message === "string" &&
+    m.post_supplement.confirmation_message.trim();
+  if (sup) return sup.slice(0, 50000);
+  if (Array.isArray(m?.image_urls) && m.image_urls.length) {
+    return "Prévia da imagem gerada.";
+  }
+  return "—";
+}
+
 function toApiMensagens(messages) {
   return messages.map((m) => {
     const meta = {};
     if (m.sources && m.sources.length) meta.sources = m.sources;
     if (m.ui_actions && m.ui_actions.length) meta.ui_actions = m.ui_actions;
     if (m.image_urls && m.image_urls.length) meta.image_urls = m.image_urls;
-    if (m.post_supplement && typeof m.post_supplement === "object" && m.post_supplement.confirmation_message) {
-      meta.post_supplement = m.post_supplement;
+    if (m.post_supplement && typeof m.post_supplement === "object") {
+      const hasConfirm =
+        typeof m.post_supplement.confirmation_message === "string" &&
+        m.post_supplement.confirmation_message.trim();
+      const hasBrief = m.post_supplement.post_context_proposal?.arte_brief;
+      if (hasConfirm || hasBrief) meta.post_supplement = m.post_supplement;
     }
     if (m.post_context_proposal && typeof m.post_context_proposal === "object" && Object.keys(m.post_context_proposal).length > 0) {
       meta.post_context_proposal = m.post_context_proposal;
@@ -293,7 +377,7 @@ function toApiMensagens(messages) {
     }
     return {
       papel: m.role,
-      conteudo: m.content,
+      conteudo: messageConteudoForApi(m),
       metadados_json: Object.keys(meta).length ? meta : null,
     };
   });
@@ -364,15 +448,29 @@ export default function PainelChatPage() {
   const [actionBusy, setActionBusy] = useState(null);
   /** Mensagem da IA aguardando `POST /ia/post-context-proposal`. */
   const [postContextLoadingId, setPostContextLoadingId] = useState(null);
+  /** Resposta do Llama após a qual a Replicate está gerando a imagem (pipeline raw). */
+  const [imageGeneratingAfterId, setImageGeneratingAfterId] = useState(null);
   const [contextosCampanha, setContextosCampanha] = useState([]);
+  const [arteBriefDraft, setArteBriefDraft] = useState(() => emptyArteBrief());
+  const [brandColors, setBrandColors] = useState([]);
+  const [arteBriefLoading, setArteBriefLoading] = useState(false);
   const messagesRef = useRef(messages);
+  const arteBriefDraftRef = useRef(arteBriefDraft);
 
-  const chatBusy = sending || !!actionBusy || !!postContextLoadingId;
+  useEffect(() => {
+    arteBriefDraftRef.current = arteBriefDraft;
+  }, [arteBriefDraft]);
+
+  const chatBusy = sending || !!actionBusy || !!postContextLoadingId || !!imageGeneratingAfterId;
   const busyStatusLabel = actionBusy
-    ? "Gerando prévia da imagem"
+    ? actionBusy === "image:auto"
+      ? "Gerando imagem"
+      : "Gerando prévia da imagem"
     : postContextLoadingId
       ? "Preparando resumo para a imagem"
-      : null;
+      : imageGeneratingAfterId
+        ? "Gerando imagem"
+        : null;
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -459,6 +557,46 @@ export default function PainelChatPage() {
     };
   }, [empresaId]);
 
+  const loadArteBriefDefaults = useCallback(async () => {
+    if (!empresaId) return;
+    setArteBriefLoading(true);
+    try {
+      let stored = null;
+      try {
+        const raw = sessionStorage.getItem(arteBriefStorageKey(empresaId));
+        if (raw) stored = JSON.parse(raw);
+      } catch {
+        /* ignore */
+      }
+      const r = await authApiFetchWithToken(
+        `/ia/arte-brief-defaults?id_empresa=${encodeURIComponent(empresaId)}`,
+      );
+      if (r.ok && !r.networkError) {
+        const colors = Array.isArray(r.json?.brand_colors) ? r.json.brand_colors : [];
+        setBrandColors(colors);
+        const base = normalizeArteBrief(r.json?.arte_brief, colors);
+        setArteBriefDraft(stored ? normalizeArteBrief(stored, colors) : base);
+      } else if (stored) {
+        setArteBriefDraft(normalizeArteBrief(stored));
+      }
+    } finally {
+      setArteBriefLoading(false);
+    }
+  }, [empresaId]);
+
+  useEffect(() => {
+    void loadArteBriefDefaults();
+  }, [loadArteBriefDefaults]);
+
+  function persistArteBriefDraft(brief) {
+    if (!empresaId || typeof window === "undefined") return;
+    try {
+      sessionStorage.setItem(arteBriefStorageKey(empresaId), JSON.stringify(brief));
+    } catch {
+      /* ignore */
+    }
+  }
+
   const loadListaConversas = useCallback(async () => {
     if (!empresaId) return;
     setLoadingList(true);
@@ -486,6 +624,14 @@ export default function PainelChatPage() {
       const raw = Array.isArray(r.json?.mensagens) ? r.json.mensagens : [];
       const mapped = raw.map(fromApiMensagem).filter(Boolean);
       setMessages(mapped);
+      for (let i = mapped.length - 1; i >= 0; i--) {
+        const ab = mapped[i]?.post_supplement?.post_context_proposal?.arte_brief;
+        if (ab && typeof ab === "object") {
+          setArteBriefDraft(normalizeArteBrief(ab, brandColors));
+          persistArteBriefDraft(normalizeArteBrief(ab, brandColors));
+          break;
+        }
+      }
       setConversaId(id);
       if (options.remember && empresaId && typeof window !== "undefined") {
         try {
@@ -495,7 +641,7 @@ export default function PainelChatPage() {
         }
       }
     },
-    [empresaId],
+    [empresaId, brandColors],
   );
 
   useEffect(() => {
@@ -539,6 +685,7 @@ export default function PainelChatPage() {
       const put = await authApiFetchWithToken(`/chat/conversas/${encodeURIComponent(chatId)}/mensagens`, {
         method: "PUT",
         body: JSON.stringify({ mensagens: toApiMensagens(lista) }),
+        timeoutMs: SYNC_MENSAGENS_TIMEOUT_MS,
       });
       if (!put.ok || put.networkError) {
         showErr(put.networkError?.message || formatAuthError(put.json) || "Não foi possível salvar a conversa.");
@@ -548,6 +695,49 @@ export default function PainelChatPage() {
       return true;
     },
     [loadListaConversas],
+  );
+
+  const invokeImagePreview = useCallback(
+    async function invokeImagePreviewFn({ msgs, proposal, supplementLinks, focusContextoId }) {
+      if (!empresaId) return { ok: false, error: "Empresa não selecionada." };
+      const historyFull = historyFromMessages(msgs);
+      if (!historyFull.length) return { ok: false, error: "Histórico vazio para gerar a imagem." };
+      const prop =
+        proposal && typeof proposal === "object" && Object.keys(proposal).length > 0
+          ? proposal
+          : findLatestImageProposalObject(msgs) || {};
+      const result = await authApiFetchWithToken("/ia/image-preview", {
+        method: "POST",
+        body: JSON.stringify(
+          buildImagePreviewRequestBody({
+            history: historyFull,
+            empresaId,
+            proposal: prop,
+            supplementLinks: supplementLinks || [],
+            focusContextoId,
+            arteDraft: arteBriefDraftRef.current,
+          }),
+        ),
+        timeoutMs: IMAGE_PREVIEW_TIMEOUT_MS,
+        timeoutLabel: "image-preview",
+      });
+      if (!result.ok || result.networkError) {
+        const msg =
+          result.networkError?.message ||
+          result.json?.error ||
+          "Não foi possível gerar a imagem agora.";
+        const errText = typeof msg === "string" ? msg : formatAuthError(result.json) || "Erro desconhecido.";
+        return { ok: false, error: String(errText) };
+      }
+      const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
+      return {
+        ok: true,
+        urls,
+        model: result.json?.model,
+        contexto: result.json?.contexto_geracao,
+      };
+    },
+    [empresaId],
   );
 
   const attachPostContextSupplement = useCallback(
@@ -560,6 +750,7 @@ export default function PainelChatPage() {
           body: JSON.stringify({
             history: historyForProposal,
             id_empresa: empresaId,
+            arte_brief: arteBriefDraftRef.current,
           }),
           timeoutMs: POST_CONTEXT_TIMEOUT_MS,
           timeoutLabel: "post-context",
@@ -581,6 +772,7 @@ export default function PainelChatPage() {
           return;
         }
         const rawSup = prop.json;
+        const isRawPipeline = rawSup?.meta?.pipeline === "raw";
         const proposalFromApi =
           rawSup?.post_context_proposal && typeof rawSup.post_context_proposal === "object"
             ? rawSup.post_context_proposal
@@ -590,10 +782,23 @@ export default function PainelChatPage() {
         const briefingStatus =
           rawSup?.briefing_status === "collecting" ? "collecting" : "ready";
         const collecting = briefingStatus === "collecting";
+        if (proposalFromApi.arte_brief && typeof proposalFromApi.arte_brief === "object") {
+          const merged = normalizeArteBrief(proposalFromApi.arte_brief, brandColors);
+          setArteBriefDraft(merged);
+          persistArteBriefDraft(merged);
+        }
+
+        const hasArteBrief = Boolean(proposalFromApi.arte_brief);
         const post_supplement =
-          rawSup && (confirmFromApi.length >= 8 || Object.keys(proposalFromApi).length > 0)
+          rawSup && (hasArteBrief || confirmFromApi.length >= 8 || Object.keys(proposalFromApi).length > 0)
             ? {
-                confirmation_message: confirmFromApi.length >= 8 ? confirmFromApi : CHAT_PEDIDO_RESUMO_MSG,
+                confirmation_message: isRawPipeline
+                  ? hasArteBrief
+                    ? "Resumo da arte atualizado."
+                    : ""
+                  : confirmFromApi.length >= 8
+                    ? confirmFromApi
+                    : CHAT_PEDIDO_RESUMO_MSG,
                 links: Array.isArray(rawSup.links)
                   ? rawSup.links.map(normalizeSupplementLink).filter(Boolean)
                   : [],
@@ -639,11 +844,18 @@ export default function PainelChatPage() {
         }
 
         setMessages((prev) => {
+          const anchorPrev = prev.find((m) => m.id === assistantMessageId);
+          const keepContent =
+            anchorPrev && typeof anchorPrev.content === "string" && anchorPrev.content.trim()
+              ? anchorPrev.content
+              : collecting
+                ? CHAT_PEDIDO_COLETANDO_INTRO
+                : CHAT_PEDIDO_RESUMO_MSG;
           let next = prev.map((m) =>
             m.id === assistantMessageId
               ? {
                   ...m,
-                  content: collecting ? CHAT_PEDIDO_COLETANDO_INTRO : CHAT_PEDIDO_RESUMO_MSG,
+                  content: collecting ? CHAT_PEDIDO_COLETANDO_INTRO : keepContent,
                   post_supplement,
                   ui_actions: collecting ? undefined : ui_actions.length ? ui_actions : undefined,
                   ...(selectedId && UUID_RE.test(selectedId) ? { selected_contexto_id: selectedId } : {}),
@@ -677,7 +889,7 @@ export default function PainelChatPage() {
         setPostContextLoadingId(null);
       }
     },
-    [empresaId, syncMensagens, contextosCampanha],
+    [empresaId, syncMensagens, contextosCampanha, brandColors],
   );
 
   const onConfirmContextoChange = useCallback(
@@ -710,6 +922,10 @@ export default function PainelChatPage() {
       const idChat = conversaId;
       if (!idChat || !empresaId || sending || actionBusy) return;
       if (actionId !== "confirm_generate_image") return;
+      if (!arteBriefReady(arteBriefDraftRef.current)) {
+        showErr("Preencha o tema no resumo da arte (no topo do chat) antes de gerar.");
+        return;
+      }
 
       if (
         typeof window !== "undefined" &&
@@ -719,6 +935,7 @@ export default function PainelChatPage() {
       }
 
       setActionBusy(`${fromAssistantMessageId}:${actionId}`);
+      setImageGeneratingAfterId(fromAssistantMessageId);
       setSending(true);
       const prev = messagesRef.current;
       const cleared = prev.map((m) =>
@@ -735,20 +952,30 @@ export default function PainelChatPage() {
         return;
       }
 
-      const historyFull = msgsWithUser.map((m) => ({ role: m.role, content: m.content }));
-
       try {
         const anchor = msgsWithUser.find((m) => m.id === fromAssistantMessageId);
         const supplement = anchor?.post_supplement;
         const proposal =
-          supplement?.post_context_proposal || anchor?.post_context_proposal;
+          supplement?.post_context_proposal ||
+          anchor?.post_context_proposal ||
+          findLatestImageProposalObject(msgsWithUser) ||
+          {};
         const supplementLinks = Array.isArray(supplement?.links) ? supplement.links : [];
-        if (!proposal || typeof proposal !== "object" || !Object.keys(proposal).length) {
+        const focusContextoId =
+          anchor?.selected_contexto_id ||
+          proposal?.matched_contexto?.id_contexto_empresa ||
+          null;
+        const out = await invokeImagePreview({
+          msgs: msgsWithUser,
+          proposal,
+          supplementLinks,
+          focusContextoId,
+        });
+        if (!out.ok) {
           const errBubble = {
             id: crypto.randomUUID(),
             role: "assistant",
-            content:
-              "Não encontrei o resumo desta arte. Descreva de novo o que você quer publicar.",
+            content: out.error || "Não foi possível gerar a prévia agora.",
             sources: [],
           };
           const comErro = [...msgsWithUser, errBubble];
@@ -756,44 +983,13 @@ export default function PainelChatPage() {
           await syncMensagens(idChat, comErro);
           return;
         }
-        const focusContextoId =
-          anchor?.selected_contexto_id ||
-          proposal?.matched_contexto?.id_contexto_empresa ||
-          null;
-        const result = await authApiFetchWithToken("/ia/image-preview", {
-          method: "POST",
-          body: JSON.stringify(
-            buildImagePreviewRequestBody({
-              history: historyFull,
-              empresaId,
-              proposal,
-              supplementLinks,
-              focusContextoId,
-            }),
-          ),
-          timeoutMs: IMAGE_PREVIEW_TIMEOUT_MS,
-        });
-        if (!result.ok || result.networkError) {
-          const msg =
-            result.networkError?.message ||
-            result.json?.error ||
-            "Não foi possível gerar a prévia agora.";
-          const errText = typeof msg === "string" ? msg : formatAuthError(result.json) || "Erro desconhecido.";
-          const errBubble = { id: crypto.randomUUID(), role: "assistant", content: String(errText), sources: [] };
-          const comErro = [...msgsWithUser, errBubble];
-          setMessages(comErro);
-          await syncMensagens(idChat, comErro);
-          return;
-        }
-        const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
-        const cg = result.json?.contexto_geracao;
-        const contextoLinha = buildImageContextNote(cg);
+        const contextoLinha = buildImageContextNote(out.contexto);
         const assistantFollowUp = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: imagePreviewSuccessLine(urls) + contextoLinha,
+          content: imagePreviewSuccessLine(out.urls, out.model) + contextoLinha,
           sources: [],
-          image_urls: urls.length ? urls : undefined,
+          image_urls: out.urls.length ? out.urls : undefined,
         };
         const finalMsgs = [...msgsWithUser, assistantFollowUp];
         setMessages(finalMsgs);
@@ -809,11 +1005,12 @@ export default function PainelChatPage() {
         setMessages(comErro);
         await syncMensagens(idChat, comErro);
       } finally {
+        setImageGeneratingAfterId(null);
         setActionBusy(null);
         setSending(false);
       }
     },
-    [conversaId, empresaId, sending, actionBusy, syncMensagens],
+    [conversaId, empresaId, sending, actionBusy, syncMensagens, invokeImagePreview],
   );
 
   const onSubmit = useCallback(
@@ -827,6 +1024,13 @@ export default function PainelChatPage() {
       setInput("");
       setSending(true);
       setMessages(msgsComUsuario);
+      setArteBriefDraft((prev) => {
+        const next = { ...prev };
+        if (!String(next.tema ?? "").trim()) next.tema = question.slice(0, 200);
+        const merged = normalizeArteBrief(next, brandColors);
+        persistArteBriefDraft(merged);
+        return merged;
+      });
 
       let idChat = conversaId;
       if (!idChat) {
@@ -862,7 +1066,7 @@ export default function PainelChatPage() {
         return;
       }
 
-      const confirmAnchor = findLatestConfirmedProposalAnchor(msgsComUsuario);
+      const confirmAnchor = findLatestConfirmedProposalAnchor(msgsComUsuario, arteBriefDraftRef.current);
       if (shouldGenerateImagePreviewDirectly(question) && confirmAnchor) {
         const latestProposal = confirmAnchor.proposal;
         if (
@@ -872,51 +1076,45 @@ export default function PainelChatPage() {
           setSending(false);
           return;
         }
+        setImageGeneratingAfterId(confirmAnchor.messageId);
         const latestLinks = Array.isArray(confirmAnchor.supplement?.links)
           ? confirmAnchor.supplement.links
           : [];
-        const imgRes = await authApiFetchWithToken("/ia/image-preview", {
-          method: "POST",
-          body: JSON.stringify(
-            buildImagePreviewRequestBody({
-              history: msgsComUsuario.map((m) => ({ role: m.role, content: m.content })),
-              empresaId,
-              proposal: latestProposal,
-              supplementLinks: latestLinks,
-              focusContextoId:
-                confirmAnchor.selected_contexto_id ||
-                latestProposal?.matched_contexto?.id_contexto_empresa,
-            }),
-          ),
-          timeoutMs: IMAGE_PREVIEW_TIMEOUT_MS,
+        const out = await invokeImagePreview({
+          msgs: msgsComUsuario,
+          proposal: latestProposal,
+          supplementLinks: latestLinks,
+          focusContextoId:
+            confirmAnchor.selected_contexto_id ||
+            latestProposal?.matched_contexto?.id_contexto_empresa,
         });
-        if (!imgRes.ok || imgRes.networkError) {
-          const msg =
-            imgRes.networkError?.message ||
-            imgRes.json?.error ||
-            "Não foi possível gerar a prévia agora.";
-          const errText = typeof msg === "string" ? msg : formatAuthError(imgRes.json) || "Erro desconhecido.";
-          const errBubble = { id: crypto.randomUUID(), role: "assistant", content: String(errText), sources: [] };
+        if (!out.ok) {
+          const errBubble = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: out.error || "Não foi possível gerar a prévia agora.",
+            sources: [],
+          };
           const comErro = [...msgsComUsuario, errBubble];
           setMessages(comErro);
           await syncMensagens(idChat, comErro);
           setSending(false);
+          setImageGeneratingAfterId(null);
           return;
         }
-        const urls = Array.isArray(imgRes.json?.image_urls) ? imgRes.json.image_urls.filter(Boolean) : [];
-        const cg = imgRes.json?.contexto_geracao;
-        const contextoLinha = buildImageContextNote(cg);
+        const contextoLinha = buildImageContextNote(out.contexto);
         const assistantFollowUp = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: imagePreviewSuccessLine(urls) + contextoLinha,
+          content: imagePreviewSuccessLine(out.urls, out.model) + contextoLinha,
           sources: [],
-          image_urls: urls.length ? urls : undefined,
+          image_urls: out.urls.length ? out.urls : undefined,
         };
         const finalMsgs = [...msgsComUsuario, assistantFollowUp];
         setMessages(finalMsgs);
         await syncMensagens(idChat, finalMsgs);
         setSending(false);
+        setImageGeneratingAfterId(null);
         return;
       }
 
@@ -988,14 +1186,16 @@ export default function PainelChatPage() {
               a.label.trim(),
           )
         : [];
-      const needsPostContext =
-        !post_supplement &&
-        (Boolean(result.json?.offer_post_context) || shouldOfferPostContext(question));
+      const routeImage =
+        Boolean(result.json?.route_image_generation) ||
+        Boolean(result.json?.offer_post_context) ||
+        detectImageGenerationIntentFromHistory(historyForApi, question) ||
+        detectImageGenerationIntent(answer);
 
       const assistantMsg = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: needsPostContext ? CHAT_PEDIDO_AGUARDE_MSG : answer,
+        content: answer,
         sources,
         post_supplement,
         ui_actions: ui_actions.length ? ui_actions : undefined,
@@ -1004,7 +1204,7 @@ export default function PainelChatPage() {
       setMessages(finalMsgs);
       await syncMensagens(idChat, finalMsgs);
       setSending(false);
-      if (needsPostContext && empresaId) {
+      if (routeImage && empresaId && !post_supplement) {
         const historyForProposal = finalMsgs.map((m) => ({ role: m.role, content: m.content }));
         void attachPostContextSupplement(idChat, assistantMsg.id, historyForProposal);
       }
@@ -1018,6 +1218,7 @@ export default function PainelChatPage() {
       historyForApi,
       syncMensagens,
       attachPostContextSupplement,
+      invokeImagePreview,
     ],
   );
 
@@ -1284,6 +1485,28 @@ export default function PainelChatPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 py-3 md:px-4 md:py-4">
             <div className="space-y-4">
+              {empresaId ? (
+                <div className="mb-2">
+                  {arteBriefLoading ? (
+                    <div className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-sm text-muted-foreground">
+                      Carregando formato e cores…
+                    </div>
+                  ) : (
+                    <ChatArteBriefCard
+                      brief={arteBriefDraft}
+                      brandColors={brandColors}
+                      disabled={chatBusy}
+                      onBriefChange={(b) => {
+                        const next = normalizeArteBrief(b, brandColors);
+                        setArteBriefDraft(next);
+                        persistArteBriefDraft(next);
+                      }}
+                      onSave={() => persistArteBriefDraft(arteBriefDraftRef.current)}
+                    />
+                  )}
+                </div>
+              ) : null}
+
               {messages.length === 0 && empresaId ? (
                 <p className="text-center text-sm text-muted-foreground">Digite abaixo para começar.</p>
               ) : null}
@@ -1309,6 +1532,9 @@ export default function PainelChatPage() {
                     ? message.post_supplement.confirmation_message.trim()
                     : "";
                 const hasSupplement = Boolean(supplementMsg);
+                const hasArteBrief =
+                  message.post_supplement?.post_context_proposal?.arte_brief &&
+                  typeof message.post_supplement.post_context_proposal.arte_brief === "object";
 
                 return (
                   <article key={message.id} className="flex items-start gap-3">
@@ -1332,7 +1558,12 @@ export default function PainelChatPage() {
                           Preparando o resumo…
                         </div>
                       ) : null}
-                      {hasSupplement ? (
+                      {imageGeneratingAfterId === message.id ? (
+                        <div className="mt-3 rounded-xl border border-dashed border-accent/40 bg-accent-muted/15 px-3 py-2.5 text-sm text-muted-foreground">
+                          Gerando imagem (pode levar alguns minutos)…
+                        </div>
+                      ) : null}
+                      {hasSupplement && !hasArteBrief ? (
                         <ChatImageConfirmBlock
                           supplement={message.post_supplement}
                           collecting={message.post_supplement?.briefing_status === "collecting"}
@@ -1351,18 +1582,13 @@ export default function PainelChatPage() {
                           disabled={!!actionBusy || sending}
                         />
                       ) : null}
+                      {hasArteBrief && supplementMsg ? (
+                        <p className="mt-2 text-xs text-muted-foreground">{supplementMsg}</p>
+                      ) : null}
                       {hasImages ? (
                         <div className="mt-3 space-y-2">
-                          {message.image_urls.map((url) => (
-                            <a
-                              key={url}
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="block overflow-hidden rounded-xl border border-border bg-muted/30"
-                            >
-                              <img src={url} alt="Prévia gerada" className="max-h-72 w-full object-contain" />
-                            </a>
+                          {message.image_urls.map((url, imgIdx) => (
+                            <ChatGeneratedImagePreview key={url} url={url} index={imgIdx} />
                           ))}
                         </div>
                       ) : null}

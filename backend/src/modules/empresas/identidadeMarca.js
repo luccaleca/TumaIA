@@ -245,6 +245,28 @@ export function formatBrandIdentityBlockForFlux(dados, maxLen = 420) {
 }
 
 /**
+ * Identidade resumida para modelos de imagem (poucas palavras + hex).
+ * @param {Record<string, unknown> | null} dados
+ * @param {number} maxLen
+ */
+export function formatBrandIdentityCompact(dados, maxLen = 140) {
+  const d = normalizeIdentidadeDados(dados || {});
+  const cores = allBrandColorsFromIdentidade(d).slice(0, 5);
+  const styleRaw = String(d.estilo_visual ?? "")
+    .split(/[,;]/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join(", ");
+  const parts = [];
+  if (cores.length) parts.push(`colors ${cores.join(" ")}`);
+  if (styleRaw) parts.push(styleRaw.slice(0, 72));
+  let s = parts.join(", ");
+  if (s.length > maxLen) s = `${s.slice(0, maxLen - 1)}…`;
+  return s.trim();
+}
+
+/**
  * @param {Array<Record<string, unknown>>} contextoRows
  */
 export function partitionContextosIdentidade(contextoRows) {

@@ -7,10 +7,20 @@ import {
   loadEmpresaResumoParaImagem,
   loadMidiasEmpresaResumo,
 } from "./imagePreviewPrompt.js";
-import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
-import { deriveFraseNaImagemFromHistory, normalizeFraseNaImagem } from "./imageHeadline.js";
+import {
+  allBrandColorsFromIdentidade,
+  formatBrandIdentityBlockForFlux,
+  partitionContextosIdentidade,
+} from "../modules/empresas/identidadeMarca.js";
+import {
+  deriveFraseNaImagemFromHistory,
+  isPanelNoiseMessage,
+  normalizeFraseNaImagem,
+  resolvePedidoCliente,
+} from "./imageHeadline.js";
 import { pickBestProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
-import { applyBriefingGate } from "./postBriefingSlots.js";
+import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
+import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
 
 const linkItemSchema = z.object({
   kind: z.enum(["contexto", "midia"]),
@@ -78,6 +88,13 @@ function coerceProposalParsed(parsed, contextoRows, midiaRows) {
   if (frase) {
     out.post_context_proposal.frase_na_imagem = frase;
   }
+  const bs = String(out.briefing_status ?? "").trim();
+  if (bs === "ready" || bs === "collecting") {
+    out.briefing_status = bs;
+  }
+  if (Array.isArray(out.missing_slots)) {
+    out.missing_slots = out.missing_slots.map((s) => String(s ?? "").trim()).filter(Boolean);
+  }
   return out;
 }
 
@@ -118,34 +135,33 @@ export function sanitizePostSupplementLinks(raw, contextoRows, midiaRows) {
 
 function formatHistoryForPrompt(history) {
   const tail = history.slice(-8);
-  return tail
-    .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${String(m.content).slice(0, 1200)}`)
-    .join("\n---\n");
+  const lines = [];
+  for (const m of tail) {
+    const role = m.role === "user" ? "Cliente" : "Assistente";
+    const content = String(m.content ?? "").trim();
+    if (isPanelNoiseMessage(m.role, content)) continue;
+    lines.push(`${role}: ${content.slice(0, 1200)}`);
+  }
+  return lines.length ? lines.join("\n---\n") : "(sem mensagens úteis no histórico)";
 }
 
-function formatContextosForLlm(rows) {
-  if (!rows.length) return "(nenhum contexto ativo no painel)";
+function formatIdentidadeForLlm(rows) {
+  const { identidadeDados } = partitionContextosIdentidade(rows);
+  if (!identidadeDados) return "(identidade da marca não configurada no painel)";
+  return formatBrandIdentityBlockForFlux(identidadeDados, 640);
+}
+
+/** Campanhas só para escolher matched_contexto / links — sem JSON pesado. */
+function formatCampanhaResumoForLlm(rows) {
   const { campanhaRows } = partitionContextosIdentidade(rows);
-  const list = campanhaRows.length ? campanhaRows : rows;
-  return list
-    .slice(0, 10)
+  if (!campanhaRows.length) return "(nenhuma campanha ativa)";
+  return campanhaRows
+    .slice(0, 8)
     .map((r, i) => {
       const id = r.id_contexto_empresa ?? `idx-${i}`;
       const nome = String(r.nome ?? "").trim() || "(sem nome)";
       const desc = String(r.descricao ?? "").trim();
-      let dados = "";
-      try {
-        dados = JSON.stringify(r.dados_json ?? {}).slice(0, 380);
-      } catch {
-        dados = "{}";
-      }
-      let schema = "";
-      try {
-        schema = JSON.stringify(r.schema_json ?? {}).slice(0, 400);
-      } catch {
-        schema = "{}";
-      }
-      return `### contexto_id=${id}\nnome: ${nome}\ndescricao: ${desc.slice(0, 600)}\nschema_json: ${schema}\ndados_json: ${dados}`;
+      return `### contexto_id=${id}\nnome: ${nome}\ndescricao: ${desc.slice(0, 400)}`;
     })
     .join("\n\n");
 }
@@ -230,11 +246,16 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
         },
       ]
     : [];
+  const intent = lastUser ? String(lastUser.content).trim().slice(0, 500) : "";
+  const missing = listMissingBriefingSlots(history, { intent_summary: intent, frase_na_imagem: frase });
+
   return {
     confirmation_message,
+    briefing_status: missing.length ? "collecting" : "ready",
+    missing_slots: missing,
     links,
     post_context_proposal: {
-      intent_summary: lastUser ? String(lastUser.content).trim().slice(0, 500) : "",
+      intent_summary: intent,
       matched_contexto: ctx
         ? {
             id_contexto_empresa: String(ctx.id_contexto_empresa ?? "").trim() || null,
@@ -283,6 +304,46 @@ async function llamaGenerateJson(promptUser) {
 }
 
 /**
+ * Pipeline cru: sem Llama nem regras de briefing — só repassa o pedido para GPT Image 2.
+ *
+ * @param {Array<{ role: string, content: string }>} history
+ */
+/**
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {string[]} brandColors
+ * @param {Record<string, unknown> | null} [existingBrief]
+ */
+function buildRawPostContextProposal(history, brandColors = [], existingBrief = null) {
+  const intent = resolvePedidoCliente(null, history, 2000);
+  const extracted = buildArteBriefFromHistory(history, brandColors, existingBrief);
+  const arte_brief = existingBrief
+    ? mergeArteBriefUserEdits(existingBrief, extracted)
+    : extracted;
+  if (intent && !arte_brief.tema) arte_brief.tema = intent.slice(0, 200);
+  const ready = Boolean(String(arte_brief.tema ?? "").trim());
+  return {
+    confirmation_message: ready
+      ? "Confira o resumo da arte abaixo e ajuste se precisar."
+      : "Defina o tema e o formato antes de gerar a prévia.",
+    briefing_status: ready ? "ready" : "collecting",
+    missing_slots: ready ? [] : ["frase_imagem"],
+    links: [],
+    post_context_proposal: {
+      intent_summary: intent || arte_brief.tema,
+      matched_contexto: null,
+      frase_na_imagem: arte_brief.titulo || arte_brief.texto || "",
+      facts_for_image: {
+        frase_na_imagem: arte_brief.titulo || arte_brief.texto || "",
+        titulo: arte_brief.titulo,
+        subtitulo: arte_brief.subtitulo,
+      },
+      midias_referenced: [],
+      arte_brief,
+    },
+  };
+}
+
+/**
  * Llama (API compatível com OpenAI) + dados do Supabase (empresa, contexto_empresa, midia) para propor a pergunta de confirmação ao usuário.
  *
  * @param {{
@@ -292,7 +353,27 @@ async function llamaGenerateJson(promptUser) {
  * }} opts
  */
 export async function generatePostContextProposal(opts) {
-  const { history, idEmpresa, db } = opts;
+  const { history, idEmpresa, db, arteBriefDraft = null } = opts;
+
+  if ((env.IMAGE_PIPELINE || "raw") === "raw") {
+    const [contextoRows] = await Promise.all([loadContextosEmpresaAtivos(db, idEmpresa)]);
+    const { identidadeDados } = partitionContextosIdentidade(contextoRows);
+    const brandColors = identidadeDados ? allBrandColorsFromIdentidade(identidadeDados) : [];
+    const raw = buildRawPostContextProposal(
+      history,
+      brandColors,
+      arteBriefDraft && typeof arteBriefDraft === "object" ? arteBriefDraft : null,
+    );
+    return {
+      confirmation_message: raw.confirmation_message,
+      links: raw.links,
+      post_context_proposal: raw.post_context_proposal,
+      briefing_status: raw.briefing_status,
+      missing_slots: raw.missing_slots,
+      _meta: { pipeline: "raw", provider: env.IMAGE_PROVIDER || "replicate" },
+    };
+  }
+
   const [empresaRow, contextoRows, midiaRows] = await Promise.all([
     loadEmpresaResumoParaImagem(db, idEmpresa),
     loadContextosEmpresaAtivos(db, idEmpresa),
@@ -300,13 +381,15 @@ export async function generatePostContextProposal(opts) {
   ]);
 
   const instrucao = `Você é assistente de marketing da TumaIA. O cliente já conversou sobre um pedido de post/conteúdo.
+O cliente pode escrever de forma informal, com erros, abreviações ou informações no meio da frase — INTERPRETE o pedido completo (não exija formato perfeito).
 Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no painel (tipos como data comemorativa, lançamento, promoção, personalizado, etc. vêm em schema_json/dados_json);
 (3) usar o ACERVO DE MÍDIAS para links e para o campo JSON midias_referenced (nunca invente URLs de arquivo; use só ids listados em "### midia_id=");
 (4) escrever UMA mensagem MUITO curta (máx. 2 frases, até ~280 caracteres) em português do Brasil pedindo confirmação, no estilo:
    "Confira o resumo do seu pedido para [contexto/campanha]…"
    Mencione números ou fatos que o cliente disse só se couber na frase — sem parágrafo extra.
    PROIBIDO citar testes, painel técnico, Llama, Ollama, Replicate ou erros internos.
-(5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo OBRIGATORIAMENTE "frase_na_imagem": frase curta que vai ESCRITA NA ARTE (não é legenda do post). Ex.: pedido de 500 mil seguidores → "Parabéns pelos 500k!" ou "500k seguidores!". Máx. 8 palavras, português BR, sem hashtags.
+(5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo "frase_na_imagem": frase curta que vai ESCRITA NA ARTE (não é legenda). Extraia do texto do cliente mesmo sem aspas (ex.: "frase: TumaIA entende seu negócio" → frase_na_imagem exatamente isso). Máx. 8 palavras, português BR, sem hashtags. Se o cliente disser sem texto na arte, deixe vazio.
+(5b) briefing_status: "ready" se já dá para gerar a imagem (tema + frase ou sem texto explícito); "collecting" só se faltar algo CRÍTICO (máx. 2 lacunas). missing_slots: lista vazia se ready, senão ids entre produto, beneficio, periodo, frase_imagem. Em collecting, confirmation_message pergunta de forma natural (não lista robótica de formulário).
 (6) preencher "links": palavras/frases clicáveis no painel — cada item com kind "contexto" ou "midia", "id" UUID que EXISTA na lista acima, e "label" curto (texto do link). Se o pedido envolver contexto comemorativo e uma mídia de referência, inclua os DOIS links. Se não houver encaixe no banco, use "links": [].
 (7) Se o cliente pedir arte com produto, embalagem, armações/óculos PNG ou "inserir" elemento do acervo, preencha "midias_referenced" com até 3 ids EXISTENTES em "### midia_id=".
    ORDEM CRÍTICA: a 1ª posição vai para o FLUX como image_prompt — deve ser RECORTE/PNG DE PRODUTO, NUNCA logo da marca (logo fica só no cantinho da arte), NUNCA um post/arte/banner/festa/400k já pronto do acervo.
@@ -316,6 +399,8 @@ Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no
 Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
 {
   "confirmation_message": "string",
+  "briefing_status": "ready" | "collecting",
+  "missing_slots": [],
   "links": [ { "kind": "contexto" | "midia", "id": "uuid", "label": "string" } ],
   "post_context_proposal": {
     "intent_summary": "string",
@@ -342,17 +427,20 @@ Regras:
 - PROIBIDO responder com parágrafos de post pronto, legenda ou texto fora do JSON. A confirmation_message é só a pergunta de confirmação (1–2 frases, máx. 280 caracteres).`;
 
   const bloco = `
-=== Cadastro da empresa ===
-${formatEmpresaForLlm(empresaRow)}
+=== Pedido do cliente (histórico — use para intent_summary e frase_na_imagem) ===
+${formatHistoryForPrompt(history)}
 
-=== Contextos ativos (tabela contexto_empresa) ===
-${formatContextosForLlm(contextoRows)}
+=== Identidade da marca (cores, estilo, tom — fonte da verdade visual) ===
+${formatIdentidadeForLlm(contextoRows)}
 
-=== Mídias ativas (tabela midia — referência de identidade) ===
+=== Campanhas ativas (opcional — só para matched_contexto e links) ===
+${formatCampanhaResumoForLlm(contextoRows)}
+
+=== Mídias ativas (acervo — midias_referenced) ===
 ${formatMidiasForLlm(midiaRows)}
 
-=== Histórico recente ===
-${formatHistoryForPrompt(history)}
+=== Cadastro empresa (nome/segmento — apoio) ===
+${formatEmpresaForLlm(empresaRow)}
 `;
 
   const promptUser = `${instrucao}\n\n${bloco}`;
@@ -475,6 +563,9 @@ ${formatHistoryForPrompt(history)}
 
   const base = {
     confirmation_message: safe.data.confirmation_message.trim(),
+    briefing_status:
+      typeof coerced?.briefing_status === "string" ? coerced.briefing_status : undefined,
+    missing_slots: coerced?.missing_slots,
     links,
     post_context_proposal,
   };
