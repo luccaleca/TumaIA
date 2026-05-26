@@ -9,6 +9,10 @@ import { env } from "../config.js";
 import { getSupabaseAdmin, getSupabaseAnon } from "../supabaseAdmin.js";
 import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { loadUsuarioParaMe } from "../modules/auth/usuarioMeService.js";
+import {
+  putEmpresaAtivaBody,
+  saveUsuarioEmpresaUltima,
+} from "../modules/auth/usuarioEmpresaUltimaService.js";
 
 const r = Router();
 
@@ -339,6 +343,49 @@ r.patch("/me", requireUserJwt, async (req, res) => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro interno";
     console.error("auth.patchMe:", e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: msg });
+    }
+  }
+});
+
+/**
+ * Salva a última empresa usada no painel (persiste entre sessões).
+ */
+r.put("/me/empresa-ativa", requireUserJwt, async (req, res) => {
+  try {
+    const parsed = putEmpresaAtivaBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+
+    const db = getSupabaseAdmin();
+    if (!db) {
+      res.status(503).json({ error: "Supabase não configurado no servidor" });
+      return;
+    }
+
+    const loaded = await loadUsuarioParaMe(db, req.authUserId);
+    if (!loaded.ok) {
+      res.status(loaded.status).json({ error: loaded.error });
+      return;
+    }
+
+    const out = await saveUsuarioEmpresaUltima(
+      db,
+      loaded.usuario.id_usuario,
+      parsed.data.id_empresa,
+    );
+    if (!out.ok) {
+      res.status(out.status).json({ error: out.error });
+      return;
+    }
+
+    res.json({ id_empresa_ultima: out.id_empresa_ultima });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro interno";
+    console.error("auth.putEmpresaAtiva:", e);
     if (!res.headersSent) {
       res.status(500).json({ error: msg });
     }

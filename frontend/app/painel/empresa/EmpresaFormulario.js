@@ -1,3 +1,4 @@
+import EmpresaSectionPanel from "./EmpresaSectionPanel";
 import {
   SEGMENTO_OPCAO_PERSONALIZADA,
   SEGMENTOS_SUGERIDOS,
@@ -55,19 +56,12 @@ export default function EmpresaFormulario({
   }
 
   return (
-    <form
-      className="mt-5 overflow-hidden rounded-xl border border-border bg-background"
-      onSubmit={onSubmit}
+    <EmpresaSectionPanel
+      step={!hasEmpresa || criandoNovaEmpresa ? 1 : undefined}
+      title={criandoNovaEmpresa || !hasEmpresa ? "Cadastro da empresa" : "Editar dados"}
+      description="Informações básicas do workspace. Campos com * são obrigatórios."
     >
-      <div className="border-b border-border px-4 py-3 sm:px-5">
-        <h2 className="text-sm font-semibold text-foreground">
-          {criandoNovaEmpresa || !hasEmpresa ? "Cadastro da empresa" : "Editar dados"}
-        </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          Informações básicas do workspace. Campos com * são obrigatórios.
-        </p>
-      </div>
-
+    <form className="overflow-hidden" onSubmit={onSubmit}>
       <div className="grid grid-cols-1 gap-4 p-4 sm:p-5 md:grid-cols-2">
         <Field id="nome_fantasia" label="Nome *" className="md:col-span-2">
           <input
@@ -233,5 +227,6 @@ export default function EmpresaFormulario({
         ) : null}
       </div>
     </form>
+    </EmpresaSectionPanel>
   );
 }

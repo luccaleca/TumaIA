@@ -375,6 +375,7 @@ CREATE TABLE public.usuario (
     nome character varying,
     email character varying,
     telefone character varying,
+    id_empresa_ultima uuid,
     ativo boolean DEFAULT true NOT NULL,
     data_criacao timestamp with time zone DEFAULT now()
 );

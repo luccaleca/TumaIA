@@ -1,13 +1,17 @@
+import { authApiFetchWithToken } from "./auth";
+
 const KEY_ID = "tuma_empresa_ativa_id";
 const KEY_NOME = "tuma_empresa_ativa_nome";
 export const EMPRESA_ATIVA_CHANGE_EVENT = "tuma-empresa-ativa-change";
 
+let persistTimer = null;
+
 /** @returns {{ id: string, nome: string } | null} */
 export function getEmpresaAtivaSnapshot() {
   if (typeof window === "undefined") return null;
-  const id = sessionStorage.getItem(KEY_ID)?.trim();
+  const id = localStorage.getItem(KEY_ID)?.trim();
   if (!id) return null;
-  const nome = sessionStorage.getItem(KEY_NOME)?.trim() || "Empresa";
+  const nome = localStorage.getItem(KEY_NOME)?.trim() || "Empresa";
   return { id, nome };
 }
 
@@ -15,19 +19,41 @@ export function getEmpresaAtivaId() {
   return getEmpresaAtivaSnapshot()?.id ?? null;
 }
 
+/** @param {unknown} json */
+export function idEmpresaUltimaFromMinhasPayload(json) {
+  const id = json?.id_empresa_ultima;
+  return id && String(id).trim() ? String(id).trim() : null;
+}
+
+function schedulePersistEmpresaAtiva(idEmpresa) {
+  if (typeof window === "undefined") return;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void authApiFetchWithToken("/auth/me/empresa-ativa", {
+      method: "PUT",
+      body: JSON.stringify({ id_empresa: idEmpresa }),
+    });
+  }, 400);
+}
+
 /**
  * @param {{ id_empresa?: string, nome_fantasia?: string } | null | undefined} empresa
+ * @param {{ persistProfile?: boolean }} [options]
  */
-export function setEmpresaAtiva(empresa) {
+export function setEmpresaAtiva(empresa, options = {}) {
   if (typeof window === "undefined") return;
+  const persistProfile = options.persistProfile !== false;
   const id = empresa?.id_empresa ? String(empresa.id_empresa).trim() : "";
   if (!id) {
-    sessionStorage.removeItem(KEY_ID);
-    sessionStorage.removeItem(KEY_NOME);
+    localStorage.removeItem(KEY_ID);
+    localStorage.removeItem(KEY_NOME);
+    if (persistProfile) schedulePersistEmpresaAtiva(null);
   } else {
-    sessionStorage.setItem(KEY_ID, id);
+    localStorage.setItem(KEY_ID, id);
     const nome = String(empresa.nome_fantasia ?? "").trim() || "Empresa";
-    sessionStorage.setItem(KEY_NOME, nome);
+    localStorage.setItem(KEY_NOME, nome);
+    if (persistProfile) schedulePersistEmpresaAtiva(id);
   }
   window.dispatchEvent(new CustomEvent(EMPRESA_ATIVA_CHANGE_EVENT));
 }
@@ -39,7 +65,11 @@ export function clearEmpresaAtiva() {
 /**
  * Escolhe a empresa ativa a partir da lista `/empresas/minhas`.
  * @param {Array<{ empresa?: { id_empresa?: string } }>} empresasRows
- * @param {{ preferId?: string | null, fallbackFirst?: boolean }} [options]
+ * @param {{
+ *   preferId?: string | null,
+ *   idEmpresaUltimaPerfil?: string | null,
+ *   fallbackFirst?: boolean,
+ * }} [options]
  */
 export function resolveEmpresaAtivaId(empresasRows, options = {}) {
   const ids = (empresasRows || [])
@@ -49,8 +79,10 @@ export function resolveEmpresaAtivaId(empresasRows, options = {}) {
   if (!ids.length) return null;
 
   const prefer = options.preferId ? String(options.preferId) : null;
+  const perfil = options.idEmpresaUltimaPerfil ? String(options.idEmpresaUltimaPerfil) : null;
   const stored = getEmpresaAtivaId();
   if (prefer && ids.includes(prefer)) return prefer;
+  if (perfil && ids.includes(perfil)) return perfil;
   if (stored && ids.includes(stored)) return stored;
   if (options.fallbackFirst !== false) return ids[0];
   return null;
@@ -67,17 +99,20 @@ export function empresaRowFromMinhas(empresasRows, id) {
 
 /**
  * @param {Array<{ empresa?: Record<string, unknown> }>} empresasRows
- * @param {{ preferId?: string | null, fallbackFirst?: boolean }} [options]
- * @returns {{ id: string, row: Record<string, unknown> | null, empresa: Record<string, unknown> | null }}
+ * @param {{
+ *   preferId?: string | null,
+ *   idEmpresaUltimaPerfil?: string | null,
+ *   fallbackFirst?: boolean,
+ * }} [options]
  */
 export function syncEmpresaAtivaFromMinhas(empresasRows, options = {}) {
   const id = resolveEmpresaAtivaId(empresasRows, options);
   const row = id ? empresaRowFromMinhas(empresasRows, id) : null;
   const empresa = row?.empresa && typeof row.empresa === "object" ? row.empresa : null;
-  if (empresa?.id_empresa) setEmpresaAtiva(empresa);
+  if (empresa?.id_empresa) setEmpresaAtiva(empresa, { persistProfile: false });
   else if (typeof window !== "undefined") {
-    sessionStorage.removeItem(KEY_ID);
-    sessionStorage.removeItem(KEY_NOME);
+    localStorage.removeItem(KEY_ID);
+    localStorage.removeItem(KEY_NOME);
     window.dispatchEvent(new CustomEvent(EMPRESA_ATIVA_CHANGE_EVENT));
   }
   return { id, row, empresa };

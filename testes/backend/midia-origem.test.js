@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX,
   ORIGEM_UPLOAD_IDENTIDADE_FOTO,
   ORIGEM_UPLOAD_MANUAL,
   filterMidiasAcervo,
@@ -22,16 +21,12 @@ describe("midiaOrigem", () => {
     assert.equal(isOrigemUploadIdentidade(ORIGEM_UPLOAD_MANUAL), false);
   });
 
-  it("rejeita logo da identidade abaixo do mínimo", () => {
-    const bad = validateLogoIdentidadeDimensions(150, 150);
-    assert.equal(bad.ok, false);
-    assert.match(bad.error, /150×150/);
-    assert.match(bad.error, new RegExp(String(LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX)));
+  it("aceita logo da identidade em qualquer tamanho legível (mínimo 512 desativado)", () => {
+    assert.equal(validateLogoIdentidadeDimensions(150, 150).ok, true);
+    assert.equal(validateLogoIdentidadeDimensions(1024, 800).ok, true);
 
-    const ok = validateLogoIdentidadeDimensions(512, 200);
-    assert.equal(ok.ok, true);
-
-    const ideal = validateLogoIdentidadeDimensions(1024, 800);
-    assert.equal(ideal.ok, true);
+    const invalid = validateLogoIdentidadeDimensions(0, 100);
+    assert.equal(invalid.ok, false);
+    assert.match(invalid.error, /tamanho/i);
   });
 });

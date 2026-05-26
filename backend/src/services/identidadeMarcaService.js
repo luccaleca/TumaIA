@@ -112,10 +112,14 @@ function buildAnalisePrompt(input) {
   if (comFoto) {
     parts.push(
       "Schema:",
-      '{"sobre_empresa":"1-2 frases","segmento":"categoria","tom_voz":"3-6 adjetivos, vírgula","estilo_visual":"1 frase mood/layout, sem cores","evitar":"2-4 itens curtos para o designer","publico":"público-alvo","exemplo_frase_marca":"máx 8 palavras","cores_marca":["#RRGGBB"]}',
+      '{"sobre_empresa":"1-2 frases","segmento":"categoria","tom_voz":"3-6 adjetivos, vírgula","estilo_visual":"1 frase mood/layout, sem cores","assinatura_visual":"1-2 frases com o padrão fixo da marca","variacoes_campanha":"1 frase com o que pode mudar por campanha","regras_repeticao":"1 frase com regras recorrentes de layout","estrategia_cor_campanha":"1 frase explicando como variar a cor por produto/campanha","evitar":"2-4 itens curtos para o designer","publico":"público-alvo","exemplo_frase_marca":"máx 8 palavras","cores_marca":["#RRGGBB"]}',
       "cores_marca: obrigatório, 4 a 6 hex — logo, botões, fundos e textos da interface (inclua branco/preto se forem da UI).",
       "evitar: exemplos do que não colocar nas artes (fotos genéricas, fontes difíceis). Não repita estas instruções.",
       "estilo_visual: mood e layout (limpo, premium, divertido…) — sem hex, sem nomes de cor (verde, azul…); cores vão só em cores_marca.",
+      "assinatura_visual: extraia o que se repete na marca (tipografia, contraste, protagonismo do produto, posição do logo, composição).",
+      "variacoes_campanha: descreva o que pode mudar sem perder a identidade (cor da campanha, fundo temático, CTA, selo, props).",
+      "regras_repeticao: diga as regras reutilizáveis da peça, sem copiar um post específico.",
+      "estrategia_cor_campanha: explique como a marca varia a cor por produto/campanha usando a paleta base; pode citar hex base como #FFFFFF se fizer sentido.",
     );
     const hintHexes = [
       input.paletteHint?.primary,
@@ -131,7 +135,7 @@ function buildAnalisePrompt(input) {
   } else {
     parts.push(
       "Schema:",
-      '{"sobre_empresa":"","segmento":"","tom_voz":"","estilo_visual":"","evitar":"","publico":"","cor_primaria":"#RRGGBB ou vazio","cor_secundaria":"#RRGGBB ou vazio","exemplo_frase_marca":""}',
+      '{"sobre_empresa":"","segmento":"","tom_voz":"","estilo_visual":"","assinatura_visual":"","variacoes_campanha":"","regras_repeticao":"","estrategia_cor_campanha":"","evitar":"","publico":"","cor_primaria":"#RRGGBB ou vazio","cor_secundaria":"#RRGGBB ou vazio","exemplo_frase_marca":""}',
       "cor_primaria/cor_secundaria: só se o site ou texto citar cores de forma clara.",
     );
   }

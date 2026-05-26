@@ -147,7 +147,7 @@ export function friendlyReplicateGptImage2Error(raw) {
     return "Créditos insuficientes na Replicate. Adicione saldo no painel da Replicate.";
   }
   if (/unauthorized|invalid.*token|401/i.test(s)) {
-    return "REPLICATE_API_TOKEN inválido. Use o token da página openai/gpt-image-2 na Replicate.";
+    return "REPLICATE_API_TOKEN inválido. Configure o token de geração de imagens no servidor.";
   }
   if (/moderation|safety|policy/i.test(s)) {
     return "Pedido bloqueado pela moderação. Ajuste o texto e tente de novo.";

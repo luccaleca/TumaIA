@@ -5,6 +5,7 @@ import { aspectRatioFromArteBrief, promptFromArteBrief } from "./rawImageArteBri
 import {
   formatBrandIdentityBlockForFlux,
   formatBrandIdentityCompact,
+  formatBrandIdentityForRawPrompt,
   partitionContextosIdentidade,
 } from "../modules/empresas/identidadeMarca.js";
 
@@ -14,29 +15,55 @@ export const FLUX_IMAGE_PROMPT_MAX = 2000;
 export const FLUX_IMAGE_PROMPT_COMPACT_TARGET = 520;
 
 /**
- * Prompt cru para GPT Image 2: só o pedido do cliente (sem regras, sem identidade injetada).
+ * Prompt para GPT Image 2 (pipeline raw): pedido do cliente + identidade da marca.
  *
  * @param {Array<{ role: string, content: string }>} history
  * @param {Record<string, unknown> | null | undefined} postContextProposal
+ * @param {Record<string, unknown> | null | undefined} identidadeDados
+ * @param {{ strictProductReference?: boolean, composeProductAssets?: boolean, productCount?: number }} [opts]
  */
-export function buildRawImagePrompt(history, postContextProposal) {
+export function buildRawImagePrompt(history, postContextProposal, identidadeDados = null, opts = {}) {
   const proposal =
     postContextProposal && typeof postContextProposal === "object" ? postContextProposal : null;
   const arteBrief = proposal?.arte_brief;
+  let base = "";
   if (arteBrief && typeof arteBrief === "object") {
     const fromBrief = promptFromArteBrief(/** @type {Record<string, unknown>} */ (arteBrief));
-    if (fromBrief.trim()) return fromBrief.slice(0, 32_000);
+    if (fromBrief.trim()) base = fromBrief;
   }
-  const pedido = resolvePedidoCliente(postContextProposal, history, 32_000);
-  if (pedido) return pedido;
-  for (let i = history.length - 1; i >= 0; i--) {
-    const m = history[i];
-    if (m?.role === "user") {
-      const t = String(m.content ?? "").trim();
-      if (t) return t.slice(0, 32_000);
+  if (!base) {
+    const pedido = resolvePedidoCliente(postContextProposal, history, 32_000);
+    if (pedido) base = pedido;
+  }
+  if (!base) {
+    for (let i = history.length - 1; i >= 0; i--) {
+      const m = history[i];
+      if (m?.role === "user") {
+        const t = String(m.content ?? "").trim();
+        if (t) {
+          base = t;
+          break;
+        }
+      }
     }
   }
-  return "Instagram marketing image";
+  if (!base) base = "Instagram marketing image";
+
+  const composeProductAssets = opts?.composeProductAssets === true;
+  const strictProductReference = opts?.strictProductReference === true && !composeProductAssets;
+  if (strictProductReference) {
+    base = `${base}\n\nProduto do acervo em referência: preservar RIGOROSAMENTE o design real da embalagem e do rótulo do produto mostrado em input_images. Manter formato do pote/embalagem, tampa, proporções, cores, sabor/variante, marca, posição dos elementos e aparência geral. NÃO redesenhar, NÃO inventar novo rótulo, NÃO trocar a marca e NÃO simplificar a embalagem. Pode mudar apenas cenário, iluminação, enquadramento e composição da campanha.`;
+  }
+  const productCount = Math.max(1, Math.min(3, Number(opts?.productCount) || 1));
+  if (composeProductAssets) {
+    base = `${base}\n\nEsta geração deve criar SOMENTE o fundo/cenário/layout da campanha. Não renderize nenhum pote, embalagem, rótulo, sache, caixa ou produto fictício. Reserve uma área hero limpa no primeiro plano para inserção posterior de ${productCount} produto${productCount > 1 ? "s reais" : " real"} do acervo. Pode incluir luz, pedestal, cenário, props e atmosfera promocional, mas sem desenhar o produto.`;
+  }
+
+  const brand = identidadeDados ? formatBrandIdentityForRawPrompt(identidadeDados) : "";
+  if (brand) {
+    return `${base}\n\nIdentidade da marca (alinhar visual e cores):\n${brand}`.slice(0, 32_000);
+  }
+  return base.slice(0, 32_000);
 }
 
 /**
@@ -112,7 +139,7 @@ function introWithFrase(frase, hasReferenceImage, referenceKind = "product") {
     const refRule =
       referenceKind === "logo"
         ? "The reference image is the brand LOGO only: place a SMALL logo mark in one corner (about 8–12% of the frame height), never centered, never full-bleed, never enlarged to fill the canvas. Build a new scene around it (product, promo background)."
-        : "The reference image is a PRODUCT packshot to feature as the hero (center or rule-of-thirds) — NOT an old post or banner to copy. Do NOT replicate the reference layout.";
+        : "The reference image is a PRODUCT packshot to feature as the hero (center or rule-of-thirds) — NOT an old post or banner to copy. Preserve the EXACT package design, label, colors, proportions and brand details of the referenced product. Do NOT redesign the packaging or invent a different label.";
     return (
       `Create a NEW Instagram key visual. ${refRule} ` +
       textRule +
@@ -141,7 +168,7 @@ function buildCompactImagePrompt({
     chunks.push(
       referenceKind === "logo"
         ? "Use reference as small corner logo only."
-        : "Hero product from reference image, new layout.",
+        : "Hero product from reference image, new layout, preserve exact package design and label.",
     );
   } else if (logoConfigured) {
     chunks.push(logoAsHero ? "Brand logo as focal point." : "Small brand logo bottom-right corner.");
@@ -196,7 +223,7 @@ function buildFullImagePrompt({
 
 /**
  * Monta prompt para geração de imagem.
- * Padrão (`IMAGE_PIPELINE=raw`): só pedido do usuário.
+ * Pipeline `raw` (GPT Image 2): pedido + identidade da marca.
  */
 export function buildFluxImagePrompt({
   history,
@@ -204,17 +231,24 @@ export function buildFluxImagePrompt({
   postContextProposal,
   hasReferenceImage = false,
   referenceKind = null,
+  strictProductReference = false,
+  composeProductAssets = false,
+  productCount = 0,
   promptStyle,
   pipeline,
 }) {
   const pipe = pipeline ?? env.IMAGE_PIPELINE ?? "raw";
+  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   if (pipe === "raw") {
-    return buildRawImagePrompt(history, postContextProposal);
+    return buildRawImagePrompt(history, postContextProposal, identidadeDados, {
+      strictProductReference,
+      composeProductAssets,
+      productCount,
+    });
   }
 
   const pedido = resolvePedidoCliente(postContextProposal, history);
   const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, contextoRows);
-  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   const style = promptStyle ?? env.IMAGE_PROMPT_STYLE ?? "compact";
   const kind = referenceKind === "logo" ? "logo" : "product";
 

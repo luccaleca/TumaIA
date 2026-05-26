@@ -3,8 +3,7 @@ import { assignRankedPalette, normalizeHexColor as normalizeHexBrand } from "./b
 
 export const MAX_FOTOS_IDENTIDADE = 8;
 
-/** Lado maior mínimo para logo nas artes (alinhado ao backend). */
-export const LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX = 512;
+/** Tamanho recomendado para logo nas artes (mínimo 512 px desativado temporariamente). */
 export const LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX = 1024;
 
 /** Nome fixo do contexto de identidade (um por empresa) — não listar em /painel/contextos. */
@@ -39,6 +38,10 @@ export const emptyDados = {
   segmento: "",
   tom_voz: "",
   estilo_visual: "",
+  assinatura_visual: "",
+  variacoes_campanha: "",
+  regras_repeticao: "",
+  estrategia_cor_campanha: "",
   evitar: "",
   publico: "",
   cor_primaria: "",
@@ -69,12 +72,12 @@ export function normalizeHexColor(v) {
   return s.toUpperCase();
 }
 
-/** Campos usados na barra de progresso (espelha o backend). */
+/** Campos usados na barra de progresso (espelha o backend — foco em artes). */
 export const PILARES_COMPLETUDE = [
   { key: "cor_primaria", label: "Cores" },
-  { key: "tom_voz", label: "Tom de voz" },
   { key: "estilo_visual", label: "Estilo visual" },
-  { key: "sobre_empresa", label: "Sobre a empresa" },
+  { key: "evitar", label: "Evitar" },
+  { key: "tom_voz", label: "Mood" },
 ];
 
 /** Exibido na barra; não entra no % dos 4 pilares principais. */
@@ -85,6 +88,10 @@ const MERGE_KEYS = [
   "segmento",
   "tom_voz",
   "estilo_visual",
+  "assinatura_visual",
+  "variacoes_campanha",
+  "regras_repeticao",
+  "estrategia_cor_campanha",
   "evitar",
   "publico",
   "cor_primaria",
@@ -115,6 +122,10 @@ export function dadosFromApi(raw) {
     segmento: raw.segmento || "",
     tom_voz: raw.tom_voz || "",
     estilo_visual: raw.estilo_visual || "",
+    assinatura_visual: raw.assinatura_visual || "",
+    variacoes_campanha: raw.variacoes_campanha || "",
+    regras_repeticao: raw.regras_repeticao || "",
+    estrategia_cor_campanha: raw.estrategia_cor_campanha || "",
     evitar: raw.evitar || "",
     publico: raw.publico || "",
     cor_primaria: normalizeHexColor(raw.cor_primaria) || "",
@@ -138,6 +149,10 @@ export function temConteudoIdentidade(dados) {
     String(dados.sobre_empresa ?? "").trim() ||
       String(dados.tom_voz ?? "").trim() ||
       String(dados.estilo_visual ?? "").trim() ||
+      String(dados.assinatura_visual ?? "").trim() ||
+      String(dados.variacoes_campanha ?? "").trim() ||
+      String(dados.regras_repeticao ?? "").trim() ||
+      String(dados.estrategia_cor_campanha ?? "").trim() ||
       String(dados.segmento ?? "").trim() ||
       String(dados.publico ?? "").trim() ||
       String(dados.evitar ?? "").trim() ||
@@ -152,9 +167,13 @@ export function calcCompletudeLocal(dados) {
     ok: Boolean(String(dados[key] ?? "").trim()),
   }));
   const done = checks.filter((c) => c.ok).length;
+  const temLogo = Boolean(String(dados.id_midia_logo ?? "").trim());
   return {
     percentual: Math.round((done / checks.length) * 100),
-    pronto_para_imagem: done >= 2 && Boolean(dados.cor_primaria?.trim()),
+    pronto_para_imagem:
+      Boolean(dados.cor_primaria?.trim()) &&
+      Boolean(dados.estilo_visual?.trim()) &&
+      (Boolean(dados.evitar?.trim()) || temLogo),
     faltando: checks.filter((c) => !c.ok).map((c) => c.key),
   };
 }
@@ -278,10 +297,6 @@ export function validateLogoIdentidadeArquivo(width, height) {
   const w = Math.max(0, Math.round(Number(width) || 0));
   const h = Math.max(0, Math.round(Number(height) || 0));
   if (w < 1 || h < 1) return "Não foi possível ler o tamanho da imagem.";
-  const ladoMaior = Math.max(w, h);
-  if (ladoMaior < LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX) {
-    return `Logo muito pequena (${w}×${h} px). Use PNG sem fundo com pelo menos ${LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX} px no lado maior (ideal ${LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px) para ficar nítida nas artes.`;
-  }
   return null;
 }
 
@@ -297,10 +312,46 @@ export async function limparFotosAnaliseIdentidade(empresaId) {
 }
 
 /**
- * Upload da logo da identidade (fica salva para artes). Fotos de análise não usam upload.
+ * @param {string} empresaId
+ */
+export async function fetchIdentidadeAnaliseJob(empresaId) {
+  const result = await authApiFetchWithToken(`/empresas/${encodeURIComponent(empresaId)}/identidade/analise-job`);
+  if (!result.ok || result.networkError) {
+    throw new Error(result.networkError?.message || result.json?.error || "Falha ao consultar análise em andamento.");
+  }
+  return result.json?.job || null;
+}
+
+/**
+ * @param {string} empresaId
+ * @param {{
+ *   midia_ids: string[],
+ *   inclui_site?: boolean,
+ *   site_url?: string,
+ *   dados_base?: Record<string, unknown>,
+ * }} body
+ */
+export async function startIdentidadeAnaliseJob(empresaId, body) {
+  const result = await authApiFetchWithToken(`/empresas/${encodeURIComponent(empresaId)}/identidade/analise-job`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  if (!result.ok || result.networkError) {
+    const err = new Error(
+      result.networkError?.message || result.json?.error || "Falha ao iniciar análise em background.",
+    );
+    err.status = result.status;
+    err.job = result.json?.job || null;
+    throw err;
+  }
+  return result.json?.job || null;
+}
+
+/**
+ * Upload da identidade. A logo fica salva para artes; fotos de análise ficam ocultas e podem ser reusadas por jobs.
  * @param {string} empresaId
  * @param {File} file
- * @param {'logo'} [kind]
+ * @param {'logo' | 'foto'} [kind]
  */
 export async function uploadImagemIdentidade(empresaId, file, kind = "logo") {
   const origem_upload = kind === "logo" ? "identidade_marca_logo" : "identidade_marca_foto";

@@ -5,10 +5,7 @@ export const ORIGEM_UPLOAD_MANUAL = "upload_manual";
 export const ORIGEM_UPLOAD_IDENTIDADE_FOTO = "identidade_marca_foto";
 export const ORIGEM_UPLOAD_IDENTIDADE_LOGO = "identidade_marca_logo";
 
-/** Lado maior mínimo para logo na identidade (artes / FLUX). */
-export const LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX = 512;
-
-/** Tamanho recomendado exibido na UI. */
+/** Tamanho recomendado exibido na UI (mínimo 512 px desativado temporariamente para testes). */
 export const LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX = 1024;
 
 const ORIGENS_IDENTIDADE = new Set([ORIGEM_UPLOAD_IDENTIDADE_FOTO, ORIGEM_UPLOAD_IDENTIDADE_LOGO]);
@@ -23,13 +20,6 @@ export function validateLogoIdentidadeDimensions(width, height) {
   const h = Math.max(0, Math.round(Number(height) || 0));
   if (w < 1 || h < 1) {
     return { ok: false, error: "Não foi possível ler o tamanho da imagem." };
-  }
-  const ladoMaior = Math.max(w, h);
-  if (ladoMaior < LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX) {
-    return {
-      ok: false,
-      error: `Logo muito pequena (${w}×${h} px). Use PNG sem fundo com pelo menos ${LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX} px no lado maior (ideal ${LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px) para ficar nítida nas artes.`,
-    };
   }
   return { ok: true };
 }

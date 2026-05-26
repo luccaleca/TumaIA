@@ -254,11 +254,6 @@ export default function Home() {
 
           <div className="relative mx-auto flex w-full max-w-6xl flex-col justify-center px-5 pb-20 pt-6 md:px-6 md:pb-28 md:pt-10">
             <div className="grid max-w-3xl gap-8">
-              <div className="landing-hero-enter inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium tracking-wide text-white/90 backdrop-blur-sm">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
-                Plataforma para PMEs brasileiras
-              </div>
-
               <div className="landing-hero-enter landing-hero-enter-d1">
                 <h1 className="text-4xl font-bold leading-[1.08] tracking-tight text-white md:text-5xl lg:text-[3.25rem]">
                   Do WhatsApp para o Instagram{" "}

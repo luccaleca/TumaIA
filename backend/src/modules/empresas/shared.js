@@ -440,6 +440,38 @@ export async function getOrCreatePastaIdentidadeMarca(supabase, idEmpresa) {
   return created.id_pasta;
 }
 
+/**
+ * Pastas do acervo criadas com pai `null` (legado) passam a ficar na área de trabalho.
+ */
+export async function reparentPastasAcervoOrfas(supabase, idEmpresa, idPastaUploadRaiz) {
+  const { data: orfas, error } = await supabase
+    .from("pasta")
+    .select("id_pasta, nome")
+    .eq("id_empresa", idEmpresa)
+    .eq("ativo", true)
+    .is("id_pasta_pai", null)
+    .neq("id_pasta", idPastaUploadRaiz)
+    .neq("nome", PASTA_IDENTIDADE_MARCA_NOME);
+  if (error) throw new Error(error.message);
+  for (const row of orfas || []) {
+    const { error: eUp } = await supabase
+      .from("pasta")
+      .update({
+        id_pasta_pai: idPastaUploadRaiz,
+        data_atualizacao: new Date().toISOString(),
+      })
+      .eq("id_pasta", row.id_pasta)
+      .eq("id_empresa", idEmpresa);
+    if (eUp) throw new Error(eUp.message);
+  }
+}
+
+/** `null` no acervo = área de trabalho (pasta upload raiz). */
+export async function resolvePastaPaiAcervo(supabase, idEmpresa, idPastaPai) {
+  if (idPastaPai) return idPastaPai;
+  return getOrCreatePastaUploadRaiz(supabase, idEmpresa);
+}
+
 export async function getOrCreatePastaUploadRaiz(supabase, idEmpresa) {
   const { data: found, error: eFind } = await supabase
     .from("pasta")

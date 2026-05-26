@@ -88,8 +88,8 @@ const envSchema = z.object({
     z.number().int().min(60_000).max(600_000),
   ),
   /**
-   * `raw` (padrão teste): prompt = pedido do usuário, sem regras FLUX/identidade no texto.
-   * `standard`: montagem anterior (compact/full + contextos).
+   * `raw` (padrão): GPT Image 2 — pedido + identidade da marca (+ logo em input_images).
+   * `standard`: montagem FLUX (compact/full + contextos).
    */
   IMAGE_PIPELINE: z.preprocess(
     (v) => (String(v ?? "raw").trim().toLowerCase() === "standard" ? "standard" : "raw"),

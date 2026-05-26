@@ -10,7 +10,27 @@ import {
 export const IDENTIDADE_CONTEXTO_NOME = "Identidade da marca";
 export const IDENTIDADE_TIPO = "identidade_marca";
 
+/** Sugestão padrão quando «Evitar» está vazio — usada no prompt de imagem. */
+export const EVITAR_PADRAO_IMAGEM =
+  "Clipart genérico; textos ilegíveis ou distorcidos; layout copiado de posts antigos; cores fora da paleta da marca.";
+
 const HEX_RE = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/;
+
+function normalizeIdentityText(v, maxLen = 800) {
+  return String(v ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLen);
+}
+
+function compactPromptText(v, maxLen = 180) {
+  const s = normalizeIdentityText(v, maxLen + 20)
+    .replace(/[•·]+/g, "; ")
+    .replace(/\s*;\s*/g, "; ")
+    .replace(/\s*,\s*/g, ", ");
+  if (!s) return "";
+  return s.length > maxLen ? `${s.slice(0, maxLen - 1)}…` : s;
+}
 
 /**
  * @param {unknown} v
@@ -98,6 +118,10 @@ export function normalizeIdentidadeDados(raw) {
     segmento: String(src.segmento ?? src.segmento_inferido ?? "").trim().slice(0, 200),
     tom_voz: tom_voz.slice(0, 500),
     estilo_visual: sanitizeEstiloVisualText(String(src.estilo_visual ?? "")).slice(0, 800),
+    assinatura_visual: normalizeIdentityText(src.assinatura_visual, 900),
+    variacoes_campanha: normalizeIdentityText(src.variacoes_campanha, 900),
+    regras_repeticao: normalizeIdentityText(src.regras_repeticao, 900),
+    estrategia_cor_campanha: normalizeIdentityText(src.estrategia_cor_campanha, 600),
     evitar: String(src.evitar ?? "").trim().slice(0, 800),
     publico: String(src.publico ?? "").trim().slice(0, 500),
     cor_primaria: normalizeHexColor(src.cor_primaria) || "",
@@ -153,14 +177,16 @@ export function refineIdentidadeFromAnalysis(raw, palette, empresaRow = null) {
     base.segmento = String(empresaRow.segmento).trim().slice(0, 200);
   }
 
-  if (base.estilo_visual) {
-    base.estilo_visual = sanitizeEstiloVisualText(base.estilo_visual).slice(0, 800);
-  } else if (allBrandColorsFromIdentidade(base).length) {
-    base.estilo_visual = "Visual alinhado ao material enviado (logo e interface).".slice(0, 800);
+  if (!base.evitar) {
+    base.evitar = EVITAR_PADRAO_IMAGEM;
   }
 
-  if (!base.evitar) {
-    base.evitar = "Layout de posts antigos copiado; fontes ilegíveis; poluição visual.";
+  if (base.estilo_visual) {
+    base.estilo_visual = sanitizeEstiloVisualText(base.estilo_visual).slice(0, 800);
+  } else if (!allBrandColorsFromIdentidade(base).length) {
+    base.estilo_visual = "Limpo e moderno, fundo claro, tipografia legível";
+  } else {
+    base.estilo_visual = "Visual alinhado à paleta da marca, limpo e profissional";
   }
 
   return base;
@@ -192,14 +218,15 @@ export function identidadeCompletude(dados) {
   const d = normalizeIdentidadeDados(dados);
   const checks = [
     { key: "cor_primaria", ok: Boolean(d.cor_primaria) },
-    { key: "tom_voz", ok: Boolean(d.tom_voz) },
     { key: "estilo_visual", ok: Boolean(d.estilo_visual) },
-    { key: "sobre_empresa", ok: Boolean(d.sobre_empresa) },
+    { key: "evitar", ok: Boolean(d.evitar) },
+    { key: "tom_voz", ok: Boolean(d.tom_voz) },
   ];
   const done = checks.filter((c) => c.ok).length;
+  const temLogo = Boolean(d.id_midia_logo);
   return {
     percentual: Math.round((done / checks.length) * 100),
-    pronto_para_imagem: done >= 2 && Boolean(d.cor_primaria),
+    pronto_para_imagem: Boolean(d.cor_primaria && d.estilo_visual && (d.evitar || temLogo)),
     faltando: checks.filter((c) => !c.ok).map((c) => c.key),
   };
 }
@@ -234,6 +261,8 @@ export function formatBrandIdentityBlockForFlux(dados, maxLen = 420) {
     parts.push(`Brand color palette (background, accents, typography): ${cores.join(", ")}.`);
   }
   if (d.estilo_visual) parts.push(`Visual style: ${d.estilo_visual}.`);
+  if (d.assinatura_visual) parts.push(`Visual signature: ${compactPromptText(d.assinatura_visual, 150)}.`);
+  if (d.regras_repeticao) parts.push(`Recurring layout rules: ${compactPromptText(d.regras_repeticao, 130)}.`);
   if (d.tom_voz) parts.push(`Tone/mood: ${d.tom_voz}.`);
   if (d.publico) parts.push(`Audience: ${d.publico}.`);
   if (d.evitar) parts.push(`Avoid: ${d.evitar}.`);
@@ -252,6 +281,7 @@ export function formatBrandIdentityBlockForFlux(dados, maxLen = 420) {
 export function formatBrandIdentityCompact(dados, maxLen = 140) {
   const d = normalizeIdentidadeDados(dados || {});
   const cores = allBrandColorsFromIdentidade(d).slice(0, 5);
+  const signature = compactPromptText(d.assinatura_visual, 64);
   const styleRaw = String(d.estilo_visual ?? "")
     .split(/[,;]/)
     .map((x) => x.trim())
@@ -261,9 +291,69 @@ export function formatBrandIdentityCompact(dados, maxLen = 140) {
   const parts = [];
   if (cores.length) parts.push(`colors ${cores.join(" ")}`);
   if (styleRaw) parts.push(styleRaw.slice(0, 72));
+  if (signature) parts.push(signature);
   let s = parts.join(", ");
   if (s.length > maxLen) s = `${s.slice(0, maxLen - 1)}…`;
   return s.trim();
+}
+
+/**
+ * Bloco em português para GPT Image 2 (pipeline raw): identidade além do pedido do cliente.
+ * @param {Record<string, unknown> | null} dados
+ * @param {number} maxLen
+ */
+export function formatBrandIdentityForRawPrompt(dados, maxLen = 900) {
+  const d = normalizeIdentidadeDados(dados || {});
+  const lines = [];
+  const cores = allBrandColorsFromIdentidade(d);
+  if (cores.length) lines.push(`Cores da marca (obrigatório usar na paleta): ${cores.join(", ")}.`);
+  if (d.estilo_visual) lines.push(`Estilo visual: ${d.estilo_visual}.`);
+  if (d.assinatura_visual) {
+    lines.push(`Assinatura visual da marca: ${compactPromptText(d.assinatura_visual, 220)}.`);
+  }
+  if (d.variacoes_campanha) {
+    lines.push(`Variações permitidas por campanha: ${compactPromptText(d.variacoes_campanha, 180)}.`);
+  }
+  if (d.regras_repeticao) {
+    lines.push(`Regras recorrentes de layout: ${compactPromptText(d.regras_repeticao, 180)}.`);
+  }
+  if (d.estrategia_cor_campanha) {
+    lines.push(`Estratégia de cor por campanha: ${compactPromptText(d.estrategia_cor_campanha, 190)}.`);
+  }
+  const evitar = String(d.evitar || "").trim() || EVITAR_PADRAO_IMAGEM;
+  lines.push(`Evitar nas artes: ${evitar}.`);
+  if (d.tom_voz) lines.push(`Mood/atmosfera: ${d.tom_voz}.`);
+  if (d.publico) lines.push(`Público-alvo (estética): ${d.publico}.`);
+  if (d.id_midia_logo) {
+    lines.push(
+      "Logo da marca em input_images — pequena em um canto, salvo se o pedido pedir destaque.",
+    );
+  }
+  if (d.segmento) lines.push(`Segmento: ${d.segmento}.`);
+  if (d.sobre_empresa) lines.push(`Contexto da empresa: ${String(d.sobre_empresa).slice(0, 200)}.`);
+  if (d.exemplo_frase_marca) {
+    lines.push(`Estilo de headline: «${String(d.exemplo_frase_marca).slice(0, 80)}».`);
+  }
+  if (!lines.length) return "";
+  let s = lines.join("\n");
+  if (s.length > maxLen) s = `${s.slice(0, maxLen - 1)}…`;
+  return s.trim();
+}
+
+/** Há dados de identidade úteis para geração de imagem. */
+export function hasIdentidadeParaImagem(dados) {
+  const d = normalizeIdentidadeDados(dados || {});
+  return Boolean(
+    allBrandColorsFromIdentidade(d).length ||
+      String(d.estilo_visual ?? "").trim() ||
+      String(d.assinatura_visual ?? "").trim() ||
+      String(d.variacoes_campanha ?? "").trim() ||
+      String(d.regras_repeticao ?? "").trim() ||
+      String(d.estrategia_cor_campanha ?? "").trim() ||
+      String(d.tom_voz ?? "").trim() ||
+      String(d.sobre_empresa ?? "").trim() ||
+      String(d.id_midia_logo ?? "").trim(),
+  );
 }
 
 /**

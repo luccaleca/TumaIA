@@ -4,8 +4,8 @@ import { useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import Modal from "../../components/Modal";
 
-const BTN_ROW =
-  "rounded-md border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted";
+const LINK_CLASS =
+  "text-sm text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:opacity-60";
 
 export default function EmpresaZonaPerigosa({
   empresaId,
@@ -63,22 +63,27 @@ export default function EmpresaZonaPerigosa({
   }
 
   return (
-    <section className="mt-6 rounded-xl border border-border bg-background p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setSairOpen(true)} className={BTN_ROW}>
-          Sair da empresa
+    <>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-6">
+        <button type="button" onClick={() => setSairOpen(true)} className={LINK_CLASS}>
+          Sair desta empresa
         </button>
         {isAdministrador ? (
-          <button
-            type="button"
-            onClick={() => {
-              setConfirmNome("");
-              setDesativarOpen(true);
-            }}
-            className={BTN_ROW}
-          >
-            Desativar empresa
-          </button>
+          <>
+            <span aria-hidden className="text-border">
+              ·
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmNome("");
+                setDesativarOpen(true);
+              }}
+              className={LINK_CLASS}
+            >
+              Desativar empresa
+            </button>
+          </>
         ) : null}
       </div>
 
@@ -144,6 +149,6 @@ export default function EmpresaZonaPerigosa({
           </button>
         </div>
       </Modal>
-    </section>
+    </>
   );
 }

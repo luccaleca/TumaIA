@@ -29,12 +29,159 @@ const linkItemSchema = z.object({
 });
 
 const CONFIRMATION_MESSAGE_MAX = 320;
+const PRODUCT_MATCH_HINT = /whey|creatina|suplement|produto|pote|embalagem|packshot|refil|sabor|baunilha|chocolate|morango|cookie/i;
 
 const proposalOutSchema = z.object({
   confirmation_message: z.string().min(12).max(CONFIRMATION_MESSAGE_MAX),
   links: z.array(linkItemSchema).max(8).optional().default([]),
   post_context_proposal: z.record(z.string(), z.unknown()).optional().default({}),
 });
+
+function compactSupplementLabel(value, fallback = "") {
+  let s = String(value || fallback || "")
+    .replace(/\.[a-z0-9]{2,5}$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s) s = String(fallback || "").trim();
+  if (!s) return "";
+  const words = s.split(" ").filter(Boolean);
+  if (words.length > 4) s = words.slice(0, 4).join(" ");
+  if (s.length > 36) s = `${s.slice(0, 35).trim()}…`;
+  return s;
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function tokenizeSearchText(value) {
+  const stop = new Set([
+    "com",
+    "para",
+    "uma",
+    "uns",
+    "umas",
+    "arte",
+    "post",
+    "foto",
+    "quero",
+    "usar",
+    "sera",
+    "seria",
+    "mais",
+    "muito",
+    "promo",
+    "promocao",
+    "promocional",
+    "dia",
+    "dos",
+    "das",
+    "de",
+    "do",
+    "da",
+    "e",
+    "ou",
+    "na",
+    "no",
+    "em",
+    "por",
+    "pra",
+  ]);
+  return [...new Set(normalizeSearchText(value).match(/[a-z0-9]+/g) || [])].filter(
+    (token) => token.length >= 3 && !stop.has(token),
+  );
+}
+
+function cleanShortSentence(value, max = 180) {
+  let s = String(value || "").replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  if (s.length > max) s = `${s.slice(0, max - 1).trim()}…`;
+  return s;
+}
+
+function scoreTokenOverlap(blob, tokens) {
+  const text = normalizeSearchText(blob);
+  let score = 0;
+  for (const token of tokens) {
+    if (!token) continue;
+    if (text.includes(token)) score += token.length >= 6 ? 4 : 2;
+  }
+  return score;
+}
+
+function pickBestCampaignContext(contextoRows, userHint = "") {
+  const { campanhaRows } = partitionContextosIdentidade(contextoRows);
+  if (!campanhaRows.length) return null;
+  const tokens = tokenizeSearchText(userHint);
+  if (!tokens.length) return campanhaRows[0] ?? null;
+  let best = null;
+  let bestScore = -1;
+  for (const row of campanhaRows) {
+    const blob = `${row?.nome ?? ""} ${row?.descricao ?? ""}`;
+    const score = scoreTokenOverlap(blob, tokens);
+    if (score > bestScore) {
+      best = row;
+      bestScore = score;
+    }
+  }
+  return bestScore > 0 ? best : campanhaRows[0] ?? null;
+}
+
+function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
+  const rows = Array.isArray(midiaRows) ? midiaRows : [];
+  if (!rows.length) return [];
+  const tokens = tokenizeSearchText(userHint);
+  const imageRows = rows.filter((row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem");
+  if (!imageRows.length) return [];
+
+  const scored = imageRows
+    .map((row) => {
+      const blob = `${row?.nome_exibicao ?? ""} ${row?.nome_arquivo ?? ""} ${row?.descricao ?? ""} ${row?.alt_text ?? ""}`;
+      let score = scoreTokenOverlap(blob, tokens);
+      if (PRODUCT_MATCH_HINT.test(userHint) && PRODUCT_MATCH_HINT.test(blob)) score += 5;
+      return { row, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) {
+    const bestId = pickBestProductMidiaId(imageRows, userHint);
+    return bestId ? imageRows.filter((row) => String(row.id_midia ?? "").trim() === bestId).slice(0, 1) : [];
+  }
+
+  const candidateIds = scored.map((item) => String(item.row.id_midia ?? "").trim()).filter(Boolean);
+  const ranked = rankReferenceMidiaIds(candidateIds, imageRows, userHint);
+  const byId = new Map(imageRows.map((row) => [String(row.id_midia ?? "").trim(), row]));
+  return ranked
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function buildMontagemResumo(proposal) {
+  const p = proposal && typeof proposal === "object" ? proposal : {};
+  const custom = cleanShortSentence(p.montagem_resumo, 180);
+  if (custom) return custom;
+
+  const arteBrief = p.arte_brief && typeof p.arte_brief === "object" ? p.arte_brief : null;
+  const tema = cleanShortSentence(arteBrief?.tema || p.intent_summary || "", 120);
+  const refs = Array.isArray(p.midias_referenced) ? p.midias_referenced.filter(Boolean) : [];
+  const matchedContexto =
+    p.matched_contexto && typeof p.matched_contexto === "object" ? p.matched_contexto : null;
+  const ctxNome = cleanShortSentence(matchedContexto?.nome || "", 48);
+  const base = tema || "Arte alinhada ao pedido";
+  const itens =
+    refs.length > 0
+      ? ` com ${refs.length} ${refs.length === 1 ? "item do acervo" : "itens do acervo"} em destaque`
+      : "";
+  const contexto =
+    ctxNome && !normalizeSearchText(base).includes(normalizeSearchText(ctxNome)) ? ` para ${ctxNome}` : "";
+  return cleanShortSentence(`${base}${itens}${contexto}.`, 180);
+}
 
 /**
  * Preenche `label` ausente e descarta itens inválidos antes do Zod (modelos pequenos omitem campos).
@@ -133,6 +280,79 @@ export function sanitizePostSupplementLinks(raw, contextoRows, midiaRows) {
   return out;
 }
 
+/**
+ * Garante links compactos e coerentes com o que a proposta realmente vai usar:
+ * contexto escolhido + mídias referenciadas + links extras do modelo.
+ *
+ * @param {unknown} rawLinks
+ * @param {Record<string, unknown> | null | undefined} postContextProposal
+ * @param {Array<Record<string, unknown>>} contextoRows
+ * @param {Array<Record<string, unknown>>} midiaRows
+ */
+export function resolvePostSupplementLinks(rawLinks, postContextProposal, contextoRows, midiaRows) {
+  const proposal =
+    postContextProposal && typeof postContextProposal === "object" ? postContextProposal : {};
+  const ctxById = new Map(
+    contextoRows.map((row) => [String(row.id_contexto_empresa ?? "").trim(), row]),
+  );
+  const midById = new Map(midiaRows.map((row) => [String(row.id_midia ?? "").trim(), row]));
+  const extra = sanitizePostSupplementLinks(rawLinks, contextoRows, midiaRows);
+  const out = [];
+  const seen = new Set();
+
+  function push(kind, id, label) {
+    const cleanId = String(id || "").trim();
+    if (!cleanId || seen.has(`${kind}:${cleanId}`)) return;
+    const href =
+      kind === "contexto"
+        ? `/painel/contextos?contexto=${encodeURIComponent(cleanId)}`
+        : `/painel/midias?midia=${encodeURIComponent(cleanId)}`;
+    const compact = compactSupplementLabel(label, kind === "contexto" ? "Contexto" : "Mídia");
+    if (!compact) return;
+    seen.add(`${kind}:${cleanId}`);
+    out.push({ kind, id: cleanId, label: compact, href });
+  }
+
+  const matchedContexto =
+    proposal.matched_contexto && typeof proposal.matched_contexto === "object"
+      ? proposal.matched_contexto
+      : null;
+  const matchedContextoId =
+    matchedContexto && typeof matchedContexto.id_contexto_empresa === "string"
+      ? matchedContexto.id_contexto_empresa.trim()
+      : "";
+  if (matchedContextoId && ctxById.has(matchedContextoId)) {
+    const row = ctxById.get(matchedContextoId);
+    push("contexto", matchedContextoId, String(row?.nome ?? matchedContexto?.nome ?? "Contexto"));
+  }
+
+  const refs = Array.isArray(proposal.midias_referenced) ? proposal.midias_referenced : [];
+  for (const item of refs) {
+    if (!item || typeof item !== "object") continue;
+    const id = typeof item.id_midia === "string" ? item.id_midia.trim() : "";
+    if (!id || !midById.has(id)) continue;
+    const row = midById.get(id);
+    push(
+      "midia",
+      id,
+      String(item.nome_exibicao ?? row?.nome_exibicao ?? row?.nome_arquivo ?? "Mídia do acervo"),
+    );
+    if (out.length >= 8) return out;
+  }
+
+  for (const item of extra) {
+    push(item.kind, item.id, item.label);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function buildReadyConfirmationMessage(links) {
+  return Array.isArray(links) && links.length
+    ? "Clique nos itens que vou usar na arte."
+    : "Revise a arte antes de gerar.";
+}
+
 function formatHistoryForPrompt(history) {
   const tail = history.slice(-8);
   const lines = [];
@@ -202,19 +422,10 @@ function formatEmpresaForLlm(emp) {
  */
 function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
   const lastUser = [...history].reverse().find((m) => m.role === "user");
-  const ctx = contextoRows[0] ?? null;
   const hint = lastUser ? String(lastUser.content) : "";
-  const bestId = pickBestProductMidiaId(midiaRows, hint);
-  const mid = bestId
-    ? (midiaRows.find((r) => String(r.id_midia ?? "").trim() === bestId) ?? null)
-    : (midiaRows.find((r) => String(r.tipo_midia || "").trim().toLowerCase() === "imagem") ??
-      midiaRows[0] ??
-      null);
-  const ctxNome = ctx ? String(ctx.nome ?? "").trim() || "contexto da marca" : "contexto da marca";
+  const ctx = pickBestCampaignContext(contextoRows, hint);
+  const midias = pickReferencedMidias(midiaRows, hint, 3);
   const frase = deriveFraseNaImagemFromHistory(history, contextoRows);
-  let confirmation_message = `Confira o resumo do seu pedido${ctx ? ` para «${ctxNome}»` : ""}${
-    frase ? ` — frase na imagem: «${frase}»` : ""
-  }. Quando estiver certo, gere a prévia.`;
   const links = [];
   if (ctx) {
     const id = String(ctx.id_contexto_empresa ?? "").trim();
@@ -226,7 +437,7 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
       });
     }
   }
-  if (mid) {
+  for (const mid of midias) {
     const id = String(mid.id_midia ?? "").trim();
     if (id) {
       links.push({
@@ -237,37 +448,35 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
       });
     }
   }
-  const midias_referenced = mid
-    ? [
-        {
-          id_midia: String(mid.id_midia ?? "").trim(),
-          nome_exibicao: String(mid.nome_exibicao ?? mid.nome_arquivo ?? "Mídia").trim(),
-          why: "Principal referência visual do acervo (montagem automática).",
-        },
-      ]
-    : [];
+  const midias_referenced = midias.map((mid) => ({
+    id_midia: String(mid.id_midia ?? "").trim(),
+    nome_exibicao: String(mid.nome_exibicao ?? mid.nome_arquivo ?? "Mídia").trim(),
+    why: "Referência escolhida automaticamente a partir do pedido.",
+  }));
   const intent = lastUser ? String(lastUser.content).trim().slice(0, 500) : "";
   const missing = listMissingBriefingSlots(history, { intent_summary: intent, frase_na_imagem: frase });
+  const proposal = {
+    intent_summary: intent,
+    matched_contexto: ctx
+      ? {
+          id_contexto_empresa: String(ctx.id_contexto_empresa ?? "").trim() || null,
+          nome: String(ctx.nome ?? "").trim(),
+          tipo_schema: "",
+          reason: "fallback_painel",
+        }
+      : null,
+    facts_for_image: frase ? { frase_na_imagem: frase } : {},
+    frase_na_imagem: frase,
+    midias_referenced,
+  };
+  proposal.montagem_resumo = buildMontagemResumo(proposal);
 
   return {
-    confirmation_message,
+    confirmation_message: "Clique nos itens que vou usar na arte.",
     briefing_status: missing.length ? "collecting" : "ready",
     missing_slots: missing,
     links,
-    post_context_proposal: {
-      intent_summary: intent,
-      matched_contexto: ctx
-        ? {
-            id_contexto_empresa: String(ctx.id_contexto_empresa ?? "").trim() || null,
-            nome: String(ctx.nome ?? "").trim(),
-            tipo_schema: "",
-            reason: "fallback_painel",
-          }
-        : null,
-      facts_for_image: frase ? { frase_na_imagem: frase } : {},
-      frase_na_imagem: frase,
-      midias_referenced,
-    },
+    post_context_proposal: proposal,
   };
 }
 
@@ -321,6 +530,19 @@ function buildRawPostContextProposal(history, brandColors = [], existingBrief = 
     : extracted;
   if (intent && !arte_brief.tema) arte_brief.tema = intent.slice(0, 200);
   const ready = Boolean(String(arte_brief.tema ?? "").trim());
+  const proposal = {
+    intent_summary: intent || arte_brief.tema,
+    matched_contexto: null,
+    frase_na_imagem: arte_brief.titulo || arte_brief.texto || "",
+    facts_for_image: {
+      frase_na_imagem: arte_brief.titulo || arte_brief.texto || "",
+      titulo: arte_brief.titulo,
+      subtitulo: arte_brief.subtitulo,
+    },
+    midias_referenced: [],
+    arte_brief,
+  };
+  proposal.montagem_resumo = buildMontagemResumo(proposal);
   return {
     confirmation_message: ready
       ? "Confira o resumo da arte abaixo e ajuste se precisar."
@@ -328,18 +550,7 @@ function buildRawPostContextProposal(history, brandColors = [], existingBrief = 
     briefing_status: ready ? "ready" : "collecting",
     missing_slots: ready ? [] : ["frase_imagem"],
     links: [],
-    post_context_proposal: {
-      intent_summary: intent || arte_brief.tema,
-      matched_contexto: null,
-      frase_na_imagem: arte_brief.titulo || arte_brief.texto || "",
-      facts_for_image: {
-        frase_na_imagem: arte_brief.titulo || arte_brief.texto || "",
-        titulo: arte_brief.titulo,
-        subtitulo: arte_brief.subtitulo,
-      },
-      midias_referenced: [],
-      arte_brief,
-    },
+    post_context_proposal: proposal,
   };
 }
 
@@ -356,20 +567,44 @@ export async function generatePostContextProposal(opts) {
   const { history, idEmpresa, db, arteBriefDraft = null } = opts;
 
   if ((env.IMAGE_PIPELINE || "raw") === "raw") {
-    const [contextoRows] = await Promise.all([loadContextosEmpresaAtivos(db, idEmpresa)]);
+    const [contextoRows, midiaRows] = await Promise.all([
+      loadContextosEmpresaAtivos(db, idEmpresa),
+      loadMidiasEmpresaResumo(db, idEmpresa, 24),
+    ]);
     const { identidadeDados } = partitionContextosIdentidade(contextoRows);
     const brandColors = identidadeDados ? allBrandColorsFromIdentidade(identidadeDados) : [];
-    const raw = buildRawPostContextProposal(
+    const raw = buildFallbackProposalFromPanel(
+      history,
+      contextoRows,
+      midiaRows,
+    );
+    const rawBrief = buildRawPostContextProposal(
       history,
       brandColors,
       arteBriefDraft && typeof arteBriefDraft === "object" ? arteBriefDraft : null,
     );
+    const mergedProposal = {
+      ...raw.post_context_proposal,
+      ...rawBrief.post_context_proposal,
+      matched_contexto:
+        raw.post_context_proposal?.matched_contexto || rawBrief.post_context_proposal?.matched_contexto || null,
+      midias_referenced:
+        raw.post_context_proposal?.midias_referenced || rawBrief.post_context_proposal?.midias_referenced || [],
+      montagem_resumo: buildMontagemResumo({
+        ...raw.post_context_proposal,
+        ...rawBrief.post_context_proposal,
+      }),
+    };
+    const links = resolvePostSupplementLinks(raw.links, mergedProposal, contextoRows, midiaRows);
     return {
-      confirmation_message: raw.confirmation_message,
-      links: raw.links,
-      post_context_proposal: raw.post_context_proposal,
-      briefing_status: raw.briefing_status,
-      missing_slots: raw.missing_slots,
+      confirmation_message:
+        rawBrief.briefing_status === "ready"
+          ? buildReadyConfirmationMessage(links)
+          : rawBrief.confirmation_message,
+      links,
+      post_context_proposal: mergedProposal,
+      briefing_status: rawBrief.briefing_status,
+      missing_slots: rawBrief.missing_slots,
       _meta: { pipeline: "raw", provider: env.IMAGE_PROVIDER || "replicate" },
     };
   }
@@ -384,13 +619,13 @@ export async function generatePostContextProposal(opts) {
 O cliente pode escrever de forma informal, com erros, abreviações ou informações no meio da frase — INTERPRETE o pedido completo (não exija formato perfeito).
 Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no painel (tipos como data comemorativa, lançamento, promoção, personalizado, etc. vêm em schema_json/dados_json);
 (3) usar o ACERVO DE MÍDIAS para links e para o campo JSON midias_referenced (nunca invente URLs de arquivo; use só ids listados em "### midia_id=");
-(4) escrever UMA mensagem MUITO curta (máx. 2 frases, até ~280 caracteres) em português do Brasil pedindo confirmação, no estilo:
-   "Confira o resumo do seu pedido para [contexto/campanha]…"
-   Mencione números ou fatos que o cliente disse só se couber na frase — sem parágrafo extra.
+(4) escrever UMA mensagem MUITO curta (ideal até 60 caracteres) em português do Brasil pedindo confirmação.
+   Exemplo bom: "Clique nos itens que vou usar na arte."
+   NÃO liste contexto, produtos, frase ou detalhes longos na confirmation_message; isso vai nos links e no post_context_proposal.
    PROIBIDO citar testes, painel técnico, Llama, Ollama, Replicate ou erros internos.
 (5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo "frase_na_imagem": frase curta que vai ESCRITA NA ARTE (não é legenda). Extraia do texto do cliente mesmo sem aspas (ex.: "frase: TumaIA entende seu negócio" → frase_na_imagem exatamente isso). Máx. 8 palavras, português BR, sem hashtags. Se o cliente disser sem texto na arte, deixe vazio.
 (5b) briefing_status: "ready" se já dá para gerar a imagem (tema + frase ou sem texto explícito); "collecting" só se faltar algo CRÍTICO (máx. 2 lacunas). missing_slots: lista vazia se ready, senão ids entre produto, beneficio, periodo, frase_imagem. Em collecting, confirmation_message pergunta de forma natural (não lista robótica de formulário).
-(6) preencher "links": palavras/frases clicáveis no painel — cada item com kind "contexto" ou "midia", "id" UUID que EXISTA na lista acima, e "label" curto (texto do link). Se o pedido envolver contexto comemorativo e uma mídia de referência, inclua os DOIS links. Se não houver encaixe no banco, use "links": [].
+(6) preencher "links": palavras clicáveis no painel — cada item com kind "contexto" ou "midia", "id" UUID que EXISTA na lista acima, e "label" CURTÍSSIMO (1 a 3 palavras, sem extensão de arquivo). Inclua o matched_contexto e TODAS as midias_referenced também em links. Se não houver encaixe no banco, use "links": [].
 (7) Se o cliente pedir arte com produto, embalagem, armações/óculos PNG ou "inserir" elemento do acervo, preencha "midias_referenced" com até 3 ids EXISTENTES em "### midia_id=".
    ORDEM CRÍTICA: a 1ª posição vai para o FLUX como image_prompt — deve ser RECORTE/PNG DE PRODUTO, NUNCA logo da marca (logo fica só no cantinho da arte), NUNCA um post/arte/banner/festa/400k já pronto do acervo.
    Só coloque o id do LOGO em 1º lugar se o cliente pedir EXPLICITAMENTE logo em destaque/principal/protagonista/arte da marca.
@@ -404,6 +639,7 @@ Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
   "links": [ { "kind": "contexto" | "midia", "id": "uuid", "label": "string" } ],
   "post_context_proposal": {
     "intent_summary": "string",
+    "montagem_resumo": "string curta explicando como a IA vai montar a arte",
     "matched_contexto": { "id_contexto_empresa": "uuid ou null", "nome": "string", "tipo_schema": "string", "reason": "string" } | null,
     "frase_na_imagem": "string curta na arte, ex. Parabéns pelos 500k!",
     "facts_for_image": { "chave": "valor" },
@@ -519,8 +755,6 @@ ${formatEmpresaForLlm(empresaRow)}
     model,
   });
 
-  const links = sanitizePostSupplementLinks(safe.data.links, contextoRows, midiaRows);
-
   let post_context_proposal =
     safe.data.post_context_proposal && typeof safe.data.post_context_proposal === "object"
       ? { ...safe.data.post_context_proposal }
@@ -560,6 +794,9 @@ ${formatEmpresaForLlm(empresaRow)}
       .filter(Boolean)
       .slice(0, 3);
   }
+  post_context_proposal.montagem_resumo = buildMontagemResumo(post_context_proposal);
+
+  const links = resolvePostSupplementLinks(safe.data.links, post_context_proposal, contextoRows, midiaRows);
 
   const base = {
     confirmation_message: safe.data.confirmation_message.trim(),
@@ -572,9 +809,19 @@ ${formatEmpresaForLlm(empresaRow)}
 
   const gated = applyBriefingGate(history, base);
 
+  const finalLinks = resolvePostSupplementLinks(
+    gated.links,
+    gated.post_context_proposal,
+    contextoRows,
+    midiaRows,
+  );
+
   return {
-    confirmation_message: gated.confirmation_message,
-    links: gated.links,
+    confirmation_message:
+      gated.briefing_status === "ready"
+        ? buildReadyConfirmationMessage(finalLinks)
+        : gated.confirmation_message,
+    links: finalLinks,
     post_context_proposal: gated.post_context_proposal,
     briefing_status: gated.briefing_status,
     missing_slots: gated.missing_slots,

@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# TumaIA Frontend
 
-## Getting Started
+Painel web do TumaIA construído em Next.js. Este frontend funciona como retaguarda operacional do produto: nele a empresa configura contexto, identidade da marca, mídias, dados cadastrais e partes do fluxo que alimentam a automação no WhatsApp e a publicação no Instagram.
 
-First, run the development server:
+## Papel no produto
+
+O TumaIA é um sistema "WhatsApp-first": o usuário final pode pedir posts pelo WhatsApp, enquanto o painel serve para preparar e manter o contexto necessário para que a IA gere materiais coerentes com a marca.
+
+Na prática, o frontend é usado para:
+
+- cadastrar e editar dados da empresa;
+- manter identidade de marca, estilo visual e referências;
+- subir contextos e mídias de apoio;
+- revisar partes do fluxo de geração;
+- operar áreas do produto que exigem interface administrativa.
+
+## Stack
+
+- Next.js
+- React
+- App Router
+
+## Desenvolvimento
 
 ```bash
+cd frontend
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Aplicação local: [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Relação com o restante do sistema
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `frontend/` entrega o painel da empresa.
+- `backend/` expõe autenticação, dados multi-tenant, rotas de IA e integrações.
+- `Supabase` persiste empresas, contextos, mídias e demais dados operacionais.
+- `n8n` e integrações externas cuidam do fluxo automatizado entre WhatsApp, IA e Instagram.
 
-## Learn More
+## Leitura complementar
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Visão geral do produto: [`../docs/contexto-produto.md`](../docs/contexto-produto.md)
+- README raiz: [`../README.md`](../README.md)

@@ -1,32 +1,30 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import {
   calcCompletudeLocal,
   dadosFromApi,
   emptyDados,
   fetchMidiasIdentidade,
-  limparFotosAnaliseIdentidade,
   temConteudoIdentidade,
 } from "../../../lib/identidadeMarcaUi";
 import IdentidadeMarcaFotosTab from "./IdentidadeMarcaFotosTab";
 import IdentidadeMarcaManualTab from "./IdentidadeMarcaManualTab";
 import IdentidadeMarcaProgressBar from "./IdentidadeMarcaProgressBar";
+import IdentidadeMarcaResumo from "./IdentidadeMarcaResumo";
 import IdentidadeMarcaLogoField from "./IdentidadeMarcaLogoField";
+import EmpresaSectionPanel from "./EmpresaSectionPanel";
 
 const BTN_SECUNDARIO =
   "rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60";
-
-const TAB_CLASS =
-  "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-60";
 
 /**
  * @param {{ empresaId: string, canEdit: boolean, siteEmpresa?: string }} props
  */
 export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa = "" }) {
   const [open, setOpen] = useState(false);
-  const [modo, setModo] = useState(/** @type {'fotos' | 'manual'} */ ("fotos"));
+  const [modo, setModo] = useState(/** @type {'tuma' | 'manual'} */ ("tuma"));
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -35,7 +33,6 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
   const [completude, setCompletude] = useState(null);
   const [midiasIdentidade, setMidiasIdentidade] = useState([]);
   const [lockedFields, setLockedFields] = useState(() => new Set());
-  const limparFotosRef = useRef(/** @type {string | null} */ (null));
 
   const onMsg = useCallback((text, kind) => {
     setMsg(text);
@@ -64,10 +61,6 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
   useEffect(() => {
     void loadIdentidade();
     void loadMidiasIdentidade();
-    if (empresaId && limparFotosRef.current !== empresaId) {
-      limparFotosRef.current = empresaId;
-      void limparFotosAnaliseIdentidade(empresaId).then(() => loadMidiasIdentidade());
-    }
   }, [loadIdentidade, loadMidiasIdentidade, empresaId]);
 
   function onManualFieldChange(key, value) {
@@ -154,7 +147,40 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
     setDados(dadosFromApi(id?.dados));
     setCompletude(id?.completude || null);
     setOpen(false);
-    onMsg("Identidade da marca salva.", "ok");
+    onMsg("Identidade salva.", "ok");
+  }
+
+  async function onClearIdentidade() {
+    if (!empresaId || !canEdit || saving) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm("Limpar a identidade da marca? Isso remove os dados preenchidos e a logo salva nesta seção.")
+    ) {
+      return;
+    }
+
+    setSaving(true);
+    onMsg("Limpando identidade...", "ok");
+    const result = await authApiFetchWithToken(`/empresas/${empresaId}/identidade`, {
+      method: "DELETE",
+    });
+    setSaving(false);
+    if (!result.ok || result.networkError) {
+      onMsg(
+        result.networkError?.message || formatAuthError(result.json) || "Não foi possível limpar a identidade.",
+        "err",
+      );
+      return;
+    }
+
+    const id = result.json?.identidade;
+    setDados(dadosFromApi(id?.dados));
+    setCompletude(id?.completude || calcCompletudeLocal(emptyDados));
+    setLockedFields(new Set());
+    setOpen(false);
+    setModo("tuma");
+    void loadMidiasIdentidade();
+    onMsg("Identidade da marca limpa.", "ok");
   }
 
   if (!empresaId) return null;
@@ -173,82 +199,46 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
         : "Configure fotos ou preencha manualmente para o Tuma entender sua marca.";
 
   return (
-    <section className="mt-6 rounded-xl border border-border bg-background" id="identidade-marca">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold text-foreground">Identidade da marca</h2>
-          {!open && temConteudo ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {pct}% completo{pronto ? " · pronto para artes" : ""}
-            </p>
-          ) : null}
-        </div>
+    <EmpresaSectionPanel
+      step={2}
+      id="identidade-marca"
+      title="Identidade"
+      description="Paleta, logo, estilo e mood — o que o Tuma usa nas artes."
+      actions={
         <button type="button" onClick={() => setOpen((v) => !v)} className={BTN_SECUNDARIO}>
-          {open ? "Recolher" : "Configurar"}
+          {open ? "Recolher" : temConteudo ? "Editar" : "Configurar"}
         </button>
-      </div>
-
-      {!open && !loading ? (
-        <div className="space-y-3 border-b border-border px-4 py-4 sm:px-5">
-          <IdentidadeMarcaProgressBar
+      }
+    >
+      {!open ? (
+        <>
+          <IdentidadeMarcaResumo
+            dados={dados}
+            midias={midiasIdentidade}
             percentual={pct}
             prontoParaImagem={pronto}
-            dados={dados}
-            batchLabel={progressSummary}
-            compact
+            loading={loading}
           />
-          {msg ? (
-            <p
-              className={`rounded-lg border px-3 py-2 text-sm ${
-                msgKind === "err"
-                  ? "border-red-300 bg-red-50 text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:text-red-100"
-                  : "border-accent/30 bg-accent-muted text-foreground"
-              }`}
-            >
-              {msg}
-            </p>
+          {msg && !loading ? (
+            <div className="border-t border-border px-4 pb-4 sm:px-5">
+              <p
+                className={`rounded-lg border px-3 py-2 text-sm ${
+                  msgKind === "err"
+                    ? "border-red-300 bg-red-50 text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:text-red-100"
+                    : "border-accent/30 bg-accent-muted text-foreground"
+                }`}
+              >
+                {msg}
+              </p>
+            </div>
           ) : null}
-        </div>
+        </>
       ) : null}
 
       {open ? (
         <>
           <div className="space-y-5 p-4 sm:p-5">
             {loading ? <p className="text-sm text-muted-foreground">Carregando…</p> : null}
-
-            <div
-              className="flex flex-wrap gap-2"
-              role="tablist"
-              aria-label="Modo de configuração da identidade"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={modo === "fotos"}
-                disabled={!canEdit && modo !== "fotos"}
-                className={`${TAB_CLASS} ${
-                  modo === "fotos"
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-                onClick={() => setModo("fotos")}
-              >
-                Tuma analisa (fotos)
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={modo === "manual"}
-                className={`${TAB_CLASS} ${
-                  modo === "manual"
-                    ? "bg-accent text-accent-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-                onClick={() => setModo("manual")}
-              >
-                Preencher manualmente
-              </button>
-            </div>
 
             <IdentidadeMarcaLogoField
               empresaId={empresaId}
@@ -262,7 +252,47 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
               onMsg={onMsg}
             />
 
-            {modo === "fotos" ? (
+            <section className="rounded-xl border border-border/80 bg-surface-elevated/25 p-4">
+              <p className="text-sm font-medium text-foreground">Como deseja montar a identidade?</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Primeiro envie a logo. Depois escolha se o Tuma vai analisar fotos para montar a base ou se você quer
+                preencher tudo manualmente.
+              </p>
+
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setModo("tuma")}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    modo === "tuma"
+                      ? "border-accent bg-accent-muted/40 ring-1 ring-accent/25"
+                      : "border-border bg-background hover:bg-muted/40"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-foreground">Criar com o Tuma</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Envie fotos, o Tuma analisa os padrões da marca e monta a base da identidade para você revisar.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setModo("manual")}
+                  className={`rounded-xl border p-4 text-left transition ${
+                    modo === "manual"
+                      ? "border-accent bg-accent-muted/40 ring-1 ring-accent/25"
+                      : "border-border bg-background hover:bg-muted/40"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-foreground">Preencher manualmente</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Abra os campos para escrever a identidade da marca na mão, do seu jeito.
+                  </p>
+                </button>
+              </div>
+            </section>
+
+            {modo === "tuma" ? (
               <IdentidadeMarcaFotosTab
                 empresaId={empresaId}
                 canEdit={canEdit}
@@ -273,12 +303,11 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
                 lockedFields={lockedFields}
                 completude={completude}
                 setCompletude={setCompletude}
-                onFieldChange={onManualFieldChange}
                 onMsg={onMsg}
                 temConteudoInicial={temConteudoIdentidade(dados)}
               />
             ) : (
-              <>
+              <div className="space-y-4">
                 <IdentidadeMarcaProgressBar
                   percentual={pct}
                   prontoParaImagem={pronto}
@@ -286,7 +315,7 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
                   batchLabel={progressSummary}
                 />
                 <IdentidadeMarcaManualTab dados={dados} canEdit={canEdit} onFieldChange={onManualFieldChange} />
-              </>
+              </div>
             )}
 
             {msg ? (
@@ -307,6 +336,14 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
               <button
                 type="button"
                 disabled={saving}
+                onClick={() => void onClearIdentidade()}
+                className="rounded-lg border border-red-400/70 px-4 py-2 text-sm font-medium text-red-800 transition disabled:opacity-60 hover:bg-red-100 dark:border-red-500/45 dark:font-normal dark:text-red-300 dark:hover:bg-red-950/45"
+              >
+                Limpar identidade
+              </button>
+              <button
+                type="button"
+                disabled={saving}
                 onClick={() => void onSave()}
                 className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 disabled:opacity-60 enabled:hover:scale-[1.02] enabled:active:scale-[0.98]"
               >
@@ -316,7 +353,7 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
           ) : null}
         </>
       ) : null}
-    </section>
+    </EmpresaSectionPanel>
   );
 }
 

@@ -1,11 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import {
-  LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX,
-  LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX,
-  uploadImagemIdentidade,
-} from "../../../lib/identidadeMarcaUi";
+import { LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX, uploadImagemIdentidade } from "../../../lib/identidadeMarcaUi";
 
 const BTN =
   "rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60";
@@ -77,10 +73,10 @@ export default function IdentidadeMarcaLogoField({
     <div className="rounded-xl border border-border bg-surface-elevated/50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">Logo para artes</p>
+          <p className="text-sm font-medium text-foreground">Logo para usar nas artes</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            PNG sem fundo. Mínimo {LOGO_IDENTIDADE_MIN_LADO_MAIOR_PX} px no lado maior (ideal{" "}
-            {LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px).
+            Nao entra na analise das fotos. Serve para o Tuma aplicar a marca nas artes. PNG sem fundo e ideal ate{" "}
+            {LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px no lado maior.
           </p>
         </div>
         {idMidiaLogo ? (

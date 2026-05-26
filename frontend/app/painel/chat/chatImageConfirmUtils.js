@@ -17,6 +17,19 @@ export function formatFraseNaImagemFromProposal(proposal) {
   return null;
 }
 
+export function formatMontagemFromProposal(proposal) {
+  if (!proposal || typeof proposal !== "object") return null;
+  const direct = proposal.montagem_resumo;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const arteBrief = proposal.arte_brief;
+  if (arteBrief && typeof arteBrief === "object" && typeof arteBrief.tema === "string" && arteBrief.tema.trim()) {
+    return arteBrief.tema.trim();
+  }
+  const summary = proposal.intent_summary;
+  if (typeof summary === "string" && summary.trim()) return summary.trim();
+  return null;
+}
+
 /**
  * @param {Record<string, unknown>} msg
  * @param {string} ctxId
@@ -91,7 +104,7 @@ export function patchMessageContextoSelection(msg, ctxId, contextosCampanha) {
     selected_contexto_id: row.id_contexto_empresa,
     post_supplement: {
       ...msg.post_supplement,
-      confirmation_message: `Resumo para a arte com o contexto «${nome}».`,
+      confirmation_message: "Clique nos itens que vou usar na arte.",
       post_context_proposal: proposal,
       links,
     },

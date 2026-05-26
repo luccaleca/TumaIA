@@ -7,6 +7,8 @@ import {
   db,
   getMembroAtivoEmpresa,
   getOrCreatePastaUploadRaiz,
+  reparentPastasAcervoOrfas,
+  resolvePastaPaiAcervo,
   patchPastaBody,
   pastaParam,
   podeGerenciarMidias,
@@ -39,6 +41,16 @@ export function registerPastasRoutes(r) {
         return;
       }
 
+      let idPastaUploadRaiz;
+      try {
+        idPastaUploadRaiz = await getOrCreatePastaUploadRaiz(supabase, idEmpresa.data);
+        await reparentPastasAcervoOrfas(supabase, idEmpresa.data, idPastaUploadRaiz);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao garantir pasta da raiz";
+        res.status(500).json({ error: msg });
+        return;
+      }
+
       const { data: pastas, error: eList } = await supabase
         .from("pasta")
         .select("*")
@@ -49,19 +61,15 @@ export function registerPastasRoutes(r) {
         res.status(500).json({ error: eList.message });
         return;
       }
-      let idPastaUploadRaiz;
-      try {
-        idPastaUploadRaiz = await getOrCreatePastaUploadRaiz(supabase, idEmpresa.data);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Erro ao garantir pasta da raiz";
-        res.status(500).json({ error: msg });
-        return;
-      }
-      const visiveis = (pastas || []).filter((p) => String(p.nome ?? "").trim() !== PASTA_IDENTIDADE_MARCA_NOME);
+      const visiveis = (pastas || []).filter((p) => {
+        const nome = String(p.nome ?? "").trim();
+        if (nome === PASTA_IDENTIDADE_MARCA_NOME) return false;
+        if (p.id_pasta === idPastaUploadRaiz) return false;
+        return true;
+      });
       res.json({
         pastas: visiveis,
         id_pasta_upload_raiz: idPastaUploadRaiz,
-        pasta_upload_raiz_nome: PASTA_UPLOAD_RAIZ_NOME,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro interno";
@@ -101,9 +109,17 @@ export function registerPastasRoutes(r) {
         return;
       }
 
+      let idPastaPai;
+      try {
+        idPastaPai = await resolvePastaPaiAcervo(supabase, idEmpresa.data, parsed.data.id_pasta_pai ?? null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao resolver pasta pai";
+        res.status(500).json({ error: msg });
+        return;
+      }
       const row = {
         id_empresa: idEmpresa.data,
-        id_pasta_pai: parsed.data.id_pasta_pai ?? null,
+        id_pasta_pai: idPastaPai,
         nome: parsed.data.nome.trim(),
         ativo: true,
       };
@@ -176,10 +192,22 @@ export function registerPastasRoutes(r) {
         return;
       }
 
+      let idPastaUploadRaiz = null;
+      try {
+        idPastaUploadRaiz = await getOrCreatePastaUploadRaiz(supabase, p.data.idEmpresa);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao resolver área de trabalho";
+        res.status(500).json({ error: msg });
+        return;
+      }
+
       const curPai = pastaRow.id_pasta_pai ?? null;
       const wantPai = parsed.data.id_pasta_pai;
       const wantNomeIn = parsed.data.nome;
-      const destPai = wantPai !== undefined ? wantPai : curPai;
+      let destPai = wantPai !== undefined ? wantPai : curPai;
+      if (wantPai !== undefined && wantPai == null) {
+        destPai = idPastaUploadRaiz;
+      }
       const destNome = wantNomeIn !== undefined ? wantNomeIn.trim() : pastaRow.nome;
 
       if (
@@ -239,6 +267,10 @@ export function registerPastasRoutes(r) {
       }
 
       const novoPai = destPai;
+      if (pastaRow.id_pasta === idPastaUploadRaiz) {
+        res.status(400).json({ error: "A área de trabalho do acervo não pode ser movida." });
+        return;
+      }
       if (novoPai === p.data.idPasta) {
         res.status(400).json({ error: "Uma pasta não pode ser pai dela mesma" });
         return;
@@ -327,6 +359,19 @@ export function registerPastasRoutes(r) {
       }
       if (!membro || !podeGerenciarMidias(membro.cargo)) {
         res.status(403).json({ error: "Sem permissão para remover pasta" });
+        return;
+      }
+
+      let idPastaUploadRaiz;
+      try {
+        idPastaUploadRaiz = await getOrCreatePastaUploadRaiz(supabase, p.data.idEmpresa);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Erro ao resolver área de trabalho";
+        res.status(500).json({ error: msg });
+        return;
+      }
+      if (p.data.idPasta === idPastaUploadRaiz) {
+        res.status(400).json({ error: "A área de trabalho do acervo não pode ser removida." });
         return;
       }
 

@@ -10,7 +10,7 @@ import {
   detectImageGenerationIntentFromHistory,
 } from "../../../lib/chatDeliveryUi";
 import { IDENTIDADE_CONTEXTO_NOME, isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
-import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
+import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresaUltimaFromMinhasPayload } from "../../../lib/empresaAtiva";
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
 import ChatFormatoBar from "./ChatFormatoBar";
 import ChatGeneratedImagePreview from "./ChatGeneratedImagePreview";
@@ -370,7 +370,8 @@ function toApiMensagens(messages) {
         typeof m.post_supplement.confirmation_message === "string" &&
         m.post_supplement.confirmation_message.trim();
       const hasBrief = m.post_supplement.post_context_proposal?.arte_brief;
-      if (hasConfirm || hasBrief) meta.post_supplement = m.post_supplement;
+      const hasLinks = Array.isArray(m.post_supplement.links) && m.post_supplement.links.length > 0;
+      if (hasConfirm || hasBrief || hasLinks) meta.post_supplement = m.post_supplement;
     }
     if (m.post_context_proposal && typeof m.post_context_proposal === "object" && Object.keys(m.post_context_proposal).length > 0) {
       meta.post_context_proposal = m.post_context_proposal;
@@ -528,7 +529,9 @@ export default function PainelChatPage() {
         return;
       }
       const list = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas : [];
-      const idEmp = resolveEmpresaAtivaId(list);
+      const idEmp = resolveEmpresaAtivaId(list, {
+        idEmpresaUltimaPerfil: idEmpresaUltimaFromMinhasPayload(minhas.json),
+      });
       if (idEmp) {
         const row = empresaRowFromMinhas(list, idEmp);
         if (row?.empresa) setEmpresaAtiva(row.empresa);
@@ -796,13 +799,12 @@ export default function PainelChatPage() {
         const post_supplement =
           rawSup && (hasArteBrief || confirmFromApi.length >= 8 || Object.keys(proposalFromApi).length > 0)
             ? {
-                confirmation_message: isRawPipeline
-                  ? hasArteBrief
-                    ? "Resumo da arte atualizado."
-                    : ""
-                  : confirmFromApi.length >= 8
+                confirmation_message:
+                  confirmFromApi.length >= 1
                     ? confirmFromApi
-                    : CHAT_PEDIDO_RESUMO_MSG,
+                    : isRawPipeline && hasArteBrief
+                      ? "Ajuste se precisar antes de gerar."
+                      : CHAT_PEDIDO_RESUMO_MSG,
                 links: Array.isArray(rawSup.links)
                   ? rawSup.links.map(normalizeSupplementLink).filter(Boolean)
                   : [],
@@ -1161,13 +1163,21 @@ export default function PainelChatPage() {
         : [];
 
       const rawSup = result.json?.post_supplement;
+      const hasRawSupLinks = rawSup && typeof rawSup === "object" && Array.isArray(rawSup.links) && rawSup.links.length > 0;
+      const hasRawSupProposal =
+        rawSup &&
+        typeof rawSup === "object" &&
+        rawSup.post_context_proposal &&
+        typeof rawSup.post_context_proposal === "object" &&
+        Object.keys(rawSup.post_context_proposal).length > 0;
       const post_supplement =
         rawSup &&
         typeof rawSup === "object" &&
-        typeof rawSup.confirmation_message === "string" &&
-        rawSup.confirmation_message.trim()
+        ((typeof rawSup.confirmation_message === "string" && rawSup.confirmation_message.trim()) ||
+          hasRawSupLinks ||
+          hasRawSupProposal)
           ? {
-              confirmation_message: rawSup.confirmation_message.trim(),
+              confirmation_message: String(rawSup.confirmation_message ?? "").trim(),
               links: Array.isArray(rawSup.links)
                 ? rawSup.links.map(normalizeSupplementLink).filter(Boolean)
                 : [],
@@ -1513,7 +1523,11 @@ export default function PainelChatPage() {
                   typeof message.post_supplement.confirmation_message === "string"
                     ? message.post_supplement.confirmation_message.trim()
                     : "";
-                const hasSupplement = Boolean(supplementMsg);
+                const supplementLinks =
+                  message.post_supplement && Array.isArray(message.post_supplement.links)
+                    ? message.post_supplement.links
+                    : [];
+                const hasSupplement = Boolean(supplementMsg) || supplementLinks.length > 0;
                 const hasArteBrief =
                   message.post_supplement?.post_context_proposal?.arte_brief &&
                   typeof message.post_supplement.post_context_proposal.arte_brief === "object";
@@ -1545,10 +1559,11 @@ export default function PainelChatPage() {
                           Gerando imagem (pode levar alguns minutos)…
                         </div>
                       ) : null}
-                      {hasSupplement && !hasArteBrief ? (
+                      {hasSupplement ? (
                         <ChatImageConfirmBlock
                           supplement={message.post_supplement}
                           collecting={message.post_supplement?.briefing_status === "collecting"}
+                          hasArteBrief={Boolean(hasArteBrief)}
                           contextosCampanha={contextosCampanha}
                           selectedContextoId={
                             message.selected_contexto_id ||
@@ -1564,7 +1579,7 @@ export default function PainelChatPage() {
                           disabled={!!actionBusy || sending}
                         />
                       ) : null}
-                      {hasArteBrief && supplementMsg ? (
+                      {hasArteBrief && supplementMsg && !hasSupplement ? (
                         <p className="mt-2 text-xs text-muted-foreground">{supplementMsg}</p>
                       ) : null}
                       {hasImages ? (

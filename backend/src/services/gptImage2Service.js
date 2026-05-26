@@ -108,7 +108,7 @@ export async function executeGptImage2(apiKey, data) {
   } catch (err) {
     const errMsg =
       err instanceof Error && err.name === "AbortError"
-        ? "Tempo esgotado aguardando GPT Image 2."
+        ? "Tempo esgotado ao gerar a imagem."
         : err instanceof Error
           ? err.message
           : String(err);

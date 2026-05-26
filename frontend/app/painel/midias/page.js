@@ -3,7 +3,19 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
-import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
+import {
+  collectDroppedMediaFiles,
+  collectMediaFilesFromFileList,
+  guessMediaMimeType,
+  inferTipoMidia,
+} from "../../../lib/collectDroppedMediaFiles";
+import {
+  buildMidiasBreadcrumbs,
+  isMidiasDesktop,
+  midiasPastaIdToUi,
+  resolveMidiasPastaAtivaId,
+} from "../../../lib/midiasDesktop";
+import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresaUltimaFromMinhasPayload } from "../../../lib/empresaAtiva";
 import Modal from "../../components/Modal";
 
 function toBase64WithoutPrefix(file) {
@@ -20,9 +32,7 @@ function toBase64WithoutPrefix(file) {
 }
 
 function getTipoMidia(file) {
-  if (file.type.startsWith("image/")) return "imagem";
-  if (file.type.startsWith("video/")) return "video";
-  return "outro";
+  return inferTipoMidia(file);
 }
 
 export default function MidiasPage() {
@@ -45,43 +55,30 @@ export default function MidiasPage() {
   const [renameDialog, setRenameDialog] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
   const [uploadZoneHover, setUploadZoneHover] = useState(false);
 
-  const isRoot = !pastaAtual;
+  const isAtDesktop = isMidiasDesktop(pastaAtual, pastaUploadRaiz);
+  const pastaAtivaId = resolveMidiasPastaAtivaId(pastaAtual, pastaUploadRaiz);
   const pastasFilhas = useMemo(() => {
-    const parentId = isRoot ? null : pastaAtual;
-    return pastas.filter((p) => {
-      if ((p.id_pasta_pai || null) !== parentId) return false;
-      // Igual demo: pasta reservada da raiz ("Geral") não aparece como tile navegável na raiz.
-      if (isRoot && pastaUploadRaiz && p.id_pasta === pastaUploadRaiz) return false;
-      return true;
-    });
-  }, [pastas, pastaAtual, isRoot, pastaUploadRaiz]);
+    if (!pastaAtivaId) return [];
+    return pastas.filter((p) => (p.id_pasta_pai || null) === pastaAtivaId);
+  }, [pastas, pastaAtivaId]);
   const midiasDaPastaAtual = useMemo(() => {
-    if (isRoot) {
-      return midias.filter((m) => {
-        if (m.id_pasta == null) return true;
-        if (pastaUploadRaiz && m.id_pasta === pastaUploadRaiz) return true;
-        return false;
-      });
-    }
-    return midias.filter((m) => {
-      if (m.id_pasta === pastaAtual) return true;
-      return false;
-    });
-  }, [midias, pastaAtual, pastaUploadRaiz, isRoot]);
-  const pastaAtualObj = useMemo(() => pastas.find((p) => p.id_pasta === pastaAtual) || null, [pastas, pastaAtual]);
-  const breadcrumbs = useMemo(() => {
-    if (!pastaAtual || !pastas.length) return [];
-    const map = new Map(pastas.map((p) => [p.id_pasta, p]));
-    const out = [];
-    let current = map.get(pastaAtual) || null;
-    while (current) {
-      out.unshift(current);
-      current = current.id_pasta_pai ? map.get(current.id_pasta_pai) || null : null;
-    }
-    return out;
-  }, [pastas, pastaAtual]);
+    if (!pastaAtivaId) return [];
+    return midias.filter(
+      (m) => m.id_pasta === pastaAtivaId || (isAtDesktop && (m.id_pasta == null || m.id_pasta === "")),
+    );
+  }, [midias, pastaAtivaId, isAtDesktop]);
+  const pastaAtualObj = useMemo(
+    () => (pastaAtual ? pastas.find((p) => p.id_pasta === pastaAtual) || null : null),
+    [pastas, pastaAtual],
+  );
+  const breadcrumbs = useMemo(
+    () => buildMidiasBreadcrumbs(pastas, pastaAtual, pastaUploadRaiz),
+    [pastas, pastaAtual, pastaUploadRaiz],
+  );
+  const pastaAtualLabel = pastaAtualObj?.nome || "Suas mídias";
 
   function isDescendant(candidateParentId, folderId) {
     if (!candidateParentId || !folderId) return false;
@@ -105,7 +102,9 @@ export default function MidiasPage() {
       return;
     }
     const list = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas : [];
-    const idEmp = resolveEmpresaAtivaId(list);
+    const idEmp = resolveEmpresaAtivaId(list, {
+      idEmpresaUltimaPerfil: idEmpresaUltimaFromMinhasPayload(minhas.json),
+    });
     const rowAtiva = idEmp ? empresaRowFromMinhas(list, idEmp) : null;
     if (rowAtiva?.empresa) setEmpresaAtiva(rowAtiva.empresa);
     const papel = String(rowAtiva?.papel || "").toLowerCase();
@@ -142,8 +141,11 @@ export default function MidiasPage() {
     setPastas(listaPastas);
     setMidias(Array.isArray(midiasRes.json?.midias) ? midiasRes.json.midias : []);
     setPastaUploadRaiz(pastasRes.json?.id_pasta_upload_raiz || null);
+    const idDesktop = pastasRes.json?.id_pasta_upload_raiz || null;
     setPastaAtual((curr) => {
-      if (curr && listaPastas.some((p) => p.id_pasta === curr)) return curr;
+      if (!curr) return "";
+      if (idDesktop && curr === idDesktop) return "";
+      if (listaPastas.some((p) => p.id_pasta === curr)) return curr;
       return "";
     });
     setLoading(false);
@@ -162,27 +164,26 @@ export default function MidiasPage() {
     if (!wanted) return;
     const m = midias.find((x) => x.id_midia === wanted);
     if (!m) return;
-    const targetPasta = m.id_pasta ?? "";
-    const pastaNorm = pastaAtual || "";
-    if (String(targetPasta || "") !== String(pastaNorm || "")) {
-      setPastaAtual(targetPasta || "");
+    const targetUi = midiasPastaIdToUi(String(m.id_pasta ?? ""), pastaUploadRaiz);
+    if (targetUi !== pastaAtual) {
+      setPastaAtual(targetUi);
       return;
     }
     requestAnimationFrame(() => {
       document.getElementById(`midia-tile-${wanted}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       if (m.url_arquivo) setPreviewMidia(m);
     });
-  }, [loading, midias, pastaAtual]);
+  }, [loading, midias, pastaAtual, pastaUploadRaiz]);
 
   async function onCreateFolder(nameIn) {
-    if (!empresaId || !canManageMidias) return;
+    if (!empresaId || !canManageMidias || !pastaAtivaId) return;
     const nome = String(nameIn || "").trim();
     if (!nome || !nome.trim()) return;
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/pastas`, {
       method: "POST",
       body: JSON.stringify({
         nome: nome.trim(),
-        id_pasta_pai: pastaAtual || null,
+        id_pasta_pai: pastaAtivaId,
       }),
     });
     if (!result.ok || result.networkError) {
@@ -197,44 +198,117 @@ export default function MidiasPage() {
     await loadData();
   }
 
-  async function uploadFilesList(files) {
-    const list = Array.isArray(files) ? files : Array.from(files || []);
-    if (!list.length || !empresaId || !canManageMidias) return;
+  async function createPastaForUpload(nome, idPastaPai, workingPastas) {
+    const result = await authApiFetchWithToken(`/empresas/${empresaId}/pastas`, {
+      method: "POST",
+      body: JSON.stringify({
+        nome: String(nome || "").trim(),
+        id_pasta_pai: idPastaPai || null,
+      }),
+    });
+    if (!result.ok || result.networkError) {
+      throw new Error(result.networkError?.message || formatAuthError(result.json) || "Falha ao criar pasta.");
+    }
+    const pasta = result.json?.pasta;
+    if (!pasta?.id_pasta) throw new Error("Resposta inválida ao criar pasta.");
+    workingPastas.push(pasta);
+    setPastas((prev) => [...prev, pasta]);
+    return pasta.id_pasta;
+  }
+
+  async function resolvePastaIdForFolderPath(folderPath, baseParentId, cache, workingPastas) {
+    let parentId = baseParentId;
+    const segments = [];
+    for (const seg of folderPath) {
+      const nome = String(seg || "").trim();
+      if (!nome) continue;
+      segments.push(nome);
+      const cacheKey = `${parentId || "root"}:${segments.join("/")}`;
+      if (cache.has(cacheKey)) {
+        parentId = cache.get(cacheKey);
+        continue;
+      }
+      const existing = workingPastas.find(
+        (p) => String(p.nome || "").trim() === nome && (p.id_pasta_pai || null) === (parentId || null),
+      );
+      if (existing?.id_pasta) {
+        parentId = existing.id_pasta;
+        cache.set(cacheKey, parentId);
+        continue;
+      }
+      const newId = await createPastaForUpload(nome, parentId, workingPastas);
+      cache.set(cacheKey, newId);
+      parentId = newId;
+    }
+    return parentId;
+  }
+
+  async function uploadOneMediaFile(file, idPasta) {
+    const tipoMidia = getTipoMidia(file);
+    if (tipoMidia === "outro") {
+      throw new Error(`Formato não suportado: ${file.name}`);
+    }
+    const base64 = await toBase64WithoutPrefix(file);
+    const payload = {
+      id_pasta: idPasta,
+      nome_arquivo: file.name,
+      nome_exibicao: file.name,
+      mime_type: guessMediaMimeType(file),
+      tipo_midia: tipoMidia,
+      base64_data: base64,
+      descricao: null,
+      alt_text: null,
+    };
+    const result = await authApiFetchWithToken(`/empresas/${empresaId}/midias/upload-base64`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    if (!result.ok || result.networkError) {
+      throw new Error(result.networkError?.message || formatAuthError(result.json) || `Falha ao enviar ${file.name}.`);
+    }
+  }
+
+  /**
+   * @param {{ file: File, folderPath: string[] }[]} entries
+   */
+  async function uploadMediaEntries(entries) {
+    if (!entries.length || !empresaId || !canManageMidias) return;
+    if (!pastaAtivaId) return;
+    const cache = new Map();
+    const workingPastas = [...pastas];
+    let openPastaAfterUpload = null;
     setUploading(true);
     try {
-      for (const file of list) {
-        const base64 = await toBase64WithoutPrefix(file);
-        const payload = {
-          id_pasta: pastaAtual || pastaUploadRaiz || null,
-          nome_arquivo: file.name,
-          nome_exibicao: file.name,
-          mime_type: file.type || "application/octet-stream",
-          tipo_midia: getTipoMidia(file),
-          base64_data: base64,
-          descricao: null,
-          alt_text: null,
-        };
-        const result = await authApiFetchWithToken(`/empresas/${empresaId}/midias/upload-base64`, {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        if (!result.ok || result.networkError) {
-          setMsg(result.networkError?.message || formatAuthError(result.json) || `Falha ao enviar ${file.name}.`);
-          setMsgKind("err");
-          return;
-        }
+      let uploaded = 0;
+      for (const { file, folderPath } of entries) {
+        const idPasta = folderPath.length
+          ? await resolvePastaIdForFolderPath(folderPath, pastaAtivaId, cache, workingPastas)
+          : pastaAtivaId;
+        await uploadOneMediaFile(file, idPasta);
+        if (folderPath.length) openPastaAfterUpload = idPasta;
+        uploaded += 1;
       }
-      setMsg("Upload concluído.");
+      setMsg(`Upload concluído (${uploaded} arquivo${uploaded === 1 ? "" : "s"}).`);
       setMsgKind("ok");
       await loadData();
+      if (openPastaAfterUpload) setPastaAtual(midiasPastaIdToUi(openPastaAfterUpload, pastaUploadRaiz));
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : "Falha no upload.");
+      setMsgKind("err");
     } finally {
       setUploading(false);
     }
   }
 
   async function onUploadFiles(event) {
-    const files = Array.from(event.target.files || []);
-    await uploadFilesList(files);
+    const entries = collectMediaFilesFromFileList(event.target.files);
+    await uploadMediaEntries(entries);
+    event.target.value = "";
+  }
+
+  async function onUploadFolder(event) {
+    const entries = collectMediaFilesFromFileList(event.target.files);
+    await uploadMediaEntries(entries);
     event.target.value = "";
   }
 
@@ -264,20 +338,28 @@ export default function MidiasPage() {
   async function onUploadZoneDrop(e) {
     if (!empresaId || !canManageMidias || uploading) return;
     setUploadZoneHover(false);
-    const raw = Array.from(e.dataTransfer?.files || []);
-    const files = raw.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
-    if (!raw.length) return;
     e.preventDefault();
-    if (!files.length) {
-      setMsg("Solte apenas imagens ou vídeos nesta área.");
+    const entries = await collectDroppedMediaFiles(e.dataTransfer);
+    if (!entries.length) {
+      const raw = Array.from(e.dataTransfer?.files || []);
+      setMsg(
+        raw.length
+          ? "Nenhuma imagem ou vídeo encontrado. Use PNG, JPEG, WebP, GIF ou vídeos comuns."
+          : "Solte arquivos ou pastas com imagens/vídeos nesta área.",
+      );
       setMsgKind("err");
       return;
     }
-    await uploadFilesList(files);
+    await uploadMediaEntries(entries);
   }
 
   function triggerUploadDialog() {
     fileInputRef.current?.click();
+    setMenuOpen(false);
+  }
+
+  function triggerUploadFolderDialog() {
+    folderInputRef.current?.click();
     setMenuOpen(false);
   }
 
@@ -337,7 +419,7 @@ export default function MidiasPage() {
       setMsgKind("err");
       return;
     }
-    if (pastaAtual === folder.id_pasta) setPastaAtual(pastaUploadRaiz || "");
+    if (pastaAtual === folder.id_pasta) setPastaAtual("");
     await loadData();
   }
 
@@ -371,9 +453,10 @@ export default function MidiasPage() {
   }
 
   async function moveFolder(folderId, targetParentId) {
-    if (!empresaId || !folderId || !canManageMidias) return;
-    if (folderId === targetParentId) return;
-    if (targetParentId && isDescendant(targetParentId, folderId)) {
+    if (!empresaId || !folderId || !canManageMidias || !pastaUploadRaiz) return;
+    const destParent = targetParentId || pastaUploadRaiz;
+    if (folderId === destParent) return;
+    if (destParent && isDescendant(destParent, folderId)) {
       setMsg("Não é possível mover uma pasta para dentro dela mesma.");
       setMsgKind("err");
       return;
@@ -382,7 +465,7 @@ export default function MidiasPage() {
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/pastas/${folderId}`, {
       method: "PATCH",
       body: JSON.stringify({
-        id_pasta_pai: targetParentId || null,
+        id_pasta_pai: destParent,
         nome: folder?.nome,
       }),
     });
@@ -395,9 +478,8 @@ export default function MidiasPage() {
   }
 
   async function moveMidia(midiaId, targetFolderId) {
-    if (!empresaId || !midiaId || !canManageMidias) return;
-    const idPastaDestino = targetFolderId || pastaUploadRaiz || null;
-    if (!idPastaDestino) return;
+    if (!empresaId || !midiaId || !canManageMidias || !pastaUploadRaiz) return;
+    const idPastaDestino = targetFolderId || pastaUploadRaiz;
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/midias/${midiaId}`, {
       method: "PATCH",
       body: JSON.stringify({ id_pasta: idPastaDestino }),
@@ -413,7 +495,7 @@ export default function MidiasPage() {
   async function handleDrop(targetFolderId) {
     if (!dragging) return;
     if (dragging.type === "folder") {
-      await moveFolder(dragging.id, targetFolderId || null);
+      await moveFolder(dragging.id, targetFolderId);
     } else {
       await moveMidia(dragging.id, targetFolderId);
     }
@@ -553,6 +635,13 @@ export default function MidiasPage() {
                 >
                   + Upload arquivo
                 </button>
+                <button
+                  type="button"
+                  onClick={triggerUploadFolderDialog}
+                  className="w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted"
+                >
+                  + Upload pasta
+                </button>
               </div>
             ) : null}
           </div>
@@ -571,8 +660,10 @@ export default function MidiasPage() {
         <div className="mt-3 rounded-md border border-border bg-background p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pasta atual</p>
-              <p className="text-sm font-medium text-foreground">{pastaAtualObj?.nome || "Raiz"}</p>
+              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                {isAtDesktop ? "Acervo" : "Pasta"}
+              </p>
+              <p className="text-sm font-medium text-foreground">{pastaAtualLabel}</p>
             </div>
             <button
               type="button"
@@ -612,23 +703,15 @@ export default function MidiasPage() {
               </button>
             </div>
           ) : null}
+          {!isAtDesktop ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-            {isRoot ? (
-              <button
-                type="button"
-                onClick={() => setPastaAtual("")}
-                className="rounded-md border border-border bg-background px-2 py-1 text-foreground hover:bg-muted"
-              >
-                Raiz /
-              </button>
-            ) : (
               <button
                 type="button"
                 onClick={() => setPastaAtual("")}
                 onDragOver={(e) => {
                   if (!canManageMidias) return;
                   e.preventDefault();
-                  setDropTarget("bc-root");
+                  setDropTarget("bc-desktop");
                 }}
                 onDragLeave={() => {
                   if (!canManageMidias) return;
@@ -640,12 +723,11 @@ export default function MidiasPage() {
                   void handleDrop(null);
                 }}
                 className={`rounded-md border border-border bg-background px-2 py-1 text-foreground transition-colors hover:bg-muted ${
-                  dropTarget === "bc-root" ? "border-accent/50 bg-accent-muted" : ""
+                  dropTarget === "bc-desktop" ? "border-accent/50 bg-accent-muted" : ""
                 }`}
               >
-                Raiz /
+                Início
               </button>
-            )}
             {breadcrumbs.map((item, idx) => (
               <button
                 key={item.id_pasta}
@@ -674,6 +756,7 @@ export default function MidiasPage() {
               </button>
             ))}
           </div>
+          ) : null}
           <input
             ref={fileInputRef}
             type="file"
@@ -682,6 +765,18 @@ export default function MidiasPage() {
             onChange={(e) => void onUploadFiles(e)}
             disabled={!empresaId || uploading || !canManageMidias}
             className="hidden"
+          />
+          <input
+            ref={folderInputRef}
+            type="file"
+            multiple
+            accept="image/*,video/*"
+            onChange={(e) => void onUploadFolder(e)}
+            disabled={!empresaId || uploading || !canManageMidias}
+            className="hidden"
+            // @ts-expect-error atributos não tipados no React DOM
+            webkitdirectory=""
+            directory=""
           />
           {empresaId && canManageMidias ? (
             <button
@@ -702,10 +797,10 @@ export default function MidiasPage() {
                 ⬆
               </span>
               <span className="text-sm font-medium text-foreground">
-                Arraste imagens ou vídeos e solte aqui
+                Arraste arquivos ou pastas com imagens/vídeos
               </span>
               <span className="text-xs text-muted-foreground">
-                Ou clique para escolher arquivos · envia para a pasta atual ({pastaAtualObj?.nome || "Raiz"})
+                Pastas viram subpastas aqui · clique para arquivos ou use + → Upload pasta ({pastaAtualLabel})
               </span>
             </button>
           ) : null}
@@ -715,7 +810,9 @@ export default function MidiasPage() {
         <div className="mt-4">
           {loading ? <p className="mt-2 text-sm text-muted-foreground">Carregando...</p> : null}
           {!loading && pastasFilhas.length === 0 && midiasDaPastaAtual.length === 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">Pasta vazia.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {isAtDesktop ? "Nenhuma mídia ainda. Arraste arquivos ou pastas acima." : "Pasta vazia."}
+            </p>
           ) : null}
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {pastasFilhas.map((p) => (

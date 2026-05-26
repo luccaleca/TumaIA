@@ -19,6 +19,7 @@ import {
   sairDaEmpresa,
 } from "../../modules/empresas/empresaDesativacao.js";
 import { montarListaMinhasEmpresas } from "../../modules/empresas/empresaListagem.js";
+import { resolveIdEmpresaUltimaUsuario } from "../../modules/auth/usuarioEmpresaUltimaService.js";
 
 const desativarEmpresaBody = z.object({
   confirmacao_nome: z.string().min(1).max(200),
@@ -60,7 +61,18 @@ export function registerEmpresaCoreRoutes(r) {
 
       const lista = montarListaMinhasEmpresas(membros, empresasRows);
 
-      res.json({ empresas: lista });
+      let id_empresa_ultima = null;
+      try {
+        id_empresa_ultima = await resolveIdEmpresaUltimaUsuario(
+          supabase,
+          req.usuario.id_usuario,
+          empresaIds,
+        );
+      } catch (err) {
+        console.warn("empresas.minhas id_empresa_ultima:", err);
+      }
+
+      res.json({ empresas: lista, id_empresa_ultima });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro interno";
       console.error("empresas.minhas:", e);

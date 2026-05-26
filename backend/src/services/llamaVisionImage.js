@@ -26,13 +26,15 @@ function guessMimeFromUrl(url) {
 
 /**
  * @param {string} imageUrl
+ * @param {{ maxBytes?: number }} [opts]
  * @returns {Promise<{ buffer: Buffer, mime: string }>}
  */
-export async function fetchImageBuffer(imageUrl) {
+export async function fetchImageBuffer(imageUrl, opts = {}) {
   const url = String(imageUrl || "").trim();
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     throw new Error("URL da imagem inválida.");
   }
+  const maxBytes = Math.max(1, Number(opts?.maxBytes) || MAX_IMAGE_BYTES);
 
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -43,8 +45,9 @@ export async function fetchImageBuffer(imageUrl) {
     }
 
     const buffer = Buffer.from(await res.arrayBuffer());
-    if (buffer.length > MAX_IMAGE_BYTES) {
-      throw new Error("Imagem muito grande para análise (máx. 4 MB). Use outra do acervo.");
+    if (buffer.length > maxBytes) {
+      const sizeMb = Math.max(1, Math.round(maxBytes / (1024 * 1024)));
+      throw new Error(`Imagem muito grande para processamento (máx. ${sizeMb} MB).`);
     }
     if (!buffer.length) throw new Error("Imagem de referência vazia.");
 

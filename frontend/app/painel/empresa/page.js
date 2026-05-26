@@ -9,6 +9,7 @@ import EmpresaFotoPerfil from "./EmpresaFotoPerfil";
 import EmpresaWorkspaceCard from "./EmpresaWorkspaceCard";
 import EmpresaUsoToggle from "./EmpresaUsoToggle";
 import EmpresaDadosSection from "./EmpresaDadosSection";
+import EmpresaMembrosSection from "./EmpresaMembrosSection";
 import EmpresaFormulario from "./EmpresaFormulario";
 import {
   emptyEmpresaFields,
@@ -24,6 +25,7 @@ import {
   EMPRESA_ATIVA_CHANGE_EVENT,
   clearEmpresaAtiva,
   getEmpresaAtivaId,
+  idEmpresaUltimaFromMinhasPayload,
   resolveEmpresaAtivaId,
   setEmpresaAtiva,
 } from "../../../lib/empresaAtiva";
@@ -118,6 +120,7 @@ export default function EmpresaPage() {
       const selectRow = options.selectRow !== false;
       const selectedId = resolveEmpresaAtivaId(list, {
         preferId: fromForce || atual || null,
+        idEmpresaUltimaPerfil: idEmpresaUltimaFromMinhasPayload(json),
         fallbackFirst: selectRow && autoFirst,
       });
       if (selectedId) {
@@ -218,9 +221,6 @@ export default function EmpresaPage() {
     const row = empresaRowFromList(empresasMinhas, id);
     if (row?.empresa) {
       setEmpresaAtiva(row.empresa);
-      const nome = row.empresa.nome_fantasia || "Empresa";
-      setMsg(`${nome} selecionada para o chat e a IA.`);
-      setMsgKind("ok");
     }
   }
 
@@ -513,6 +513,28 @@ export default function EmpresaPage() {
                     Preencha os dados para começar a usar o painel.
                   </p>
                 ) : null}
+                {hasEmpresa && !criandoNovaEmpresa ? (
+                  <nav
+                    className="mt-2 flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground"
+                    aria-label="Seções da empresa"
+                  >
+                    <a href="#dados-empresa" className="font-medium text-accent hover:underline">
+                      Dados
+                    </a>
+                    <span aria-hidden className="text-border">
+                      ·
+                    </span>
+                    <a href="#identidade-marca" className="font-medium text-accent hover:underline">
+                      Identidade
+                    </a>
+                    <span aria-hidden className="text-border">
+                      ·
+                    </span>
+                    <a href="#membros-empresa" className="font-medium text-accent hover:underline">
+                      Membros
+                    </a>
+                  </nav>
+                ) : null}
               </div>
             </div>
           </div>
@@ -523,27 +545,75 @@ export default function EmpresaPage() {
         </p>
       ) : null}
       {hasEmpresa ? (
-        <EmpresaDadosSection
-          empresaId={empresaId}
-          fotoPerfilUrl={fotoPerfilUrl}
-          dados={dadosResumoCard}
-          meuCargo={meuCargo}
-          cargoLabel={cargoLabel}
-          canEdit={canEditEmpresa}
-          detalhesOpen={empresaDetalhesOpen}
-          onToggleDetalhes={() => setEmpresaDetalhesOpen((v) => !v)}
-          onEditar={() => {
-            setCriandoNovaEmpresa(false);
-            setEmpresaEditOpen(true);
-          }}
-          onFotoUpdated={() => void refreshEmpresasLista()}
-          onMsg={(text, kind) => {
-            setMsg(text);
-            setMsgKind(kind === "err" ? "err" : "ok");
-          }}
-        />
-      ) : null}
-      {mostrarFormulario ? (
+        <div className="mt-6 space-y-8">
+          <EmpresaDadosSection
+            empresaId={empresaId}
+            fotoPerfilUrl={fotoPerfilUrl}
+            dados={dadosResumoCard}
+            meuCargo={meuCargo}
+            cargoLabel={cargoLabel}
+            canEdit={canEditEmpresa}
+            detalhesOpen={empresaDetalhesOpen}
+            onToggleDetalhes={() => setEmpresaDetalhesOpen((v) => !v)}
+            onEditar={() => {
+              setCriandoNovaEmpresa(false);
+              setEmpresaEditOpen(true);
+            }}
+            onFotoUpdated={() => void refreshEmpresasLista()}
+            onMsg={(text, kind) => {
+              setMsg(text);
+              setMsgKind(kind === "err" ? "err" : "ok");
+            }}
+          />
+
+          {mostrarFormulario ? (
+            <EmpresaFormulario
+              form={form}
+              setForm={setForm}
+              canEdit={canEditEmpresa}
+              saving={saving}
+              criandoNovaEmpresa={criandoNovaEmpresa}
+              hasEmpresa={hasEmpresa}
+              empresaEditOpen={empresaEditOpen}
+              onSubmit={onSubmit}
+              onCancelar={onCancelarFormulario}
+            />
+          ) : null}
+
+          {!criandoNovaEmpresa ? (
+            <>
+              <IdentidadeMarcaSection
+                empresaId={empresaId}
+                canEdit={canEditEmpresa}
+                siteEmpresa={String(form.site_empresa || empresaAtiva?.site_empresa || "").trim()}
+              />
+
+              <EmpresaMembrosSection
+                membros={membros}
+                canManageMembros={canManageMembros}
+                savingMembroId={savingMembroId}
+                onConvidar={() => {
+                  setConviteCodigo("");
+                  setConviteExpiraEm("");
+                  setConviteEmail("");
+                  setConviteCargo("membro");
+                  setConviteModalOpen(true);
+                }}
+                onChangeCargo={(idUsuario, cargo) => void onChangeCargo(idUsuario, cargo)}
+                onRemove={setMembroToRemove}
+              />
+
+              <EmpresaZonaPerigosa
+                empresaId={empresaId}
+                nomeFantasia={dadosResumoCard?.nome_fantasia || ""}
+                isAdministrador={canManageMembros}
+                onEmpresaRemovida={() => void onEmpresaRemovidaZonaPerigosa()}
+                onNotify={onNotifyZonaPerigosa}
+              />
+            </>
+          ) : null}
+        </div>
+      ) : mostrarFormulario ? (
         <EmpresaFormulario
           form={form}
           setForm={setForm}
@@ -554,83 +624,6 @@ export default function EmpresaPage() {
           empresaEditOpen={empresaEditOpen}
           onSubmit={onSubmit}
           onCancelar={onCancelarFormulario}
-        />
-      ) : null}
-
-      {hasEmpresa && !criandoNovaEmpresa ? (
-        <IdentidadeMarcaSection
-          empresaId={empresaId}
-          canEdit={canEditEmpresa}
-          siteEmpresa={String(form.site_empresa || empresaAtiva?.site_empresa || "").trim()}
-        />
-      ) : null}
-
-      {hasEmpresa && !criandoNovaEmpresa ? (
-        <section className="mt-6 rounded-xl border border-border bg-background p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold text-foreground">Membros da empresa</h2>
-            <div className="flex items-center gap-2">
-              {canManageMembros ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setConviteCodigo("");
-                    setConviteExpiraEm("");
-                    setConviteEmail("");
-                    setConviteCargo("membro");
-                    setConviteModalOpen(true);
-                  }}
-                  className="rounded-md border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted"
-                >
-                  Convidar
-                </button>
-              ) : null}
-            </div>
-          </div>
-          {!membros.length ? <p className="text-sm text-muted-foreground">Nenhum membro encontrado.</p> : null}
-          <div className="space-y-2">
-            {membros.map((m) => (
-              <article
-                key={m.id_usuario}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">{m.nome || "Usuário sem nome"}</p>
-                  <p className="text-xs text-muted-foreground">{m.email || "Sem e-mail"}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={m.cargo || "membro"}
-                    onChange={(e) => void onChangeCargo(m.id_usuario, e.target.value)}
-                    disabled={!canManageMembros || savingMembroId === m.id_usuario}
-                    className="rounded-md border border-border bg-surface-elevated px-2 py-1 text-sm text-foreground disabled:opacity-60"
-                  >
-                    <option value="membro">Membro</option>
-                    <option value="editor">Editor</option>
-                    <option value="administrador">Administrador</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setMembroToRemove(m)}
-                    disabled={!canManageMembros || savingMembroId === m.id_usuario}
-                    className="rounded-md border border-red-400/70 px-2 py-1 text-xs font-medium text-red-800 hover:bg-red-100 disabled:opacity-60 dark:border-red-500/45 dark:font-normal dark:text-red-300 dark:hover:bg-red-950/45"
-                  >
-                    Remover
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {hasEmpresa && !criandoNovaEmpresa ? (
-        <EmpresaZonaPerigosa
-          empresaId={empresaId}
-          nomeFantasia={dadosResumoCard?.nome_fantasia || ""}
-          isAdministrador={canManageMembros}
-          onEmpresaRemovida={() => void onEmpresaRemovidaZonaPerigosa()}
-          onNotify={onNotifyZonaPerigosa}
         />
       ) : null}
 

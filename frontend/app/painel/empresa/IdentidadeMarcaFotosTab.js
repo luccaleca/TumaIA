@@ -1,24 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import {
-  IDENTIDADE_ANALISE_TIMEOUT_MS,
   MAX_FOTOS_IDENTIDADE,
   calcCompletudeLocal,
-  mergeIdentidadeSugestao,
+  fetchIdentidadeAnaliseJob,
+  limparFotosAnaliseIdentidade,
+  startIdentidadeAnaliseJob,
   temConteudoIdentidade,
-  toBase64WithoutPrefix,
+  uploadImagemIdentidade,
 } from "../../../lib/identidadeMarcaUi";
 import IdentidadeMarcaAnaliseProgress from "./IdentidadeMarcaAnaliseProgress";
 import IdentidadeMarcaProgressBar from "./IdentidadeMarcaProgressBar";
 import IdentidadeMarcaResultado from "./IdentidadeMarcaResultado";
-
-const INPUT_CLASS =
-  "w-full rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] focus:border-accent/55 focus:ring-2 focus:ring-accent/15 dark:focus:ring-accent/25 disabled:opacity-60";
-
-const BTN_SECUNDARIO =
-  "rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60";
 
 const BTN_PRIMARIO =
   "rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition disabled:opacity-60 enabled:hover:scale-[1.02] enabled:active:scale-[0.98]";
@@ -32,6 +26,7 @@ const BTN_PRIMARIO =
  *   status: FotoStatus,
  *   error?: string,
  *   revokeOnUnmount?: boolean,
+ *   removable?: boolean,
  * }} FotoFilaItem
  */
 
@@ -51,6 +46,24 @@ function isImageFile(file) {
   return String(file.type || "").startsWith("image/");
 }
 
+function mapJobItemToFila(item, idx) {
+  return {
+    clientId: String(item?.id_midia ?? `job-${idx}`),
+    nome: String(item?.nome ?? `Imagem ${idx + 1}`).trim() || `Imagem ${idx + 1}`,
+    previewUrl: String(item?.preview_url ?? "").trim() || null,
+    status:
+      item?.status === "uploading" ||
+      item?.status === "analyzing" ||
+      item?.status === "done" ||
+      item?.status === "error"
+        ? item.status
+        : "pending",
+    error: String(item?.error ?? "").trim() || undefined,
+    revokeOnUnmount: false,
+    removable: false,
+  };
+}
+
 /**
  * @param {{
  *   empresaId: string,
@@ -58,7 +71,6 @@ function isImageFile(file) {
  *   dados: Record<string, string>,
  *   setDados: (fn: (prev: Record<string, string>) => Record<string, string>) => void,
  *   onFieldChange: (key: string, value: string) => void,
- *   lockedFields: Set<string>,
  *   completude: { percentual?: number, pronto_para_imagem?: boolean } | null,
  *   setCompletude: (c: ReturnType<typeof calcCompletudeLocal>) => void,
  *   onMsg: (text: string, kind: 'ok' | 'err') => void,
@@ -73,43 +85,148 @@ export default function IdentidadeMarcaFotosTab({
   dados,
   setDados,
   onFieldChange,
-  lockedFields,
   completude,
   setCompletude,
   onMsg,
   temConteudoInicial = false,
 }) {
   const fileRef = useRef(null);
+  const filaRef = useRef(/** @type {FotoFilaItem[]} */ ([]));
   const pendingFilesRef = useRef(/** @type {Map<string, File>} */ (new Map()));
+  const pollingRef = useRef(/** @type {ReturnType<typeof setTimeout> | null} */ (null));
+  const notifiedJobRef = useRef("");
   const [fila, setFila] = useState(/** @type {FotoFilaItem[]} */ ([]));
   const [batchRunning, setBatchRunning] = useState(false);
   const [analiseProgress, setAnaliseProgress] = useState(
     /** @type {{ fotoTotal: number, fotoConcluidas: number, fotoAtual: number, fase: 'foto' | 'upload' | 'site', incluiSite: boolean } | null} */ (
-      null,
+      null
     ),
   );
   const [analiseFinishing, setAnaliseFinishing] = useState(false);
   const [zoneHover, setZoneHover] = useState(false);
   const [temResultado, setTemResultado] = useState(temConteudoInicial);
 
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearTimeout(pollingRef.current);
+      pollingRef.current = null;
+    }
+  }, []);
+
+  const applyJobSnapshot = useCallback(
+    async (job, notifyTerminal = false) => {
+      if (!job || typeof job !== "object") {
+        setBatchRunning(false);
+        setAnaliseProgress(null);
+        stopPolling();
+        return;
+      }
+
+      const running = job.status === "queued" || job.status === "running";
+      const progress = job.progress && typeof job.progress === "object" ? job.progress : null;
+      const items = Array.isArray(progress?.items) ? progress.items.map(mapJobItemToFila) : [];
+
+      if (items.length) {
+        setFila((prev) => {
+          const hasLocalPending = prev.some((item) => item.removable);
+          return running || !hasLocalPending ? items : prev;
+        });
+      }
+
+      setBatchRunning(running);
+      setAnaliseProgress(
+        running && progress
+          ? {
+              fotoTotal: Number(progress.fotoTotal) || items.length,
+              fotoConcluidas: Number(progress.fotoConcluidas) || 0,
+              fotoAtual: Number(progress.fotoAtual) || 0,
+              fase: progress.fase === "site" ? "site" : progress.fase === "upload" ? "upload" : "foto",
+              incluiSite: progress.incluiSite === true,
+            }
+          : null,
+      );
+
+      if (!running && job.dados_resultado) {
+        setDados(() => job.dados_resultado);
+        setCompletude(job.completude || calcCompletudeLocal(job.dados_resultado));
+        setTemResultado(true);
+      }
+
+      if (running) {
+        setAnaliseFinishing(false);
+        stopPolling();
+        pollingRef.current = setTimeout(() => {
+          void refreshJob(true);
+        }, 2500);
+      } else {
+        stopPolling();
+        if (notifyTerminal) {
+          const terminalKey = `${job.id_job || "none"}:${job.status || "none"}`;
+          if (notifiedJobRef.current !== terminalKey) {
+            notifiedJobRef.current = terminalKey;
+            if (job.status === "completed" && job.completude) {
+              setAnaliseFinishing(true);
+              setTimeout(() => setAnaliseFinishing(false), 700);
+              onMsg(
+                job.completude.pronto_para_imagem
+                  ? "Análise concluída — revise abaixo e salve a identidade."
+                  : "Análise concluída. Revise os campos abaixo ou envie mais fotos.",
+                "ok",
+              );
+            } else if (job.status === "failed") {
+              onMsg(job.error || "Nenhuma foto foi analisada com sucesso.", "err");
+            }
+          }
+        }
+      }
+    },
+    [onMsg, setCompletude, setDados, stopPolling],
+  );
+
+  const refreshJob = useCallback(
+    async (quiet = false) => {
+      if (!empresaId) return null;
+      try {
+        const job = await fetchIdentidadeAnaliseJob(empresaId);
+        await applyJobSnapshot(job, !quiet);
+        return job;
+      } catch (err) {
+        if (!quiet) {
+          onMsg(err instanceof Error ? err.message : "Falha ao consultar análise em andamento.", "err");
+        }
+        return null;
+      }
+    },
+    [applyJobSnapshot, empresaId, onMsg],
+  );
+
   useEffect(() => {
     if (temConteudoIdentidade(dados)) setTemResultado(true);
   }, [dados]);
 
   useEffect(() => {
+    filaRef.current = fila;
+  }, [fila]);
+
+  useEffect(() => {
     return () => {
-      for (const item of fila) {
+      stopPolling();
+      for (const item of filaRef.current) {
         if (item.revokeOnUnmount && item.previewUrl?.startsWith("blob:")) {
           URL.revokeObjectURL(item.previewUrl);
         }
       }
     };
-  }, [fila]);
+  }, [stopPolling]);
+
+  useEffect(() => {
+    void refreshJob(true);
+  }, [refreshJob]);
 
   const pct = completude?.percentual ?? calcCompletudeLocal(dados).percentual;
   const pronto = completude?.pronto_para_imagem ?? calcCompletudeLocal(dados).pronto_para_imagem;
 
-  const pendingCount = fila.filter((f) => f.status === "pending" || f.status === "error").length;
+  const pendingCount = fila.filter((f) => f.removable && (f.status === "pending" || f.status === "error")).length;
   const canInterpret = canEdit && pendingCount > 0 && !batchRunning;
 
   const updateFilaItem = useCallback((clientId, patch) => {
@@ -123,7 +240,8 @@ export default function IdentidadeMarcaFotosTab({
         onMsg("Envie apenas imagens (JPEG, PNG, WebP…).", "err");
         return;
       }
-      const room = Math.max(0, MAX_FOTOS_IDENTIDADE - fila.length);
+      const localCount = fila.filter((item) => item.removable).length;
+      const room = Math.max(0, MAX_FOTOS_IDENTIDADE - localCount);
       const slice = list.slice(0, room);
       if (slice.length < list.length) {
         onMsg(`Máximo de ${MAX_FOTOS_IDENTIDADE} fotos por análise — algumas foram ignoradas.`, "err");
@@ -141,11 +259,12 @@ export default function IdentidadeMarcaFotosTab({
             previewUrl: URL.createObjectURL(file),
             status: "pending",
             revokeOnUnmount: true,
+            removable: true,
           },
         ]);
       }
     },
-    [fila.length, onMsg],
+    [fila, onMsg],
   );
 
   function removeFromFila(clientId) {
@@ -159,46 +278,16 @@ export default function IdentidadeMarcaFotosTab({
     });
   }
 
-  async function analyzeOneItem(item) {
-    updateFilaItem(item.clientId, { status: "analyzing", error: undefined });
-
-    const file = pendingFilesRef.current.get(item.clientId);
-    if (!file) {
-      updateFilaItem(item.clientId, { status: "error", error: "Arquivo ausente." });
-      return { error: "Arquivo ausente." };
-    }
-    /** @type {Record<string, string>} */
-    const body = {
-      image_base64: await toBase64WithoutPrefix(file),
-      mime_type: file.type || "image/jpeg",
-      nome_arquivo: file.name,
-    };
-
-    const result = await authApiFetchWithToken(`/empresas/${empresaId}/identidade/analisar`, {
-      method: "POST",
-      body: JSON.stringify(body),
-      timeoutMs: IDENTIDADE_ANALISE_TIMEOUT_MS,
-      timeoutLabel: "identidade",
-    });
-    if (!result.ok || result.networkError) {
-      const err =
-        result.networkError?.message ||
-        formatAuthError(result.json) ||
-        (result.status ? `Erro ${result.status}` : "A análise não concluiu.");
-      updateFilaItem(item.clientId, { status: "error", error: err });
-      return { error: err };
-    }
-    if (!result.json?.sugestao) {
-      const err = "O Tuma não retornou sugestões para esta foto.";
-      updateFilaItem(item.clientId, { status: "error", error: err });
-      return { error: err };
-    }
-    return { data: result.json };
-  }
-
   async function onInterpretFotos() {
     if (!empresaId || !canEdit || batchRunning) return;
-    const toRun = fila.filter((f) => f.status === "pending" || f.status === "error");
+
+    const existing = await refreshJob(true);
+    if (existing && (existing.status === "queued" || existing.status === "running")) {
+      onMsg("Já existe uma análise em andamento. Vou retomar o acompanhamento dela.", "ok");
+      return;
+    }
+
+    const toRun = fila.filter((f) => f.removable && (f.status === "pending" || f.status === "error"));
     if (!toRun.length) {
       onMsg("Adicione fotos na fila e toque em Analisar fotos.", "err");
       return;
@@ -206,112 +295,67 @@ export default function IdentidadeMarcaFotosTab({
 
     setBatchRunning(true);
     setAnaliseFinishing(false);
-    onMsg("O Tuma está analisando suas fotos — isso pode levar alguns minutos.", "ok");
+    onMsg("Enviando fotos e iniciando a análise em background…", "ok");
 
-    let merged = { ...dados };
-    const siteUrl = String(siteEmpresa || "").trim();
-    const incluiSite = Boolean(siteUrl);
-    let okCount = 0;
-    let firstError = null;
+    try {
+      await limparFotosAnaliseIdentidade(empresaId).catch(() => {});
 
-    setAnaliseProgress({
-      fotoTotal: toRun.length,
-      fotoConcluidas: 0,
-      fotoAtual: 1,
-      fase: "foto",
-      incluiSite,
-    });
-
-    for (let i = 0; i < toRun.length; i++) {
-      const item = toRun[i];
-      const fotoNum = i + 1;
-
-      setAnaliseProgress({
-        fotoTotal: toRun.length,
-        fotoConcluidas: i,
-        fotoAtual: fotoNum,
-        fase: "foto",
-        incluiSite,
-      });
-
-      try {
-        const out = await analyzeOneItem(item);
-        if (out?.error) {
-          if (!firstError) firstError = out.error;
+      const uploadedIds = [];
+      for (const item of toRun) {
+        updateFilaItem(item.clientId, { status: "uploading", error: undefined });
+        const file = pendingFilesRef.current.get(item.clientId);
+        if (!file) {
+          updateFilaItem(item.clientId, { status: "error", error: "Arquivo ausente." });
           continue;
         }
-
-        const payload = out?.data;
-        merged = mergeIdentidadeSugestao(merged, payload.sugestao, lockedFields);
-        const comp = calcCompletudeLocal(merged);
-        setDados(() => merged);
-        setCompletude(payload.completude || comp);
-        updateFilaItem(item.clientId, { status: "done", error: undefined });
-        okCount++;
-        setAnaliseProgress({
-          fotoTotal: toRun.length,
-          fotoConcluidas: fotoNum,
-          fotoAtual: fotoNum,
-          fase: "foto",
-          incluiSite,
-        });
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : "Erro ao processar foto.";
-        if (!firstError) firstError = errMsg;
-        updateFilaItem(item.clientId, { status: "error", error: errMsg });
+        try {
+          const midia = await uploadImagemIdentidade(empresaId, file, "foto");
+          uploadedIds.push(String(midia.id_midia));
+          updateFilaItem(item.clientId, {
+            status: "analyzing",
+            error: undefined,
+            previewUrl: midia.url_arquivo || item.previewUrl || null,
+            revokeOnUnmount: true,
+          });
+        } catch (err) {
+          updateFilaItem(item.clientId, {
+            status: "error",
+            error: err instanceof Error ? err.message : "Falha ao enviar foto.",
+          });
+        }
       }
-    }
 
-    if (siteUrl && okCount > 0) {
-      setAnaliseProgress({
-        fotoTotal: toRun.length,
-        fotoConcluidas: toRun.length,
-        fotoAtual: toRun.length,
-        fase: "site",
-        incluiSite: true,
-      });
-      const siteRes = await authApiFetchWithToken(`/empresas/${empresaId}/identidade/analisar`, {
-        method: "POST",
-        body: JSON.stringify({}),
-        timeoutMs: IDENTIDADE_ANALISE_TIMEOUT_MS,
-        timeoutLabel: "identidade",
-      });
-      if (siteRes.ok && siteRes.json?.sugestao) {
-        merged = mergeIdentidadeSugestao(merged, siteRes.json.sugestao, lockedFields);
-        setDados(() => merged);
-        setCompletude(siteRes.json.completude || calcCompletudeLocal(merged));
+      if (!uploadedIds.length) {
+        setBatchRunning(false);
+        onMsg("Nenhuma foto pôde ser enviada para análise.", "err");
+        return;
       }
-    }
 
-    const finalComp = calcCompletudeLocal(merged);
-    if (okCount > 0) {
-      setTemResultado(true);
-      onMsg(
-        finalComp.pronto_para_imagem
-          ? "Análise concluída — revise abaixo e salve a identidade."
-          : `${okCount} foto(s) analisada(s). Revise os campos abaixo ou envie mais fotos.`,
-        "ok",
+      const siteUrl = String(siteEmpresa || "").trim();
+      const job = await startIdentidadeAnaliseJob(empresaId, {
+        midia_ids: uploadedIds,
+        inclui_site: Boolean(siteUrl),
+        site_url: siteUrl || undefined,
+        dados_base: dados,
+      });
+
+      for (const item of toRun) {
+        pendingFilesRef.current.delete(item.clientId);
+      }
+      setFila((prev) =>
+        prev.filter((item) => !toRun.some((candidate) => candidate.clientId === item.clientId && item.removable)),
       );
-    } else {
-      onMsg(
-        firstError
-          ? `Nenhuma foto concluiu: ${firstError}`
-          : "Nenhuma foto foi analisada com sucesso. Veja o motivo em cada item da fila.",
-        "err",
-      );
-    }
-
-    if (okCount > 0) {
-      setAnaliseFinishing(true);
-      await new Promise((r) => setTimeout(r, 700));
-    }
-    setAnaliseProgress(null);
-    setAnaliseFinishing(false);
-    setBatchRunning(false);
-
-    if (okCount > 0) {
-      setFila([]);
-      pendingFilesRef.current.clear();
+      await applyJobSnapshot(job, false);
+      onMsg("O Tuma segue analisando em background. Você pode sair da página e voltar depois.", "ok");
+    } catch (err) {
+      setBatchRunning(false);
+      const existingJob = err && typeof err === "object" ? err.job : null;
+      if (existingJob) {
+        await applyJobSnapshot(existingJob, false);
+        onMsg("Já existe uma análise em andamento. Vou acompanhar essa mesma análise.", "ok");
+        return;
+      }
+      onMsg(err instanceof Error ? err.message : "Não foi possível iniciar a análise em background.", "err");
     }
   }
 
@@ -322,24 +366,6 @@ export default function IdentidadeMarcaFotosTab({
         progress={analiseProgress}
         finishing={analiseFinishing}
       />
-
-      {!batchRunning ? (
-        <IdentidadeMarcaProgressBar
-          percentual={pct}
-          prontoParaImagem={pronto}
-          dados={dados}
-          batchLabel={null}
-        />
-      ) : null}
-
-      {temResultado && !batchRunning ? (
-        <IdentidadeMarcaResultado
-          dados={dados}
-          canEdit={canEdit}
-          onFieldChange={onFieldChange}
-          visible
-        />
-      ) : null}
 
       {canEdit ? (
         <div
@@ -360,7 +386,10 @@ export default function IdentidadeMarcaFotosTab({
         >
           <p className="text-sm font-medium text-foreground">Suas fotos</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Só para extrair cores e estilo — não fica salvo. Use Mídias se quiser guardar arquivos.
+            As fotos sobem para o servidor e o Tuma continua a análise mesmo se você sair da página.
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            A logo para aparecer nas artes é enviada separadamente acima, fora desta análise.
           </p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <button
@@ -397,7 +426,7 @@ export default function IdentidadeMarcaFotosTab({
                 disabled={!canInterpret}
                 onClick={() => void onInterpretFotos()}
               >
-                {batchRunning ? "Analisando…" : `Analisar ${pendingCount || fila.length} foto(s)`}
+                {batchRunning ? "Análise em andamento…" : `Analisar ${pendingCount || fila.length} foto(s)`}
               </button>
             ) : null}
           </div>
@@ -427,7 +456,7 @@ export default function IdentidadeMarcaFotosTab({
                     {statusLabel(item.status, item.error)}
                   </p>
                 </div>
-                {canEdit && !batchRunning ? (
+                {canEdit && !batchRunning && item.removable ? (
                   <button
                     type="button"
                     className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
@@ -441,6 +470,24 @@ export default function IdentidadeMarcaFotosTab({
             ))}
           </ul>
         </div>
+      ) : null}
+
+      {(batchRunning || temResultado) ? (
+        <IdentidadeMarcaProgressBar
+          percentual={pct}
+          prontoParaImagem={pronto}
+          dados={dados}
+          batchLabel={null}
+        />
+      ) : null}
+
+      {temResultado && !batchRunning ? (
+        <IdentidadeMarcaResultado
+          dados={dados}
+          canEdit={canEdit}
+          onFieldChange={onFieldChange}
+          visible
+        />
       ) : null}
     </div>
   );

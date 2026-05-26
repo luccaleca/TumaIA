@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import { isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
-import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas } from "../../../lib/empresaAtiva";
+import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresaUltimaFromMinhasPayload } from "../../../lib/empresaAtiva";
 
 const TIPOS = [
   { value: "promocao", label: "Promoção" },
@@ -197,7 +197,9 @@ export default function ContextosPage() {
       return;
     }
     const list = Array.isArray(minhas.json?.empresas) ? minhas.json.empresas : [];
-    const idEmp = resolveEmpresaAtivaId(list);
+    const idEmp = resolveEmpresaAtivaId(list, {
+      idEmpresaUltimaPerfil: idEmpresaUltimaFromMinhasPayload(minhas.json),
+    });
     const rowAtiva = idEmp ? empresaRowFromMinhas(list, idEmp) : null;
     if (rowAtiva?.empresa) setEmpresaAtiva(rowAtiva.empresa);
     const papel = String(rowAtiva?.papel || "").toLowerCase();

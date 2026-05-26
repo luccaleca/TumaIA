@@ -8,6 +8,8 @@ import {
 } from "../../backend/src/modules/empresas/identidadeAnaliseLlm.js";
 import {
   formatBrandIdentityBlockForFlux,
+  formatBrandIdentityForRawPrompt,
+  EVITAR_PADRAO_IMAGEM,
   identidadeCompletude,
   isIdentidadeMarcaContexto,
   normalizeHexColor,
@@ -42,6 +44,20 @@ describe("identidadeMarca — partition e prompt FLUX", () => {
     assert.equal(identidadeDados?.cor_primaria, "#6B2D9E");
   });
 
+  it("formatBrandIdentityForRawPrompt inclui cores e estilo", () => {
+    const block = formatBrandIdentityForRawPrompt({
+      cor_primaria: "#6B2D9E",
+      estilo_visual: "ótica premium",
+      assinatura_visual: "tipografia condensada, headline dominante, produto central",
+      estrategia_cor_campanha: "usar #FFFFFF como base neutra e variar a cor conforme o produto",
+      tom_voz: "acolhedor",
+    });
+    assert.match(block, /Cores da marca/);
+    assert.match(block, /#6B2D9E/);
+    assert.match(block, /Assinatura visual da marca/);
+    assert.match(block, /Estratégia de cor por campanha/);
+  });
+
   it("formatBrandIdentityBlockForFlux inclui cores", () => {
     const block = formatBrandIdentityBlockForFlux({
       cor_primaria: "#6B2D9E",
@@ -54,11 +70,20 @@ describe("identidadeMarca — partition e prompt FLUX", () => {
 });
 
 describe("identidadeMarca — completude", () => {
-  it("pronto para imagem com cor e estilo", () => {
+  it("pronto para imagem com cor, estilo e evitar", () => {
     const c = identidadeCompletude({
       cor_primaria: "#111111",
       estilo_visual: "limpo",
-      tom_voz: "animado",
+      evitar: "clipart",
+    });
+    assert.equal(c.pronto_para_imagem, true);
+  });
+
+  it("pronto para imagem com cor, estilo e logo", () => {
+    const c = identidadeCompletude({
+      cor_primaria: "#111111",
+      estilo_visual: "limpo",
+      id_midia_logo: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
     });
     assert.equal(c.pronto_para_imagem, true);
   });
@@ -114,6 +139,19 @@ describe("identidadeMarca — normalizeIdentidadeDados", () => {
     const d = normalizeIdentidadeDados({ id_midia_logo: id });
     assert.equal(d.id_midia_logo, id);
   });
+
+  it("normaliza campos de padrão visual", () => {
+    const d = normalizeIdentidadeDados({
+      assinatura_visual: "  tipografia condensada   \n produto central ",
+      variacoes_campanha: " cor por produto ; CTA ocasional ",
+      regras_repeticao: " logo no topo ; headline curta ",
+      estrategia_cor_campanha: " usar #FFFFFF como base e variar a cor dominante conforme o produto ",
+    });
+    assert.equal(d.assinatura_visual, "tipografia condensada produto central");
+    assert.equal(d.variacoes_campanha, "cor por produto ; CTA ocasional");
+    assert.equal(d.regras_repeticao, "logo no topo ; headline curta");
+    assert.match(d.estrategia_cor_campanha, /#FFFFFF/);
+  });
 });
 
 describe("identidadeMarca — refineIdentidadeFromAnalysis", () => {
@@ -153,7 +191,7 @@ describe("identidadeMarca — refineIdentidadeFromAnalysis", () => {
     assert.equal(cleaned.evitar, "");
     assert.equal(isIdentidadePromptLeak(leak), true);
     const d = refineIdentidadeFromAnalysis(cleaned, null);
-    assert.equal(d.evitar, "Layout de posts antigos copiado; fontes ilegíveis; poluição visual.");
+    assert.equal(d.evitar, EVITAR_PADRAO_IMAGEM);
   });
 
   it("guarda cores adicionais da paleta extraída", () => {

@@ -2,10 +2,18 @@
 
 ## O que é
 
-API interna para o N8N (e depois o painel Next.js) acessar:
+API do TumaIA para o painel em Next.js, automações em `n8n` e integrações do fluxo de criação/publicação de posts.
 
-- contexto de marca no Supabase
-- (geração com IA pode ser integrada depois neste backend ou no orquestrador)
+No contexto do produto, o backend participa de um fluxo em que:
+
+- o usuário pede um post pelo WhatsApp;
+- o `n8n` recebe o webhook;
+- o sistema consulta no Supabase o contexto da marca;
+- a camada de IA gera proposta de imagem, legenda e hashtags;
+- o usuário aprova ou pede ajustes;
+- o ativo aprovado é salvo e pode seguir para publicação no Instagram.
+
+Dentro do repositório, o backend concentra autenticação, multi-tenant, acesso ao Supabase, rotas de IA e endpoints internos usados pelas automações.
 
 **Painel (JWT, usuário logado)** — `src/routes/ia.js`:
 

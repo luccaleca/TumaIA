@@ -2,6 +2,11 @@
 
 Este diretório concentra **documentação de produto, acadêmica e diagramas**. Instruções de ambiente e API ficam nos READMEs de cada pacote do monorepo.
 
+## Leitura recomendada para entender o produto
+
+- [`contexto-produto.md`](./contexto-produto.md): visão de negócio, fluxo ponta a ponta, principais atores e papel de cada parte do sistema.
+- [`arquitetura/arquitetura-repositorio.md`](./arquitetura/arquitetura-repositorio.md): visão técnica dos serviços, rotas e integrações do repositório.
+
 ## Como costuma ser organizado (referência)
 
 Em projetos de software é comum ter **uma pasta `docs/` na raiz** com subpastas por tipo de conteúdo, por exemplo:
@@ -19,6 +24,7 @@ Evite duas pastas com o mesmo papel (por exemplo `docs/` e `documentacao/`): iss
 
 | Caminho | Conteúdo |
 |---------|----------|
+| [`contexto-produto.md`](./contexto-produto.md) | Contexto de negócio e fluxo principal do produto |
 | [`academico/`](./academico/) | Artigo científico (`.docx`) e resumos em texto |
 | [`arquitetura/`](./arquitetura/) | Diagrama de arquitetura (PNG) e diagrama de sequência (SVG) |
 | [`diagramas/`](./diagramas/) | Diagramas do modelo de dados / banco (PNG) |
