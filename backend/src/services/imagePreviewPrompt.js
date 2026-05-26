@@ -1,6 +1,7 @@
 import { env } from "../config.js";
 import { filterMidiasAcervo } from "../modules/empresas/midiaOrigem.js";
-import { resolveFraseNaImagem, resolvePedidoCliente } from "./imageHeadline.js";
+import { normalizeFraseNaImagem, resolveFraseNaImagem, resolvePedidoCliente } from "./imageHeadline.js";
+import { buildConfirmedImageIntent } from "./imageIntent.js";
 import { aspectRatioFromArteBrief, promptFromArteBrief } from "./rawImageArteBrief.js";
 import {
   formatBrandIdentityBlockForFlux,
@@ -20,19 +21,41 @@ export const FLUX_IMAGE_PROMPT_COMPACT_TARGET = 520;
  * @param {Array<{ role: string, content: string }>} history
  * @param {Record<string, unknown> | null | undefined} postContextProposal
  * @param {Record<string, unknown> | null | undefined} identidadeDados
- * @param {{ strictProductReference?: boolean, composeProductAssets?: boolean, productCount?: number }} [opts]
+ * @param {{
+ *   strictProductReference?: boolean,
+ *   composeProductAssets?: boolean,
+ *   productCount?: number,
+ *   logoAsHero?: boolean,
+ * }} [opts]
  */
 export function buildRawImagePrompt(history, postContextProposal, identidadeDados = null, opts = {}) {
   const proposal =
     postContextProposal && typeof postContextProposal === "object" ? postContextProposal : null;
+  const imageIntent =
+    opts?.imageIntent && typeof opts.imageIntent === "object"
+      ? opts.imageIntent
+      : buildConfirmedImageIntent({ history, postContextProposal: proposal, contextoRows: [] });
   const arteBrief = proposal?.arte_brief;
+  const hasPhraseOverride = Boolean(
+    proposal && Object.prototype.hasOwnProperty.call(proposal, "frase_na_imagem"),
+  );
+  const phraseOverride = hasPhraseOverride ? normalizeFraseNaImagem(proposal?.frase_na_imagem) || "" : null;
   let base = "";
   if (arteBrief && typeof arteBrief === "object") {
-    const fromBrief = promptFromArteBrief(/** @type {Record<string, unknown>} */ (arteBrief));
+    const promptBrief =
+      hasPhraseOverride && arteBrief && typeof arteBrief === "object"
+        ? {
+            ...arteBrief,
+            titulo: "",
+            subtitulo: "",
+            texto: "",
+          }
+        : arteBrief;
+    const fromBrief = promptFromArteBrief(/** @type {Record<string, unknown>} */ (promptBrief));
     if (fromBrief.trim()) base = fromBrief;
   }
   if (!base) {
-    const pedido = resolvePedidoCliente(postContextProposal, history, 32_000);
+    const pedido = imageIntent?.pedido || resolvePedidoCliente(postContextProposal, history, 32_000);
     if (pedido) base = pedido;
   }
   if (!base) {
@@ -55,8 +78,28 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
     base = `${base}\n\nProduto do acervo em referência: preservar RIGOROSAMENTE o design real da embalagem e do rótulo do produto mostrado em input_images. Manter formato do pote/embalagem, tampa, proporções, cores, sabor/variante, marca, posição dos elementos e aparência geral. NÃO redesenhar, NÃO inventar novo rótulo, NÃO trocar a marca e NÃO simplificar a embalagem. Pode mudar apenas cenário, iluminação, enquadramento e composição da campanha.`;
   }
   const productCount = Math.max(1, Math.min(3, Number(opts?.productCount) || 1));
+  const heroProductName =
+    imageIntent?.heroProduct && typeof imageIntent.heroProduct.nome_exibicao === "string"
+      ? imageIntent.heroProduct.nome_exibicao.trim()
+      : "";
   if (composeProductAssets) {
     base = `${base}\n\nEsta geração deve criar SOMENTE o fundo/cenário/layout da campanha. Não renderize nenhum pote, embalagem, rótulo, sache, caixa ou produto fictício. Reserve uma área hero limpa no primeiro plano para inserção posterior de ${productCount} produto${productCount > 1 ? "s reais" : " real"} do acervo. Pode incluir luz, pedestal, cenário, props e atmosfera promocional, mas sem desenhar o produto.`;
+    if (heroProductName) {
+      base = `${base}\n\nO produto principal desta arte será «${heroProductName}». A maior área de destaque visual deve ser reservada para esse item, com mais presença que os produtos de apoio.`;
+    }
+  }
+  const fraseNaImagem =
+    hasPhraseOverride ? phraseOverride : imageIntent?.fraseNaImagem || resolveFraseNaImagem(proposal, history || []);
+  if (fraseNaImagem) {
+    base = `${base}\n\nO ÚNICO texto legível na imagem deve ser exatamente esta frase em português: «${fraseNaImagem}». Não adicione outro título, subtítulo, CTA, selo, preço ou parágrafo diferente.`;
+  } else if (hasPhraseOverride) {
+    base = `${base}\n\nNão renderize texto legível na imagem. Sem headline, subtítulo, CTA, preço ou qualquer palavra extra.`;
+  }
+  if (imageIntent?.matchedContexto?.nome) {
+    base = `${base}\n\nContexto/campanha prioritário desta arte: ${imageIntent.matchedContexto.nome}.`;
+  }
+  if (identidadeDados?.id_midia_logo && !opts?.logoAsHero) {
+    base = `${base}\n\nReserve um canto limpo para aplicar a logo real da marca pequena no resultado final. Não invente wordmark, lettering ou texto de marca extra dentro da arte.`;
   }
 
   const brand = identidadeDados ? formatBrandIdentityForRawPrompt(identidadeDados) : "";
@@ -92,7 +135,7 @@ export async function loadEmpresaResumoParaImagem(db, idEmpresa) {
   return data && typeof data === "object" ? data : null;
 }
 
-export async function loadMidiasEmpresaResumo(db, idEmpresa, limit = 48) {
+export async function loadMidiasEmpresaResumo(db, idEmpresa, limit = 72) {
   const { data, error } = await db
     .from("midia")
     .select(
@@ -161,6 +204,7 @@ function buildCompactImagePrompt({
   referenceKind,
   logoConfigured,
   logoAsHero,
+  heroProductName,
 }) {
   const chunks = ["Square 1:1 Instagram ad, premium, clean, high quality."];
 
@@ -176,6 +220,7 @@ function buildCompactImagePrompt({
 
   const visual = compressPedidoVisual(pedido, 260);
   if (visual) chunks.push(visual);
+  if (heroProductName) chunks.push(`Main product highlight: ${heroProductName}.`);
   if (brandCompact) chunks.push(brandCompact);
   if (frase) chunks.push(`Headline text exactly in Portuguese: "${frase}".`);
   else chunks.push("Minimal or no text.");
@@ -194,6 +239,7 @@ function buildFullImagePrompt({
   identidadeDados,
   hasReferenceImage,
   referenceKind,
+  heroProductName,
 }) {
   const pedidoBudget = identidadeDados ? 780 : 1100;
   const pedidoBlock = formatPedidoBlock(pedido, fraseNaImagem, pedidoBudget);
@@ -210,6 +256,7 @@ function buildFullImagePrompt({
     : "";
 
   const parts = [intro];
+  if (heroProductName) parts.push(`\n\n=== Hero product ===\nPrioritize this product as the main visual focus: ${heroProductName}`);
   if (logoCornerHint) parts.push(logoCornerHint);
   if (pedidoBlock) parts.push(`\n\n=== Client request ===\n${pedidoBlock}`);
   if (brandBlock) parts.push(`\n\n=== Brand identity ===\n${brandBlock}`);
@@ -229,6 +276,7 @@ export function buildFluxImagePrompt({
   history,
   contextoRows,
   postContextProposal,
+  focusContextoId = null,
   hasReferenceImage = false,
   referenceKind = null,
   strictProductReference = false,
@@ -239,16 +287,24 @@ export function buildFluxImagePrompt({
 }) {
   const pipe = pipeline ?? env.IMAGE_PIPELINE ?? "raw";
   const { identidadeDados } = partitionContextosIdentidade(contextoRows);
+  const imageIntent = buildConfirmedImageIntent({
+    history,
+    postContextProposal,
+    contextoRows,
+    focusContextoId,
+  });
   if (pipe === "raw") {
-    return buildRawImagePrompt(history, postContextProposal, identidadeDados, {
+    return buildRawImagePrompt(history, imageIntent.postContextProposal, identidadeDados, {
       strictProductReference,
       composeProductAssets,
       productCount,
+      logoAsHero: referenceKind === "logo",
+      imageIntent,
     });
   }
 
-  const pedido = resolvePedidoCliente(postContextProposal, history);
-  const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, contextoRows);
+  const pedido = imageIntent.pedido || resolvePedidoCliente(postContextProposal, history);
+  const fraseNaImagem = imageIntent.fraseNaImagem || resolveFraseNaImagem(postContextProposal, history, contextoRows);
   const style = promptStyle ?? env.IMAGE_PROMPT_STYLE ?? "compact";
   const kind = referenceKind === "logo" ? "logo" : "product";
 
@@ -259,6 +315,10 @@ export function buildFluxImagePrompt({
       identidadeDados,
       hasReferenceImage,
       referenceKind: kind,
+      heroProductName:
+        imageIntent?.heroProduct && typeof imageIntent.heroProduct.nome_exibicao === "string"
+          ? imageIntent.heroProduct.nome_exibicao.trim()
+          : "",
     });
   }
 
@@ -271,6 +331,10 @@ export function buildFluxImagePrompt({
     referenceKind: kind,
     logoConfigured: Boolean(identidadeDados?.id_midia_logo),
     logoAsHero: kind === "logo",
+    heroProductName:
+      imageIntent?.heroProduct && typeof imageIntent.heroProduct.nome_exibicao === "string"
+        ? imageIntent.heroProduct.nome_exibicao.trim()
+        : "",
   });
 }
 
@@ -280,17 +344,28 @@ export function buildImagePreviewContextMeta(
   contextoRows,
   postContextProposal,
   history,
+  focusContextoId = null,
 ) {
   const pipeline = env.IMAGE_PIPELINE || "raw";
-  const frase_na_imagem =
-    pipeline === "raw" ? null : resolveFraseNaImagem(postContextProposal, history || [], contextoRows);
-  const pedido_resumo = resolvePedidoCliente(postContextProposal, history || [], 280);
+  const imageIntent = buildConfirmedImageIntent({
+    history: history || [],
+    postContextProposal,
+    contextoRows,
+    focusContextoId,
+  });
+  const frase_na_imagem = imageIntent.fraseNaImagem || null;
+  const pedido_resumo = (imageIntent.pedido || resolvePedidoCliente(postContextProposal, history || [], 280)).slice(
+    0,
+    280,
+  );
   const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   return {
     id_empresa: idEmpresa,
     empresa_nome_fantasia: empresaRow ? String(empresaRow.nome_fantasia ?? "").trim() || null : null,
     pedido_resumo: pedido_resumo || null,
     frase_na_imagem,
+    hero_product: imageIntent.heroProduct || null,
+    contexto_prioritario: imageIntent.matchedContexto?.nome || null,
     identidade_configurada: Boolean(
       identidadeDados?.cor_primaria || identidadeDados?.estilo_visual || identidadeDados?.id_midia_logo,
     ),

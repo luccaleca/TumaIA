@@ -36,6 +36,14 @@ function pushFromLinks(links, ids) {
 export function collectReferenceMidiaIds(postContextProposal, supplementLinks) {
   const ids = [];
   if (postContextProposal && typeof postContextProposal === "object") {
+    if (
+      postContextProposal.hero_product &&
+      typeof postContextProposal.hero_product === "object" &&
+      typeof postContextProposal.hero_product.id_midia === "string"
+    ) {
+      pushId(ids, postContextProposal.hero_product.id_midia);
+      if (ids.length >= REFERENCE_MIDIA_MAX) return ids.slice(0, REFERENCE_MIDIA_MAX);
+    }
     const raw = postContextProposal.midias_referenced;
     if (Array.isArray(raw)) {
       for (const item of raw) {

@@ -36,6 +36,13 @@ const HIDDEN_USER_LINES = new Set([
   CONFIRM_IMAGE_USER_LINE,
   "Gerar prévia da imagem.",
 ]);
+const WEAK_ARTE_THEME_RE =
+  /^(oi+|ol[aá]+|opa+|e\s*a[ií]+|bom dia|boa tarde|boa noite|tudo bem|blz+|ok+|teste+)$/i;
+
+function isWeakArteTheme(value) {
+  const t = String(value || "").trim();
+  return !t || t.length < 6 || WEAK_ARTE_THEME_RE.test(t);
+}
 
 function friendlyUiActionLabel(action) {
   if (action?.id === "confirm_generate_image") return "Gerar prévia da imagem";
@@ -137,6 +144,14 @@ function referenceMidiaIdsFromProposal(proposal, supplementLinks) {
     if (t && UUID_RE.test(t) && !ids.includes(t)) ids.push(t);
   };
   if (proposal && typeof proposal === "object") {
+    if (
+      proposal.hero_product &&
+      typeof proposal.hero_product === "object" &&
+      typeof proposal.hero_product.id_midia === "string"
+    ) {
+      push(proposal.hero_product.id_midia);
+      if (ids.length >= 3) return ids;
+    }
     const raw = proposal.midias_referenced;
     if (Array.isArray(raw)) {
       for (const item of raw) {
@@ -232,14 +247,32 @@ function buildImageContextNote(cg) {
       ? cg.frase_na_imagem.trim()
       : null;
   if (frase) lines.push(`Frase na imagem: «${frase}»`);
+  const hero =
+    cg.hero_product &&
+    typeof cg.hero_product === "object" &&
+    typeof cg.hero_product.nome_exibicao === "string" &&
+    cg.hero_product.nome_exibicao.trim()
+      ? cg.hero_product.nome_exibicao.trim()
+      : null;
+  if (hero) lines.push(`Produto foco: ${hero}`);
   return lines.length ? `\n\n(${lines.join(" · ")})` : "";
 }
 
-function imagePreviewSuccessLine(urls, model) {
+function imagePreviewSuccessLine(urls, model, imageGeneration) {
   const modelLabel = typeof model === "string" && model.trim() ? ` (${model.trim()})` : "";
-  return urls.length > 0
-    ? `Prévia da imagem${modelLabel} — o link pode expirar depois de um tempo:`
-    : "A geração terminou sem imagem. Tente de novo ou ajuste o pedido no chat.";
+  if (urls.length <= 0) {
+    return "A geração terminou sem imagem. Tente de novo ou ajuste o pedido no chat.";
+  }
+  if (imageGeneration?.composed_preview_error) {
+    return `Prévia parcial do cenário${modelLabel} — não consegui aplicar os produtos e a logo do acervo nesta tentativa:`;
+  }
+  if (imageGeneration?.composed_preview) {
+    const assetsLabel = imageGeneration?.composed_logo
+      ? " com produtos e logo do acervo"
+      : " com itens do acervo";
+    return `Prévia da imagem${modelLabel}${assetsLabel}:`;
+  }
+  return `Prévia da imagem${modelLabel}:`;
 }
 
 function lastConversaStorageKey(empresaId) {
@@ -604,6 +637,16 @@ export default function PainelChatPage() {
     }
   }
 
+  const resetArteBriefDraft = useCallback(
+    (persist = true) => {
+      const fresh = emptyArteBrief(brandColors);
+      setArteBriefDraft(fresh);
+      if (persist) persistArteBriefDraft(fresh);
+      return fresh;
+    },
+    [brandColors, empresaId],
+  );
+
   const loadListaConversas = useCallback(async () => {
     if (!empresaId) return;
     setLoadingList(true);
@@ -631,14 +674,17 @@ export default function PainelChatPage() {
       const raw = Array.isArray(r.json?.mensagens) ? r.json.mensagens : [];
       const mapped = raw.map(fromApiMensagem).filter(Boolean);
       setMessages(mapped);
+      let foundArteBrief = false;
       for (let i = mapped.length - 1; i >= 0; i--) {
         const ab = mapped[i]?.post_supplement?.post_context_proposal?.arte_brief;
         if (ab && typeof ab === "object") {
+          foundArteBrief = true;
           setArteBriefDraft(normalizeArteBrief(ab, brandColors));
           persistArteBriefDraft(normalizeArteBrief(ab, brandColors));
           break;
         }
       }
+      if (!foundArteBrief) resetArteBriefDraft();
       setConversaId(id);
       if (options.remember && empresaId && typeof window !== "undefined") {
         try {
@@ -648,7 +694,7 @@ export default function PainelChatPage() {
         }
       }
     },
-    [empresaId, brandColors],
+    [empresaId, brandColors, resetArteBriefDraft],
   );
 
   useEffect(() => {
@@ -672,11 +718,12 @@ export default function PainelChatPage() {
       }
       setConversaId(null);
       setMessages([]);
+      resetArteBriefDraft();
     })();
     return () => {
       cancelled = true;
     };
-  }, [empresaReady, empresaId, loadListaConversas, loadConversa]);
+  }, [empresaReady, empresaId, loadListaConversas, loadConversa, resetArteBriefDraft]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -689,19 +736,27 @@ export default function PainelChatPage() {
 
   const syncMensagens = useCallback(
     async (chatId, lista) => {
-      const put = await authApiFetchWithToken(`/chat/conversas/${encodeURIComponent(chatId)}/mensagens`, {
-        method: "PUT",
-        body: JSON.stringify({ mensagens: toApiMensagens(lista) }),
-        timeoutMs: SYNC_MENSAGENS_TIMEOUT_MS,
-      });
-      if (!put.ok || put.networkError) {
+      const body = JSON.stringify({ mensagens: toApiMensagens(lista) });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const put = await authApiFetchWithToken(`/chat/conversas/${encodeURIComponent(chatId)}/mensagens`, {
+          method: "PUT",
+          body,
+          timeoutMs: SYNC_MENSAGENS_TIMEOUT_MS,
+        });
+        if (put.ok && !put.networkError) {
+          void loadListaConversas();
+          return true;
+        }
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 450));
+          continue;
+        }
         showErr(put.networkError?.message || formatAuthError(put.json) || "Não foi possível salvar a conversa.");
         return false;
       }
-      void loadListaConversas();
-      return true;
+      return false;
     },
-    [loadListaConversas],
+    [loadListaConversas, showErr],
   );
 
   const invokeImagePreview = useCallback(
@@ -742,6 +797,10 @@ export default function PainelChatPage() {
         urls,
         model: result.json?.model,
         contexto: result.json?.contexto_geracao,
+        imageGeneration:
+          result.json?.image_generation && typeof result.json.image_generation === "object"
+            ? result.json.image_generation
+            : null,
       };
     },
     [empresaId],
@@ -851,9 +910,14 @@ export default function PainelChatPage() {
 
         setMessages((prev) => {
           const anchorPrev = prev.find((m) => m.id === assistantMessageId);
+          const currentContent =
+            anchorPrev && typeof anchorPrev.content === "string" ? anchorPrev.content.trim() : "";
           const keepContent =
-            anchorPrev && typeof anchorPrev.content === "string" && anchorPrev.content.trim()
-              ? anchorPrev.content
+            currentContent &&
+            currentContent !== CHAT_PEDIDO_AGUARDE_MSG &&
+            currentContent !== CHAT_PEDIDO_RESUMO_MSG &&
+            currentContent !== CHAT_PEDIDO_COLETANDO_INTRO
+              ? currentContent
               : collecting
                 ? CHAT_PEDIDO_COLETANDO_INTRO
                 : CHAT_PEDIDO_RESUMO_MSG;
@@ -993,7 +1057,7 @@ export default function PainelChatPage() {
         const assistantFollowUp = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: imagePreviewSuccessLine(out.urls, out.model) + contextoLinha,
+          content: imagePreviewSuccessLine(out.urls, out.model, out.imageGeneration) + contextoLinha,
           sources: [],
           image_urls: out.urls.length ? out.urls : undefined,
         };
@@ -1032,7 +1096,9 @@ export default function PainelChatPage() {
       setMessages(msgsComUsuario);
       setArteBriefDraft((prev) => {
         const next = { ...prev };
-        if (!String(next.tema ?? "").trim()) next.tema = question.slice(0, 200);
+        if (detectImageGenerationIntent(question) && isWeakArteTheme(next.tema)) {
+          next.tema = question.slice(0, 200);
+        }
         const merged = normalizeArteBrief(next, brandColors);
         persistArteBriefDraft(merged);
         return merged;
@@ -1112,7 +1178,7 @@ export default function PainelChatPage() {
         const assistantFollowUp = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: imagePreviewSuccessLine(out.urls, out.model) + contextoLinha,
+          content: imagePreviewSuccessLine(out.urls, out.model, out.imageGeneration) + contextoLinha,
           sources: [],
           image_urls: out.urls.length ? out.urls : undefined,
         };
@@ -1185,6 +1251,9 @@ export default function PainelChatPage() {
                 rawSup.post_context_proposal && typeof rawSup.post_context_proposal === "object"
                   ? rawSup.post_context_proposal
                   : {},
+              ...(rawSup.briefing_status === "collecting" || rawSup.briefing_status === "ready"
+                ? { briefing_status: rawSup.briefing_status }
+                : {}),
             }
           : undefined;
 
@@ -1205,11 +1274,18 @@ export default function PainelChatPage() {
         Boolean(result.json?.offer_post_context) ||
         detectImageGenerationIntentFromHistory(historyForApi, question) ||
         detectImageGenerationIntent(answer);
+      const assistantContent = routeImage
+        ? post_supplement?.briefing_status === "collecting"
+          ? CHAT_PEDIDO_COLETANDO_INTRO
+          : post_supplement
+            ? CHAT_PEDIDO_RESUMO_MSG
+            : CHAT_PEDIDO_AGUARDE_MSG
+        : answer;
 
       const assistantMsg = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: answer,
+        content: assistantContent,
         sources,
         post_supplement,
         ui_actions: ui_actions.length ? ui_actions : undefined,
@@ -1240,6 +1316,7 @@ export default function PainelChatPage() {
     if (sending || deleting || loadingConversa || actionBusy) return;
     setConversaId(null);
     setMessages([]);
+    resetArteBriefDraft();
     try {
       if (empresaId) sessionStorage.removeItem(lastConversaStorageKey(empresaId));
     } catch {
@@ -1270,6 +1347,7 @@ export default function PainelChatPage() {
     }
     setConversaId(null);
     setMessages([]);
+    resetArteBriefDraft();
     await loadListaConversas();
   }
 

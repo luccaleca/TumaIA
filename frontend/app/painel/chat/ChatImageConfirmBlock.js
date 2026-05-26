@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { formatFraseNaImagemFromProposal, formatMontagemFromProposal } from "./chatImageConfirmUtils";
 
 const ROW_LABEL_CLASS = "min-w-[72px] pt-0.5 text-xs font-medium text-muted-foreground";
@@ -24,6 +25,7 @@ export default function ChatImageConfirmBlock({
   const proposal = supplement?.post_context_proposal;
   const frase = fraseNaImagem ?? formatFraseNaImagemFromProposal(proposal);
   const montagem = formatMontagemFromProposal(proposal);
+  const [editingFrase, setEditingFrase] = useState(false);
   const links = Array.isArray(supplement?.links) ? supplement.links : [];
   const confirmation =
     typeof supplement?.confirmation_message === "string" ? supplement.confirmation_message.trim() : "";
@@ -49,6 +51,51 @@ export default function ChatImageConfirmBlock({
           <p className="min-w-0 flex-1 text-sm text-foreground">{montagem}</p>
         </div>
       ) : null}
+
+      <div className="block">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs font-medium text-muted-foreground">Frase na imagem</span>
+          {frase && !editingFrase ? (
+            <button
+              type="button"
+              className="text-xs font-medium text-accent transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={disabled}
+              onClick={() => setEditingFrase(true)}
+            >
+              Editar
+            </button>
+          ) : null}
+        </div>
+
+        {frase && !editingFrase ? (
+          <div className="mt-1 rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground">
+            {frase}
+          </div>
+        ) : (
+          <input
+            type="text"
+            maxLength={56}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
+            value={frase || ""}
+            disabled={disabled}
+            placeholder="Ex.: Até 40% OFF"
+            onBlur={() => {
+              if (frase) setEditingFrase(false);
+            }}
+            onChange={(e) => onFraseChange(e.target.value)}
+          />
+        )}
+
+        <span className="mt-1 block text-xs text-muted-foreground">
+          {frase
+            ? hasArteBrief
+              ? "A sugestão já vem preenchida. Se quiser, clique em editar para sobrescrever o texto final usado na geração."
+              : "A sugestão já vem preenchida. Se quiser, clique em editar para trocar o texto que aparecerá na imagem."
+            : hasArteBrief
+              ? "Se quiser texto na arte, preencha aqui. Se deixar vazio, a geração segue sem frase legível."
+              : "Nenhuma frase sugerida ainda. Se quiser, preencha aqui o texto que deve aparecer na imagem."}
+        </span>
+      </div>
 
       {contextLinks.length > 0 ? (
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
@@ -98,28 +145,6 @@ export default function ChatImageConfirmBlock({
           </span>
         </label>
       ) : null}
-
-      {!hasArteBrief ? (
-        <label className="block">
-          <span className="text-xs font-medium text-muted-foreground">Frase na imagem</span>
-          <input
-            type="text"
-            maxLength={56}
-            className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
-            value={frase || ""}
-            disabled={disabled}
-            placeholder="Ex.: Até 40% OFF"
-            onChange={(e) => onFraseChange(e.target.value)}
-          />
-          <span className="mt-1 block text-xs text-muted-foreground">
-            Escreva o texto que deve aparecer na imagem.
-          </span>
-        </label>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Você pode ajustar tema, cores e textos no resumo da arte acima.
-        </p>
-      )}
 
     </div>
   );

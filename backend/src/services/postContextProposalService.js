@@ -18,7 +18,7 @@ import {
   normalizeFraseNaImagem,
   resolvePedidoCliente,
 } from "./imageHeadline.js";
-import { pickBestProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
+import { pickBestProductMidiaId, pickHeroProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
 import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
 
@@ -30,6 +30,61 @@ const linkItemSchema = z.object({
 
 const CONFIRMATION_MESSAGE_MAX = 320;
 const PRODUCT_MATCH_HINT = /whey|creatina|suplement|produto|pote|embalagem|packshot|refil|sabor|baunilha|chocolate|morango|cookie/i;
+const MONTAGEM_STOP = new Set([
+  "com",
+  "para",
+  "uma",
+  "umas",
+  "uns",
+  "arte",
+  "post",
+  "foto",
+  "fotos",
+  "imagem",
+  "imagens",
+  "pedido",
+  "painel",
+  "cliente",
+  "marca",
+  "produto",
+  "produtos",
+  "foco",
+  "principal",
+  "centro",
+  "lado",
+  "ladoa",
+  "ladob",
+  "fundo",
+  "compre",
+  "agora",
+  "melhore",
+  "desempenho",
+  "integral",
+  "growth",
+  "max",
+  "oi",
+  "ola",
+  "olá",
+  "amigao",
+  "amigão",
+  "novo",
+  "nova",
+  "bem",
+  "evidencia",
+  "evidência",
+  "das",
+  "dos",
+  "de",
+  "do",
+  "da",
+  "em",
+  "na",
+  "no",
+  "pro",
+  "pra",
+  "por",
+  "que",
+]);
 
 const proposalOutSchema = z.object({
   confirmation_message: z.string().min(12).max(CONFIRMATION_MESSAGE_MAX),
@@ -103,6 +158,86 @@ function cleanShortSentence(value, max = 180) {
   return s;
 }
 
+function titleWord(value) {
+  const s = String(value || "").trim();
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function compactMontagemWords(value, max = 3) {
+  const tokens = (normalizeSearchText(value).match(/[a-z0-9]+/g) || []).filter(
+    (token) => token.length >= 3 && !MONTAGEM_STOP.has(token),
+  );
+  return [...new Set(tokens)].slice(0, max);
+}
+
+function detectMontagemScene(blob) {
+  const text = normalizeSearchText(blob);
+  if (/black\s*friday/.test(text)) return "black friday";
+  if (/academia|fitness|treino|muscul|gym/.test(text)) return "academia";
+  if (/institucional|branding|marca/.test(text)) return "institucional";
+  if (/lancamento|lançamento|novo produto|novidade/.test(text)) return "lançamento";
+  if (/dia dos|natal|pascoa|páscoa|comemor|seguidores|marco/.test(text)) return "campanha";
+  return "";
+}
+
+function detectMontagemGoal(blob) {
+  const text = normalizeSearchText(blob);
+  if (/desconto|promo|promoc|oferta|off\b/.test(text)) return "promo";
+  if (/institucional|branding|marca/.test(text)) return "institucional";
+  if (/lancamento|lançamento|novidade/.test(text)) return "lançamento";
+  return "";
+}
+
+function subjectFromReferencedNames(names, blob = "") {
+  if (!Array.isArray(names) || !names.length) return "";
+  const lists = names.map((name) => compactMontagemWords(name, 4));
+  const counts = new Map();
+  for (const tokens of lists) {
+    for (const token of tokens) {
+      counts.set(token, (counts.get(token) || 0) + 1);
+    }
+  }
+  const common = [...counts.entries()]
+    .filter(([, count]) => count >= Math.min(2, names.length))
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .map(([token]) => token)[0];
+  if (common) {
+    if (names.length > 1 && /a$/.test(common)) return `${common}s`;
+    return common;
+  }
+  const fromBlob = compactMontagemWords(blob, 4).find((token) =>
+    lists.some((tokens) => tokens.includes(token)),
+  );
+  if (fromBlob) return fromBlob;
+  return lists[0]?.[0] || "";
+}
+
+function buildCompactMontagemLabel(proposal) {
+  const p = proposal && typeof proposal === "object" ? proposal : {};
+  const exactNames = exactReferencedMidiaNames(p);
+  const matchedContexto =
+    p.matched_contexto && typeof p.matched_contexto === "object" ? p.matched_contexto : null;
+  const blob = [
+    p.intent_summary,
+    p.arte_brief?.tema,
+    p.montagem_resumo,
+    matchedContexto?.nome,
+    ...exactNames,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const subject = subjectFromReferencedNames(exactNames, blob);
+  const scene = detectMontagemScene(blob);
+  const goal = detectMontagemGoal(blob);
+  const words = [subject, scene, goal].filter(Boolean);
+  if (words.length) {
+    return cleanShortSentence(words.slice(0, 3).map(titleWord).join(" "), 42);
+  }
+  const fallback = compactMontagemWords(blob, 3).map(titleWord).join(" ");
+  return fallback || "Arte";
+}
+
 function scoreTokenOverlap(blob, tokens) {
   const text = normalizeSearchText(blob);
   let score = 0;
@@ -156,15 +291,95 @@ function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
   const candidateIds = scored.map((item) => String(item.row.id_midia ?? "").trim()).filter(Boolean);
   const ranked = rankReferenceMidiaIds(candidateIds, imageRows, userHint);
   const byId = new Map(imageRows.map((row) => [String(row.id_midia ?? "").trim(), row]));
-  return ranked
+  let ordered = ranked
     .map((id) => byId.get(id))
     .filter(Boolean)
     .slice(0, limit);
+  const explicitHeroId = pickHeroProductMidiaId(imageRows, userHint);
+  if (explicitHeroId) {
+    const heroRow = byId.get(explicitHeroId);
+    if (heroRow) {
+      ordered = [heroRow, ...ordered.filter((row) => String(row.id_midia ?? "").trim() !== explicitHeroId)].slice(
+        0,
+        limit,
+      );
+    }
+  }
+  return ordered;
 }
 
-function buildMontagemResumo(proposal) {
+function buildHeroProductSelection(rows, userHint = "", fallbackToFirst = false) {
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  if (!list.length) return null;
+  const explicitId = pickHeroProductMidiaId(list, userHint);
+  const chosen =
+    (explicitId ? list.find((row) => String(row.id_midia ?? "").trim() === explicitId) : null) ||
+    (fallbackToFirst ? list[0] : null);
+  if (!chosen) return null;
+  return {
+    id_midia: String(chosen.id_midia ?? "").trim() || null,
+    nome_exibicao: String(chosen.nome_exibicao ?? chosen.nome_arquivo ?? "Mídia").trim() || "Mídia",
+    reason: explicitId ? "pedido_destacou_item" : "primeira_referencia",
+  };
+}
+
+function normalizeHeroProductSelection(heroProduct, refItems) {
+  const refs = Array.isArray(refItems) ? refItems : [];
+  const raw = heroProduct && typeof heroProduct === "object" ? heroProduct : null;
+  const refById = new Map(
+    refs
+      .filter((item) => item && typeof item === "object")
+      .map((item) => [String(item.id_midia ?? "").trim(), item]),
+  );
+  const requestedId = raw && typeof raw.id_midia === "string" ? raw.id_midia.trim() : "";
+  const requestedName = raw && typeof raw.nome_exibicao === "string" ? raw.nome_exibicao.trim() : "";
+  const requestedReason = raw && typeof raw.reason === "string" ? raw.reason.trim() : "";
+  const byId = requestedId ? refById.get(requestedId) : null;
+  if (byId) {
+    return {
+      id_midia: requestedId,
+      nome_exibicao: String(byId.nome_exibicao ?? requestedName ?? "Mídia").trim() || "Mídia",
+      reason: requestedReason || "confirmado_no_fluxo",
+    };
+  }
+  if (refs.length) {
+    const first = refs[0];
+    return {
+      id_midia: String(first.id_midia ?? "").trim() || null,
+      nome_exibicao: String(first.nome_exibicao ?? requestedName ?? "Mídia").trim() || "Mídia",
+      reason: requestedReason || "primeira_referencia",
+    };
+  }
+  if (requestedId || requestedName) {
+    return {
+      id_midia: requestedId || null,
+      nome_exibicao: requestedName || "Mídia",
+      reason: requestedReason || "confirmado_no_fluxo",
+    };
+  }
+  return null;
+}
+
+function exactReferencedMidiaNames(proposal) {
+  const refs =
+    proposal && typeof proposal === "object" && Array.isArray(proposal.midias_referenced)
+      ? proposal.midias_referenced
+      : [];
+  return refs
+    .map((item) => {
+      const nome = typeof item?.nome_exibicao === "string" ? item.nome_exibicao.trim() : "";
+      return nome ? cleanShortSentence(nome, 42) : "";
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+export function buildMontagemResumo(proposal) {
   const p = proposal && typeof proposal === "object" ? proposal : {};
   const custom = cleanShortSentence(p.montagem_resumo, 180);
+  const exactNames = exactReferencedMidiaNames(p);
+  const compact = buildCompactMontagemLabel(p);
+  if (compact) return compact;
   if (custom) return custom;
 
   const arteBrief = p.arte_brief && typeof p.arte_brief === "object" ? p.arte_brief : null;
@@ -468,6 +683,7 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
     facts_for_image: frase ? { frase_na_imagem: frase } : {},
     frase_na_imagem: frase,
     midias_referenced,
+    hero_product: buildHeroProductSelection(midias, hint, true),
   };
   proposal.montagem_resumo = buildMontagemResumo(proposal);
 
@@ -540,6 +756,7 @@ function buildRawPostContextProposal(history, brandColors = [], existingBrief = 
       subtitulo: arte_brief.subtitulo,
     },
     midias_referenced: [],
+    hero_product: null,
     arte_brief,
   };
   proposal.montagem_resumo = buildMontagemResumo(proposal);
@@ -569,7 +786,7 @@ export async function generatePostContextProposal(opts) {
   if ((env.IMAGE_PIPELINE || "raw") === "raw") {
     const [contextoRows, midiaRows] = await Promise.all([
       loadContextosEmpresaAtivos(db, idEmpresa),
-      loadMidiasEmpresaResumo(db, idEmpresa, 24),
+      loadMidiasEmpresaResumo(db, idEmpresa, 72),
     ]);
     const { identidadeDados } = partitionContextosIdentidade(contextoRows);
     const brandColors = identidadeDados ? allBrandColorsFromIdentidade(identidadeDados) : [];
@@ -590,6 +807,18 @@ export async function generatePostContextProposal(opts) {
         raw.post_context_proposal?.matched_contexto || rawBrief.post_context_proposal?.matched_contexto || null,
       midias_referenced:
         raw.post_context_proposal?.midias_referenced || rawBrief.post_context_proposal?.midias_referenced || [],
+      hero_product:
+        raw.post_context_proposal?.hero_product ||
+        rawBrief.post_context_proposal?.hero_product ||
+        buildHeroProductSelection(
+          raw.post_context_proposal?.midias_referenced || rawBrief.post_context_proposal?.midias_referenced || [],
+          history
+            .filter((m) => m.role === "user")
+            .map((m) => m.content)
+            .join(" ")
+            .slice(-600),
+          true,
+        ),
       montagem_resumo: buildMontagemResumo({
         ...raw.post_context_proposal,
         ...rawBrief.post_context_proposal,
@@ -612,7 +841,7 @@ export async function generatePostContextProposal(opts) {
   const [empresaRow, contextoRows, midiaRows] = await Promise.all([
     loadEmpresaResumoParaImagem(db, idEmpresa),
     loadContextosEmpresaAtivos(db, idEmpresa),
-    loadMidiasEmpresaResumo(db, idEmpresa, 20),
+    loadMidiasEmpresaResumo(db, idEmpresa, 72),
   ]);
 
   const instrucao = `Você é assistente de marketing da TumaIA. O cliente já conversou sobre um pedido de post/conteúdo.
@@ -630,6 +859,7 @@ Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no
    ORDEM CRÍTICA: a 1ª posição vai para o FLUX como image_prompt — deve ser RECORTE/PNG DE PRODUTO, NUNCA logo da marca (logo fica só no cantinho da arte), NUNCA um post/arte/banner/festa/400k já pronto do acervo.
    Só coloque o id do LOGO em 1º lugar se o cliente pedir EXPLICITAMENTE logo em destaque/principal/protagonista/arte da marca.
    Não use como 1ª referência imagens que pareçam post de Instagram, comemoração de seguidores, balões ou layout completo.
+(8) preencher "hero_product" quando o cliente pedir um item específico como foco, centro, principal, destaque ou protagonista da arte. Esse campo define QUAL produto real deve receber o maior destaque visual na composição final. Se houver midias_referenced, hero_product deve apontar para uma delas. Se o cliente não explicitar um item principal, use a 1ª mídia referenciada como hero_product.
 
 Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
 {
@@ -643,7 +873,8 @@ Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
     "matched_contexto": { "id_contexto_empresa": "uuid ou null", "nome": "string", "tipo_schema": "string", "reason": "string" } | null,
     "frase_na_imagem": "string curta na arte, ex. Parabéns pelos 500k!",
     "facts_for_image": { "chave": "valor" },
-    "midias_referenced": [ { "id_midia": "uuid opcional", "nome_exibicao": "string", "why": "string" } ]
+    "midias_referenced": [ { "id_midia": "uuid opcional", "nome_exibicao": "string", "why": "string" } ],
+    "hero_product": { "id_midia": "uuid ou null", "nome_exibicao": "string", "reason": "string" } | null
   }
 }
 
@@ -651,6 +882,7 @@ Regras:
 - matched_contexto.id_contexto_empresa DEVE ser um dos ids listados em "### contexto_id=" ou null se nenhum encaixar bem.
 - Cada links[].id DEVE ser exatamente um id listado em "### contexto_id=" (se kind=contexto) ou "### midia_id=" (se kind=midia). NUNCA invente UUID.
 - midias_referenced só pode citar ids listados em "### midia_id=".
+- hero_product.id_midia, se vier preenchido, também deve ser um dos ids listados em "### midia_id=" e deve preferencialmente estar dentro de midias_referenced.
 - Interpretação do acervo (mídias) — o cliente pode citar nome de arquivo, apelido ou descrição imprecisa:
   - Compare o pedido com nome_exibicao, nome_arquivo, descricao e alt_text de cada mídia (não exija texto idêntico).
   - Trate como equivalentes: maiúsculas/minúsculas; underscore, hífen e espaço (ex.: "oculos_reto", "oculos-reto", "óculos reto"); pequenas variações de grafia ou singular/plural.
@@ -794,6 +1026,10 @@ ${formatEmpresaForLlm(empresaRow)}
       .filter(Boolean)
       .slice(0, 3);
   }
+  post_context_proposal.hero_product = normalizeHeroProductSelection(
+    post_context_proposal.hero_product,
+    post_context_proposal.midias_referenced,
+  );
   post_context_proposal.montagem_resumo = buildMontagemResumo(post_context_proposal);
 
   const links = resolvePostSupplementLinks(safe.data.links, post_context_proposal, contextoRows, midiaRows);

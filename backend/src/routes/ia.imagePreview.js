@@ -19,8 +19,9 @@ import {
   loadContextosEmpresaAtivos,
   loadEmpresaResumoParaImagem,
 } from "../services/imagePreviewPrompt.js";
+import { buildConfirmedImageIntent } from "../services/imageIntent.js";
 import { collectReferenceMidiaIds } from "../services/referenceMidiaFromProposal.js";
-import { rankReferenceMidiaIds } from "../services/referenceMidiaRanking.js";
+import { pickHeroProductMidiaId, rankReferenceMidiaIds } from "../services/referenceMidiaRanking.js";
 import { wantsLogoAsHero } from "../services/logoReferencePolicy.js";
 import { friendlyImageGenerationError } from "../services/replicateImagePromptPrep.js";
 import {
@@ -100,17 +101,23 @@ async function resolveInputImageUrlsForGpt(db, idEmpresa, refIds) {
  * @param {z.infer<typeof imagePreviewSchema>} parsed
  * @param {Array<Record<string, unknown>>} contextoRows
  */
-async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows) {
+async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows, imageIntent = null) {
   const fromBody = (parsed.reference_midia_ids || []).map((x) => String(x).trim()).filter(Boolean);
-  const fromProposal = collectReferenceMidiaIds(parsed.post_context_proposal, parsed.post_supplement_links);
+  const fromProposal = collectReferenceMidiaIds(
+    imageIntent?.postContextProposal || parsed.post_context_proposal,
+    parsed.post_supplement_links,
+  );
   let refIds = [...new Set([...fromBody, ...fromProposal])].slice(0, REFERENCE_MIDIA_MAX);
-  const userHint = parsed.history
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join(" ")
-    .slice(-400);
+  const userHint =
+    imageIntent?.selectionHint ||
+    parsed.history
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join(" ")
+      .slice(-400);
   const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
+  const logoAsHero = wantsLogoAsHero(userHint);
   if (logoId && !refIds.includes(logoId)) {
     refIds = [...refIds, logoId].slice(0, REFERENCE_MIDIA_MAX);
   }
@@ -122,6 +129,7 @@ async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows) 
       strictProductReference: false,
       composeProductAssets: false,
       productRefIds: [],
+      heroProductId: null,
       productCount: 0,
     };
   }
@@ -145,12 +153,27 @@ async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows) 
   const productRows = orderedRows.filter((row) => !isLogoRow(row));
   const logoRows = orderedRows.filter((row) => isLogoRow(row));
   const composeProductAssets = productRows.length > 0;
-  const inputImageIds = composeProductAssets ? logoRows.map((row) => String(row.id_midia)).slice(0, 1) : refIds;
+  const inputImageIds = logoAsHero
+    ? refIds
+    : composeProductAssets
+      ? []
+      : refIds.filter((id) => id !== logoId);
   const inputImages = await resolveInputImageUrlsForGpt(db, idEmpresa, inputImageIds);
-  const primaryRow = orderedRows[0] || null;
-  const referenceKind = primaryRow && isLogoRow(primaryRow) ? "logo" : "product";
+  const primaryRow =
+    (inputImageIds.length
+      ? orderedRows.find((row) => inputImageIds.includes(String(row.id_midia ?? "").trim()))
+      : orderedRows[0]) || null;
+  const referenceKind = logoAsHero && primaryRow && isLogoRow(primaryRow) ? "logo" : "product";
   const strictProductReference = productRows.length > 0;
   const productRefIds = productRows.map((row) => String(row.id_midia)).filter(Boolean);
+  const proposalHeroId =
+    imageIntent?.heroProduct && typeof imageIntent.heroProduct.id_midia === "string"
+      ? imageIntent.heroProduct.id_midia.trim()
+      : "";
+  const heroProductId =
+    (proposalHeroId && productRows.some((row) => String(row.id_midia ?? "").trim() === proposalHeroId)
+      ? proposalHeroId
+      : "") || pickHeroProductMidiaId(productRows, userHint);
 
   if (!inputImages.length) {
     return {
@@ -160,11 +183,14 @@ async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows) 
         reference_input_images: refIds,
         compose_product_assets: composeProductAssets,
         composed_product_ids: productRefIds,
+        composed_hero_product_id: heroProductId,
+        composed_logo_id: logoAsHero ? null : logoId || null,
       },
       referenceKind,
       strictProductReference,
       composeProductAssets,
       productRefIds,
+      heroProductId,
       productCount: productRefIds.length,
     };
   }
@@ -175,11 +201,14 @@ async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows) 
       reference_input_images: refIds,
       compose_product_assets: composeProductAssets,
       composed_product_ids: productRefIds,
+      composed_hero_product_id: heroProductId,
+      composed_logo_id: logoAsHero ? null : logoId || null,
     },
     referenceKind,
     strictProductReference,
     composeProductAssets,
     productRefIds,
+    heroProductId,
     productCount: productRefIds.length,
   };
 }
@@ -247,12 +276,27 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     return;
   }
 
+  const imageIntent = buildConfirmedImageIntent({
+    history: parsed.data.history,
+    postContextProposal: parsed.data.post_context_proposal,
+    contextoRows,
+    focusContextoId: parsed.data.focus_contexto_id,
+  });
   const prompt = buildFluxImagePrompt({
     history: parsed.data.history,
     contextoRows,
-    postContextProposal: parsed.data.post_context_proposal,
+    postContextProposal: imageIntent.postContextProposal,
+    focusContextoId: parsed.data.focus_contexto_id,
     hasReferenceImage: false,
   });
+  const previewUserHint = parsed.data.history
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join(" ")
+    .slice(-400);
+  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
+  const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
+  const logoAsHero = wantsLogoAsHero(imageIntent.selectionHint || previewUserHint);
 
   if (env.IMAGE_PREVIEW_LOG_PROMPT) {
     console.info(
@@ -266,6 +310,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
   let out;
   let referenceMeta = null;
   let composedProductIds = [];
+  let heroProductId = null;
 
   if (provider === "openai") {
     const apiKey = (env.OPENAI_API_KEY || "").trim();
@@ -298,15 +343,17 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     let inputImages;
     let promptForProvider = prompt;
     try {
-      const refs = await resolveGptImage2InputImages(db, idEmpresa, parsed.data, contextoRows);
+      const refs = await resolveGptImage2InputImages(db, idEmpresa, parsed.data, contextoRows, imageIntent);
       inputImages = refs.inputImages;
       composedProductIds = refs.productRefIds || [];
+      heroProductId = refs.heroProductId || null;
       if (refs.referenceMeta) referenceMeta = refs.referenceMeta;
       if (inputImages?.length || refs.composeProductAssets) {
         promptForProvider = buildFluxImagePrompt({
           history: parsed.data.history,
           contextoRows,
-          postContextProposal: parsed.data.post_context_proposal,
+          postContextProposal: imageIntent.postContextProposal,
+          focusContextoId: parsed.data.focus_contexto_id,
           hasReferenceImage: Boolean(inputImages?.length),
           referenceKind: refs.referenceKind,
           strictProductReference: refs.strictProductReference,
@@ -351,17 +398,10 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
 
     const fromBody = (parsed.data.reference_midia_ids || []).map((x) => String(x).trim()).filter(Boolean);
     const fromProposal = collectReferenceMidiaIds(
-      parsed.data.post_context_proposal,
+      imageIntent.postContextProposal,
       parsed.data.post_supplement_links,
     );
     let refIds = [...new Set([...fromBody, ...fromProposal])].slice(0, REFERENCE_MIDIA_MAX);
-    const userHint = parsed.data.history
-      .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join(" ")
-      .slice(-400);
-    const { identidadeDados } = partitionContextosIdentidade(contextoRows);
-    const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
     let primaryRefUrl = null;
     let primaryRefKind = "product";
     let fluxPrompt = prompt;
@@ -380,12 +420,18 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
           const excludeRefIds = identidadeDados?.id_midia_referencia_analise
             ? [String(identidadeDados.id_midia_referencia_analise)]
             : [];
-          refIds = rankReferenceMidiaIds(refIds, midiaRows, userHint, excludeRefIds, logoId);
+          refIds = rankReferenceMidiaIds(
+            refIds,
+            midiaRows,
+            imageIntent.selectionHint || previewUserHint,
+            excludeRefIds,
+            logoId,
+          );
         }
         const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds, {
           logoId,
-          userHint,
-          logoAsHero: wantsLogoAsHero(userHint),
+          userHint: imageIntent.selectionHint || previewUserHint,
+          logoAsHero,
         });
         primaryRefUrl = resolved.primaryUrl;
         primaryRefKind = resolved.primaryKind === "logo" ? "logo" : "product";
@@ -393,7 +439,8 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
           fluxPrompt = buildFluxImagePrompt({
             history: parsed.data.history,
             contextoRows,
-            postContextProposal: parsed.data.post_context_proposal,
+            postContextProposal: imageIntent.postContextProposal,
+            focusContextoId: parsed.data.focus_contexto_id,
             hasReferenceImage: true,
             referenceKind: primaryRefKind,
             pipeline: "standard",
@@ -460,15 +507,31 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
   }
 
   let image_urls = normalizeImageOutputUrls(out.output);
-  if (provider === "replicate" && pipeline === "raw" && composedProductIds.length && image_urls.length) {
+  if (provider === "replicate" && pipeline === "raw" && image_urls.length) {
     try {
+      const hasComposedAssets = Boolean(composedProductIds.length || (logoId && !logoAsHero));
       image_urls = await Promise.all(
         image_urls.map((url, idx) =>
-          composeGeneratedSceneWithProducts(db, idEmpresa, url, composedProductIds, idx),
+          composeGeneratedSceneWithProducts(db, idEmpresa, url, composedProductIds, idx, {
+            heroProductId,
+            logoId: logoId && !logoAsHero ? logoId : null,
+          }),
         ),
       );
-      if (referenceMeta && typeof referenceMeta === "object") {
-        referenceMeta = { ...referenceMeta, composed_preview: true };
+      if (hasComposedAssets) {
+        referenceMeta =
+          referenceMeta && typeof referenceMeta === "object"
+            ? {
+                ...referenceMeta,
+                composed_preview: true,
+                composed_logo: Boolean(logoId && !logoAsHero),
+              }
+            : {
+                mode: "replicate/gpt-image-2",
+                pipeline,
+                composed_preview: true,
+                composed_logo: Boolean(logoId && !logoAsHero),
+              };
       }
     } catch (err) {
       console.warn(
@@ -484,8 +547,9 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     idEmpresa,
     empresaRow,
     contextoRows,
-    parsed.data.post_context_proposal,
+    imageIntent.postContextProposal,
     parsed.data.history,
+    parsed.data.focus_contexto_id,
   );
 
   res.json({

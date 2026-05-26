@@ -6,7 +6,7 @@ import {
   getFormatPresetById,
   normalizeFormatoFromRaw,
 } from "./arteFormatPresets.js";
-import { extractFraseFromUserText, recentUserTexts } from "./imageHeadline.js";
+import { deriveFraseNaImagemFromHistory, extractFraseFromUserText, recentUserTexts } from "./imageHeadline.js";
 
 const TEMA_MAX = 200;
 const TITULO_MAX = 48;
@@ -129,15 +129,6 @@ function splitTituloSubtitulo(text) {
     };
   }
   const subMatch = text.match(/subt[ií]tulo\s*:\s*(.+?)(?:\s*[,;]|$)/i);
-  const frase = extractFraseFromUserText(text);
-  if (frase) {
-    const words = frase.split(/\s+/);
-    if (words.length <= 6) return { titulo: frase.slice(0, TITULO_MAX), subtitulo: "" };
-    return {
-      titulo: words.slice(0, 4).join(" ").slice(0, TITULO_MAX),
-      subtitulo: words.slice(4).join(" ").slice(0, SUBTITULO_MAX),
-    };
-  }
   if (subMatch?.[1]) {
     return { titulo: "", subtitulo: subMatch[1].trim().slice(0, SUBTITULO_MAX) };
   }
@@ -156,7 +147,7 @@ export function buildArteBriefFromHistory(history, brandColors = [], existing = 
 
   const preset = detectFormatPresetFromText(userBlob);
   const { titulo, subtitulo } = splitTituloSubtitulo(userBlob);
-  const frase = extractFraseFromUserText(userBlob);
+  const frase = extractFraseFromUserText(userBlob) || deriveFraseNaImagemFromHistory(history) || "";
   const rede = detectRede(userBlob) || base.rede;
   const estilo = detectEstilo(userBlob) || base.estilo;
 

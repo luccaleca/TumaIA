@@ -28,6 +28,33 @@ describe("rawImageArteBrief", () => {
     assert.ok(brief.titulo || brief.texto);
   });
 
+  it("não transforma o pedido livre em título sem marcação explícita", () => {
+    const brief = buildArteBriefFromHistory(
+      [{ role: "user", content: "quero arte black friday do whey com fundo escuro e clima premium" }],
+      ["#00B341"],
+    );
+    assert.equal(brief.titulo, "");
+    assert.equal(brief.subtitulo, "");
+    assert.equal(brief.texto, "Black Friday");
+    assert.match(brief.tema, /black friday|whey/i);
+  });
+
+  it("sugere frase promocional no brief mesmo sem `frase:` explícita", () => {
+    const brief = buildArteBriefFromHistory(
+      [
+        {
+          role: "user",
+          content:
+            "quero uma foto das 3 creatinas growth max e integral, com a integral em foco e promoção de 30% de desconto bem em evidência",
+        },
+      ],
+      ["#00B341"],
+    );
+    assert.equal(brief.titulo, "");
+    assert.equal(brief.texto, "Até 30% OFF");
+    assert.match(brief.tema, /creatina|promo/i);
+  });
+
   it("prompt estruturado e aspect 4:5 mapeado", () => {
     const brief = buildArteBriefFromHistory(
       [{ role: "user", content: "feed retrato 4:5 promo verão" }],

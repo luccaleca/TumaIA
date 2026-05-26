@@ -325,9 +325,7 @@ export function formatBrandIdentityForRawPrompt(dados, maxLen = 900) {
   if (d.tom_voz) lines.push(`Mood/atmosfera: ${d.tom_voz}.`);
   if (d.publico) lines.push(`Público-alvo (estética): ${d.publico}.`);
   if (d.id_midia_logo) {
-    lines.push(
-      "Logo da marca em input_images — pequena em um canto, salvo se o pedido pedir destaque.",
-    );
+    lines.push("Logo da marca: pequena em um canto; nunca central como texto, salvo pedido explícito.");
   }
   if (d.segmento) lines.push(`Segmento: ${d.segmento}.`);
   if (d.sobre_empresa) lines.push(`Contexto da empresa: ${String(d.sobre_empresa).slice(0, 200)}.`);

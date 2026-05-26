@@ -6,6 +6,7 @@
 const BASE = "https://api.replicate.com/v1";
 
 const DEFAULT_FETCH_TIMEOUT_MS = 30_000;
+const PREDICTION_POLL_FETCH_TIMEOUT_MS = 60_000;
 
 /**
  * @param {string} url
@@ -99,7 +100,7 @@ export async function waitForPrediction(token, getUrl, opts = {}) {
       {
         headers: { Authorization: `Bearer ${token}` },
       },
-      20_000,
+      PREDICTION_POLL_FETCH_TIMEOUT_MS,
     );
     const raw = await res.text();
     if (!res.ok) {

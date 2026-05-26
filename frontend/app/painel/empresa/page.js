@@ -204,6 +204,10 @@ export default function EmpresaPage() {
 
   function onSelectEmpresa(id) {
     if (!id) return;
+    const row = empresaRowFromList(empresasMinhas, id);
+    if (row?.empresa) {
+      setEmpresaAtiva(row.empresa);
+    }
     aplicarLinhaSelecionada(empresasMinhas, id);
     setEmpresaEditOpen(false);
     setCriandoNovaEmpresa(false);

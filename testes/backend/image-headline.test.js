@@ -34,6 +34,18 @@ describe("imageHeadline — frase na imagem", () => {
     assert.equal(frase, "TumaIA entende seu negócio");
   });
 
+  it("sugere frase curta quando o pedido fala em porcentagem de desconto", () => {
+    const history = [
+      {
+        role: "user",
+        content:
+          "quero uma foto das 3 creatinas growth max e integral, com a integral em foco e promoção de 30% de desconto bem em evidência",
+      },
+    ];
+    const frase = deriveFraseNaImagemFromHistory(history, []);
+    assert.equal(frase, "Até 30% OFF");
+  });
+
   it("ignora linha automática de confirmação do painel", () => {
     const history = [
       { role: "user", content: "arte promo whey" },

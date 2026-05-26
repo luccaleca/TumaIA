@@ -180,9 +180,11 @@ export function deriveFraseNaImagemFromHistory(history, contextoRows = []) {
 
   const lower = recent.toLowerCase();
   if (/at[eé]\s*\d+\s*%|%\s*off|desconto|\bpromo\b|black\s*friday/i.test(lower)) {
-    const pct = lower.match(/at[eé]\s*(\d{1,3})\s*%|(\d{1,3})\s*%\s*off/);
+    const pct = lower.match(
+      /at[eé]\s*(\d{1,3})\s*%|(\d{1,3})\s*%\s*off|(\d{1,3})\s*%\s*(?:de\s+)?desconto|desconto\s+de\s+(\d{1,3})\s*%/,
+    );
     if (pct) {
-      const n = pct[1] || pct[2];
+      const n = pct[1] || pct[2] || pct[3] || pct[4];
       if (n) return normalizeFraseNaImagem(`Até ${n}% OFF`);
     }
     if (/black\s*friday/i.test(lower)) return normalizeFraseNaImagem("Black Friday");
