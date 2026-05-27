@@ -9,6 +9,11 @@ import {
   detectImageGenerationIntent,
   detectImageGenerationIntentFromHistory,
 } from "../../../lib/chatDeliveryUi";
+import {
+  clearChatSession,
+  loadChatSession,
+  saveChatSession,
+} from "../../../lib/chatSessionPersistence";
 import { IDENTIDADE_CONTEXTO_NOME, isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
 import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresaUltimaFromMinhasPayload } from "../../../lib/empresaAtiva";
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
@@ -19,9 +24,7 @@ import {
   CHAT_PEDIDO_AGUARDE_MSG,
   CHAT_PEDIDO_COLETANDO_INTRO,
   CHAT_PEDIDO_RESUMO_MSG,
-  formatFraseNaImagemFromProposal,
   patchMessageContextoSelection,
-  patchMessageFrase,
 } from "./chatImageConfirmUtils";
 
 /** Alinhado a REPLICATE_GPT_IMAGE_TIMEOUT_MS no backend (300s) + margem. */
@@ -494,10 +497,49 @@ export default function PainelChatPage() {
   const [arteBriefLoading, setArteBriefLoading] = useState(false);
   const messagesRef = useRef(messages);
   const arteBriefDraftRef = useRef(arteBriefDraft);
+  const sessionPersistRef = useRef({ empresaId: null, conversaId: null, input: "", messages: [] });
 
   useEffect(() => {
     arteBriefDraftRef.current = arteBriefDraft;
   }, [arteBriefDraft]);
+
+  useEffect(() => {
+    sessionPersistRef.current = { empresaId, conversaId, input, messages };
+  }, [empresaId, conversaId, input, messages]);
+
+  const flushChatSession = useCallback(() => {
+    const snap = sessionPersistRef.current;
+    if (!snap.empresaId) return;
+    saveChatSession(snap.empresaId, {
+      conversaId: snap.conversaId,
+      input: snap.input,
+      messages: snap.messages,
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!empresaId) return;
+    const timer = setTimeout(() => {
+      saveChatSession(empresaId, { conversaId, input, messages });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [empresaId, conversaId, input, messages]);
+
+  useEffect(() => {
+    function onPageHide() {
+      flushChatSession();
+    }
+    function onVisibility() {
+      if (document.visibilityState === "hidden") onPageHide();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+      flushChatSession();
+    };
+  }, [flushChatSession]);
 
   const chatBusy = sending || !!actionBusy || !!postContextLoadingId || !!imageGeneratingAfterId;
   const busyStatusLabel = actionBusy
@@ -701,20 +743,39 @@ export default function PainelChatPage() {
     if (!empresaReady || !empresaId) return;
     let cancelled = false;
     (async () => {
+      const cached = loadChatSession(empresaId);
+      if (cached?.input) setInput(cached.input);
+
       await loadListaConversas();
       if (cancelled) return;
+
       let last = null;
       try {
         last = sessionStorage.getItem(lastConversaStorageKey(empresaId));
       } catch {
         /* ignore */
       }
-      if (last && /^[0-9a-f-]{36}$/i.test(last)) {
-        const check = await authApiFetchWithToken(`/chat/conversas/${encodeURIComponent(last)}`);
+
+      const targetId =
+        (last && /^[0-9a-f-]{36}$/i.test(last) ? last : null) ||
+        (cached?.conversaId && /^[0-9a-f-]{36}$/i.test(cached.conversaId) ? cached.conversaId : null);
+
+      if (targetId) {
+        if (cached?.conversaId === targetId && cached.messages?.length) {
+          setConversaId(targetId);
+          setMessages(cached.messages);
+        }
+        const check = await authApiFetchWithToken(`/chat/conversas/${encodeURIComponent(targetId)}`);
+        if (cancelled) return;
         if (check.ok && !check.networkError && Array.isArray(check.json?.mensagens)) {
-          await loadConversa(last, { remember: false });
+          await loadConversa(targetId, { remember: false });
+          if (cached?.input) setInput(cached.input);
           return;
         }
+      }
+
+      if (cached?.input) {
+        setInput(cached.input);
       }
       setConversaId(null);
       setMessages([]);
@@ -976,17 +1037,6 @@ export default function PainelChatPage() {
     [contextosCampanha, conversaId, syncMensagens],
   );
 
-  const onConfirmFraseChange = useCallback(
-    (messageId, frase) => {
-      setMessages((prev) => {
-        const next = prev.map((m) => (m.id === messageId ? patchMessageFrase(m, frase) : m));
-        if (conversaId) void syncMensagens(conversaId, next);
-        return next;
-      });
-    },
-    [conversaId, syncMensagens],
-  );
-
   const runDeliveryAction = useCallback(
     async function runDeliveryActionFn(fromAssistantMessageId, actionId) {
       const idChat = conversaId;
@@ -1200,6 +1250,7 @@ export default function PainelChatPage() {
         method: "POST",
         body: JSON.stringify(body),
         timeoutMs: 180000,
+        timeoutLabel: "chat",
       });
 
       if (!result.ok || result.networkError) {
@@ -1272,8 +1323,7 @@ export default function PainelChatPage() {
       const routeImage =
         Boolean(result.json?.route_image_generation) ||
         Boolean(result.json?.offer_post_context) ||
-        detectImageGenerationIntentFromHistory(historyForApi, question) ||
-        detectImageGenerationIntent(answer);
+        detectImageGenerationIntentFromHistory(historyForApi, question);
       const assistantContent = routeImage
         ? post_supplement?.briefing_status === "collecting"
           ? CHAT_PEDIDO_COLETANDO_INTRO
@@ -1316,12 +1366,14 @@ export default function PainelChatPage() {
     if (sending || deleting || loadingConversa || actionBusy) return;
     setConversaId(null);
     setMessages([]);
+    setInput("");
     resetArteBriefDraft();
     try {
       if (empresaId) sessionStorage.removeItem(lastConversaStorageKey(empresaId));
     } catch {
       /* ignore */
     }
+    clearChatSession(empresaId);
   }
 
   async function onDeleteChat() {
@@ -1345,8 +1397,10 @@ export default function PainelChatPage() {
     } catch {
       /* ignore */
     }
+    clearChatSession(empresaId);
     setConversaId(null);
     setMessages([]);
+    setInput("");
     resetArteBriefDraft();
     await loadListaConversas();
   }
@@ -1649,11 +1703,7 @@ export default function PainelChatPage() {
                               ?.id_contexto_empresa ||
                             ""
                           }
-                          fraseNaImagem={formatFraseNaImagemFromProposal(
-                            message.post_supplement?.post_context_proposal,
-                          )}
                           onContextoChange={(ctxId) => onConfirmContextoChange(message.id, ctxId)}
-                          onFraseChange={(frase) => onConfirmFraseChange(message.id, frase)}
                           disabled={!!actionBusy || sending}
                         />
                       ) : null}

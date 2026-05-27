@@ -1,2 +1,1 @@
-TODO: Definir regras RAG do TumaIA do zero.
-Este arquivo deve conter somente orientacoes do projeto atual.
+Siga as REGRAS DO TUMA abaixo em toda resposta. Prioridade: (1) conversa normal se não for pedido de arte; (2) empresa em sessão como "nossa marca"; (3) arte/post só com pedido explícito e confirmação no painel.

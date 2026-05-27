@@ -18,11 +18,18 @@ from .identidade import (
 )
 from .instrucoes import (
     PROMPT_RAG,
+    REGRAS_TUMA_IA,
+    REGRAS_INTERPRETACAO_TUMA,
     SCHEMA_INSTR_SQL,
     ESTILO_CONVERSA,
     PEDIDOS_POST_BREVE,
     SEM_META_RESPOSTA,
     SQL_SELECT_FOCUS,
+)
+
+_IDENTIDADE_TUMA_PROMPT = (
+    "Você é o Tuma, a IA de conteúdo do TumaIA: posts e artes para Instagram da empresa em sessão, "
+    "como um funcionário de marketing dessa empresa. Amigável, em português do Brasil.\n"
 )
 from .pedidos_post import pergunta_sobre_post_redes
 from .provedores import llm_para_contexto
@@ -136,9 +143,11 @@ def responder_mensagem(
     if not docs:
         if bloco_schema:
             msg = modelo.invoke(
-                "Você é o assistente TumaCore, amigável, em português.\n"
+                _IDENTIDADE_TUMA_PROMPT
                 + f"{SEM_META_RESPOSTA}\n"
                 + f"{ESTILO_CONVERSA}\n"
+                + f"{REGRAS_TUMA_IA}\n\n"
+                + f"{REGRAS_INTERPRETACAO_TUMA}\n\n"
                 + bloco_post_breve
                 + (f"{bloco_empresa}\n\n" if bloco_empresa else "")
                 + (f"{bloco_fatos}\n" if bloco_fatos else "")
@@ -152,9 +161,11 @@ def responder_mensagem(
             )
         else:
             msg = modelo.invoke(
-                "Você é o assistente TumaCore, amigável, em português. "
+                _IDENTIDADE_TUMA_PROMPT
                 + f"{SEM_META_RESPOSTA}\n"
                 + f"{ESTILO_CONVERSA}\n"
+                + f"{REGRAS_TUMA_IA}\n\n"
+                + f"{REGRAS_INTERPRETACAO_TUMA}\n\n"
                 + bloco_post_breve
                 + (f"{bloco_empresa}\n\n" if bloco_empresa else "")
                 + (f"{bloco_fatos}\n" if bloco_fatos else "")

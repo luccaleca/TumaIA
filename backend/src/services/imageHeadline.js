@@ -1,3 +1,5 @@
+import { extractProductMentions } from "./productMentionMatch.js";
+
 /** Frase curta que aparece NA IMAGEM (não é legenda do post). */
 export const FRASE_NA_IMAGEM_MAX = 56;
 
@@ -188,7 +190,7 @@ export function deriveFraseNaImagemFromHistory(history, contextoRows = []) {
       if (n) return normalizeFraseNaImagem(`Até ${n}% OFF`);
     }
     if (/black\s*friday/i.test(lower)) return normalizeFraseNaImagem("Black Friday");
-    return normalizeFraseNaImagem("Promoção");
+    // Não inventar só "Promoção" — o resumo visual usa o pedido completo.
   }
 
   if (/dia\s+das\s+m[aã]es|mothers?\s*day/i.test(lower)) {
@@ -200,6 +202,117 @@ export function deriveFraseNaImagemFromHistory(history, contextoRows = []) {
   if (explicit) return explicit;
 
   return null;
+}
+
+function normalizeLiteText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function looksLikeRawUserCopy(resumo, intent) {
+  const r = normalizeLiteText(resumo);
+  const i = normalizeLiteText(intent);
+  if (!r || !i || i.length < 14) return false;
+  if (r === i) return true;
+  const chunk = i.slice(0, Math.min(56, i.length));
+  return chunk.length >= 14 && r.includes(chunk);
+}
+
+/**
+ * Descrição do que a IA vai compor — nunca colar o pedido do cliente palavra por palavra.
+ *
+ * @param {Record<string, unknown>} proposal
+ * @param {string} [userHint]
+ */
+export function synthesizeResumoVisual(proposal, userHint = "") {
+  const p = proposal && typeof proposal === "object" ? proposal : {};
+  const intent =
+    String(p.intent_summary ?? "").trim() || String(userHint || "").trim();
+  const lower = intent.toLowerCase();
+  const parts = [];
+
+  if (/promo|desconto|off|%\b|de\s+\d+\s+por\s+\d+/i.test(intent)) {
+    parts.push("Post promocional para feed do Instagram, visual chamativo e energético.");
+  } else {
+    parts.push("Arte para feed do Instagram alinhada à marca.");
+  }
+
+  if (/academia/i.test(lower)) {
+    parts.push("Público-alvo: academias.");
+  }
+
+  const priceMatch = lower.match(/de\s+(\d+)\s+por\s+(\d+)|(\d+)\s+por\s+(\d+)/);
+  if (priceMatch) {
+    const de = priceMatch[1] || priceMatch[3];
+    const por = priceMatch[2] || priceMatch[4];
+    parts.push(`Destaque de preço: de R$ ${de} por R$ ${por}.`);
+  }
+
+  const refs = Array.isArray(p.midias_referenced) ? p.midias_referenced : [];
+  const refNames = refs
+    .map((r) => String(r?.nome_exibicao ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  if (refNames.length) {
+    parts.push(`PNG do acervo na composição: ${refNames.join(", ")}.`);
+    const heroName =
+      p.hero_product && typeof p.hero_product === "object"
+        ? String(p.hero_product.nome_exibicao ?? "").trim()
+        : "";
+    if (heroName && !refNames.includes(heroName)) {
+      parts.push(`Produto em destaque: ${heroName}.`);
+    } else if (heroName) {
+      parts.push(`Produto em destaque no centro: ${heroName}.`);
+    }
+  } else {
+    const mentions = extractProductMentions(intent);
+    if (mentions.length) {
+      parts.push(
+        `Produto(s) pedido(s): ${mentions.map((m) => `«${m}»`).join(", ")}. ` +
+          "Nenhum PNG correspondente no acervo ainda — confira os itens abaixo ou cadastre em Mídias.",
+      );
+    } else if (/monster|creatina|whey|pro\s*force|produto/i.test(lower)) {
+      parts.push(
+        "Nenhum PNG do produto foi vinculado ainda — confira os itens abaixo ou cadastre em Mídias.",
+      );
+    }
+  }
+
+  const explicit = extractFraseFromUserText(intent) || fraseFromProposal(p);
+  if (explicit) {
+    parts.push(`Texto pedido na arte: «${explicit}».`);
+  } else {
+    parts.push(
+      "Use preço e chamada da promo na tipografia; não repetir o pedido do chat como frase única na imagem.",
+    );
+  }
+
+  return parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 480);
+}
+
+/**
+ * Resumo do que a arte deve comunicar (direção visual para o modelo — não o pedido literal).
+ *
+ * @param {Record<string, unknown> | null | undefined} proposal
+ * @param {Array<{ role: string, content: string }>} [history]
+ * @param {string} [userHint]
+ */
+export function buildResumoVisual(proposal, history = [], userHint = "") {
+  const p = proposal && typeof proposal === "object" ? proposal : {};
+  const intent =
+    String(p.intent_summary ?? "").trim() ||
+    recentUserTexts(history, 2).join(" ").trim() ||
+    String(userHint || "").trim();
+
+  const fromProposal =
+    typeof p.resumo_visual === "string" && p.resumo_visual.trim() ? p.resumo_visual.trim() : "";
+  if (fromProposal && !looksLikeRawUserCopy(fromProposal, intent)) {
+    return fromProposal.slice(0, 480);
+  }
+
+  return synthesizeResumoVisual(p, intent || userHint);
 }
 
 /**

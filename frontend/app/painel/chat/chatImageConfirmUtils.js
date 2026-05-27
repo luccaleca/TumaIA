@@ -60,6 +60,34 @@ export function formatFraseNaImagemFromProposal(proposal) {
   return null;
 }
 
+export function midiaItemsFromProposal(proposal, supplementLinks = []) {
+  const fromLinks = Array.isArray(supplementLinks)
+    ? supplementLinks.filter((l) => l?.kind === "midia" && l.id)
+    : [];
+  if (fromLinks.length) return fromLinks;
+
+  const refs = Array.isArray(proposal?.midias_referenced) ? proposal.midias_referenced : [];
+  return refs
+    .filter((r) => r && typeof r === "object" && String(r.id_midia ?? "").trim())
+    .map((r) => {
+      const id = String(r.id_midia).trim();
+      const label = String(r.nome_exibicao ?? "Mídia").trim() || "Mídia";
+      return {
+        kind: "midia",
+        id,
+        label,
+        href: `/painel/midias?midia=${encodeURIComponent(id)}`,
+      };
+    });
+}
+
+export function formatResumoVisualFromProposal(proposal) {
+  if (!proposal || typeof proposal !== "object") return null;
+  const direct = proposal.resumo_visual;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  return formatMontagemFromProposal(proposal);
+}
+
 export function formatMontagemFromProposal(proposal) {
   if (!proposal || typeof proposal !== "object") return null;
   const direct = proposal.montagem_resumo;

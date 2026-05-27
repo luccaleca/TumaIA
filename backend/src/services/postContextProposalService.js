@@ -19,8 +19,16 @@ import {
   resolvePedidoCliente,
 } from "./imageHeadline.js";
 import { pickBestProductMidiaId, pickHeroProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
+import {
+  applyProductMediaGate,
+  extractProductMentions,
+  narrowImageRowsByProductMention,
+  scoreRowProductMention,
+} from "./productMentionMatch.js";
+import { buildResumoVisual, extractFraseFromUserText } from "./imageHeadline.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
 import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
+import { TUMA_IA_REGRAS_RESUMO_IMAGEM } from "./tumaIaRegrasResumo.js";
 
 const linkItemSchema = z.object({
   kind: z.enum(["contexto", "midia"]),
@@ -29,7 +37,7 @@ const linkItemSchema = z.object({
 });
 
 const CONFIRMATION_MESSAGE_MAX = 320;
-const PRODUCT_MATCH_HINT = /whey|creatina|suplement|produto|pote|embalagem|packshot|refil|sabor|baunilha|chocolate|morango|cookie/i;
+const PRODUCT_MATCH_HINT = /whey|creatina|suplement|produto|pote|embalagem|packshot|refil|monster|pro\s*force/i;
 const MONTAGEM_STOP = new Set([
   "com",
   "para",
@@ -273,10 +281,15 @@ function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
   const imageRows = rows.filter((row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem");
   if (!imageRows.length) return [];
 
-  const scored = imageRows
+  const { pool, strict } = narrowImageRowsByProductMention(imageRows, userHint);
+  const searchPool = strict ? pool : imageRows;
+  if (strict && !searchPool.length) return [];
+
+  const scored = searchPool
     .map((row) => {
       const blob = `${row?.nome_exibicao ?? ""} ${row?.nome_arquivo ?? ""} ${row?.descricao ?? ""} ${row?.alt_text ?? ""}`;
       let score = scoreTokenOverlap(blob, tokens);
+      score += scoreRowProductMention(row, extractProductMentions(userHint));
       if (PRODUCT_MATCH_HINT.test(userHint) && PRODUCT_MATCH_HINT.test(blob)) score += 5;
       return { row, score };
     })
@@ -284,6 +297,7 @@ function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
     .sort((a, b) => b.score - a.score);
 
   if (!scored.length) {
+    if (strict) return [];
     const bestId = pickBestProductMidiaId(imageRows, userHint);
     return bestId ? imageRows.filter((row) => String(row.id_midia ?? "").trim() === bestId).slice(0, 1) : [];
   }
@@ -295,7 +309,7 @@ function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
     .map((id) => byId.get(id))
     .filter(Boolean)
     .slice(0, limit);
-  const explicitHeroId = pickHeroProductMidiaId(imageRows, userHint);
+  const explicitHeroId = pickHeroProductMidiaId(searchPool.length ? searchPool : imageRows, userHint);
   if (explicitHeroId) {
     const heroRow = byId.get(explicitHeroId);
     if (heroRow) {
@@ -562,10 +576,38 @@ export function resolvePostSupplementLinks(rawLinks, postContextProposal, contex
   return out;
 }
 
-function buildReadyConfirmationMessage(links) {
-  return Array.isArray(links) && links.length
-    ? "Clique nos itens que vou usar na arte."
-    : "Revise a arte antes de gerar.";
+function proposalHasMidiaRefs(proposal) {
+  const refs = proposal?.midias_referenced;
+  return Array.isArray(refs) && refs.some((r) => r && typeof r === "object" && String(r.id_midia ?? "").trim());
+}
+
+function buildReadyConfirmationMessage(links, proposal) {
+  const hasMidiaLink = Array.isArray(links) && links.some((l) => l?.kind === "midia");
+  if (hasMidiaLink || proposalHasMidiaRefs(proposal)) {
+    return "Confira o resumo e os PNGs do acervo abaixo antes de gerar.";
+  }
+  return "Revise o resumo antes de gerar.";
+}
+
+function ensureProposalMidiasReferenced(proposal, midiaRows, userHint) {
+  const p = proposal && typeof proposal === "object" ? { ...proposal } : {};
+  if (proposalHasMidiaRefs(p)) return p;
+  const picked = pickReferencedMidias(midiaRows, userHint, 3);
+  if (!picked.length) return p;
+  p.midias_referenced = picked.map((row) => ({
+    id_midia: String(row.id_midia ?? "").trim(),
+    nome_exibicao: String(row.nome_exibicao ?? row.nome_arquivo ?? "Mídia").trim() || "Mídia",
+    why: "PNG do acervo selecionado conforme o pedido.",
+  }));
+  p.hero_product = buildHeroProductSelection(picked, userHint, true);
+  return p;
+}
+
+function finalizePostContextProposal(proposal, midiaRows, history, userHint) {
+  let p = ensureProposalMidiasReferenced(proposal, midiaRows, userHint);
+  p.resumo_visual = buildResumoVisual(p, history, userHint);
+  p.montagem_resumo = buildMontagemResumo(p);
+  return p;
 }
 
 function formatHistoryForPrompt(history) {
@@ -670,7 +712,7 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
   }));
   const intent = lastUser ? String(lastUser.content).trim().slice(0, 500) : "";
   const missing = listMissingBriefingSlots(history, { intent_summary: intent, frase_na_imagem: frase });
-  const proposal = {
+  let proposal = {
     intent_summary: intent,
     matched_contexto: ctx
       ? {
@@ -685,13 +727,25 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
     midias_referenced,
     hero_product: buildHeroProductSelection(midias, hint, true),
   };
-  proposal.montagem_resumo = buildMontagemResumo(proposal);
+  const gate = applyProductMediaGate(proposal, midiaRows, hint, history);
+  proposal = finalizePostContextProposal(gate.proposal, midiaRows, history, hint);
+  const resolvedLinks = resolvePostSupplementLinks(links, proposal, contextoRows, midiaRows);
+
+  if (gate.blocked) {
+    return {
+      confirmation_message: gate.confirmation_message,
+      briefing_status: "collecting",
+      missing_slots: gate.missing_slots,
+      links: resolvedLinks.filter((l) => l.kind === "contexto"),
+      post_context_proposal: proposal,
+    };
+  }
 
   return {
-    confirmation_message: "Clique nos itens que vou usar na arte.",
+    confirmation_message: buildReadyConfirmationMessage(resolvedLinks, proposal),
     briefing_status: missing.length ? "collecting" : "ready",
     missing_slots: missing,
-    links,
+    links: resolvedLinks,
     post_context_proposal: proposal,
   };
 }
@@ -800,7 +854,12 @@ export async function generatePostContextProposal(opts) {
       brandColors,
       arteBriefDraft && typeof arteBriefDraft === "object" ? arteBriefDraft : null,
     );
-    const mergedProposal = {
+    const rawHint = history
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join(" ")
+      .slice(-600);
+    let mergedProposal = {
       ...raw.post_context_proposal,
       ...rawBrief.post_context_proposal,
       matched_contexto:
@@ -812,23 +871,27 @@ export async function generatePostContextProposal(opts) {
         rawBrief.post_context_proposal?.hero_product ||
         buildHeroProductSelection(
           raw.post_context_proposal?.midias_referenced || rawBrief.post_context_proposal?.midias_referenced || [],
-          history
-            .filter((m) => m.role === "user")
-            .map((m) => m.content)
-            .join(" ")
-            .slice(-600),
+          rawHint,
           true,
         ),
-      montagem_resumo: buildMontagemResumo({
-        ...raw.post_context_proposal,
-        ...rawBrief.post_context_proposal,
-      }),
     };
+    const rawGate = applyProductMediaGate(mergedProposal, midiaRows, rawHint, history);
+    mergedProposal = finalizePostContextProposal(rawGate.proposal, midiaRows, history, rawHint);
     const links = resolvePostSupplementLinks(raw.links, mergedProposal, contextoRows, midiaRows);
+    if (rawGate.blocked) {
+      return {
+        confirmation_message: rawGate.confirmation_message,
+        links: links.filter((l) => l.kind === "contexto"),
+        post_context_proposal: mergedProposal,
+        briefing_status: "collecting",
+        missing_slots: rawGate.missing_slots,
+        _meta: { pipeline: "raw", provider: env.IMAGE_PROVIDER || "replicate" },
+      };
+    }
     return {
       confirmation_message:
         rawBrief.briefing_status === "ready"
-          ? buildReadyConfirmationMessage(links)
+          ? buildReadyConfirmationMessage(links, mergedProposal)
           : rawBrief.confirmation_message,
       links,
       post_context_proposal: mergedProposal,
@@ -844,7 +907,9 @@ export async function generatePostContextProposal(opts) {
     loadMidiasEmpresaResumo(db, idEmpresa, 72),
   ]);
 
-  const instrucao = `Você é assistente de marketing da TumaIA. O cliente já conversou sobre um pedido de post/conteúdo.
+  const instrucao = `${TUMA_IA_REGRAS_RESUMO_IMAGEM}
+
+Você é o Tuma, IA de conteúdo do TumaIA — funcionário de marketing da empresa em sessão. O cliente já conversou sobre um pedido de post/conteúdo.
 O cliente pode escrever de forma informal, com erros, abreviações ou informações no meio da frase — INTERPRETE o pedido completo (não exija formato perfeito).
 Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no painel (tipos como data comemorativa, lançamento, promoção, personalizado, etc. vêm em schema_json/dados_json);
 (3) usar o ACERVO DE MÍDIAS para links e para o campo JSON midias_referenced (nunca invente URLs de arquivo; use só ids listados em "### midia_id=");
@@ -852,7 +917,9 @@ Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no
    Exemplo bom: "Clique nos itens que vou usar na arte."
    NÃO liste contexto, produtos, frase ou detalhes longos na confirmation_message; isso vai nos links e no post_context_proposal.
    PROIBIDO citar testes, painel técnico, Llama, Ollama, Replicate ou erros internos.
-(5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo "frase_na_imagem": frase curta que vai ESCRITA NA ARTE (não é legenda). Extraia do texto do cliente mesmo sem aspas (ex.: "frase: TumaIA entende seu negócio" → frase_na_imagem exatamente isso). Máx. 8 palavras, português BR, sem hashtags. Se o cliente disser sem texto na arte, deixe vazio.
+(5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo:
+   - "resumo_visual": descrição completa do que a arte deve mostrar (tema, promoção, preços, público, produtos citados, tom). Use o pedido do cliente — NÃO resuma tudo a uma palavra genérica.
+   - "frase_na_imagem": SOMENTE se o cliente pediu frase/texto explícito na arte (ex.: "frase: …"). Caso contrário deixe vazio. Não preencha só "Promoção".
 (5b) briefing_status: "ready" se já dá para gerar a imagem (tema + frase ou sem texto explícito); "collecting" só se faltar algo CRÍTICO (máx. 2 lacunas). missing_slots: lista vazia se ready, senão ids entre produto, beneficio, periodo, frase_imagem. Em collecting, confirmation_message pergunta de forma natural (não lista robótica de formulário).
 (6) preencher "links": palavras clicáveis no painel — cada item com kind "contexto" ou "midia", "id" UUID que EXISTA na lista acima, e "label" CURTÍSSIMO (1 a 3 palavras, sem extensão de arquivo). Inclua o matched_contexto e TODAS as midias_referenced também em links. Se não houver encaixe no banco, use "links": [].
 (7) Se o cliente pedir arte com produto, embalagem, armações/óculos PNG ou "inserir" elemento do acervo, preencha "midias_referenced" com até 3 ids EXISTENTES em "### midia_id=".
@@ -871,7 +938,8 @@ Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
     "intent_summary": "string",
     "montagem_resumo": "string curta explicando como a IA vai montar a arte",
     "matched_contexto": { "id_contexto_empresa": "uuid ou null", "nome": "string", "tipo_schema": "string", "reason": "string" } | null,
-    "frase_na_imagem": "string curta na arte, ex. Parabéns pelos 500k!",
+    "resumo_visual": "string — o que vai na arte (pedido completo)",
+    "frase_na_imagem": "string opcional — só se o cliente pediu texto explícito na arte",
     "facts_for_image": { "chave": "valor" },
     "midias_referenced": [ { "id_midia": "uuid opcional", "nome_exibicao": "string", "why": "string" } ],
     "hero_product": { "id_midia": "uuid ou null", "nome_exibicao": "string", "reason": "string" } | null
@@ -889,6 +957,8 @@ Regras:
   - Use sobreposição de palavras-chave ou trechos: se o cliente disser "óculos reto" e existir arquivo "imagem-oculos-reto.jfif" ou nome_exibicao parecido, associe essa mídia.
   - Se houver várias candidatas, escolha a mais específica ao que foi pedido; na 1ª posição de midias_referenced coloque a principal para composição visual; em "why" explique brevemente o vínculo (ex.: "nome_arquivo contém oculos-reto como o cliente pediu").
   - Se nenhuma mídia for claramente relacionada, deixe midias_referenced vazio ou só contextos em links — não force UUID.
+  - PROIBIDO trocar o produto pedido por outro do acervo (ex.: cliente pediu "monster" → não use "pro force", creatina, whey, etc.).
+  - Só inclua mídia cujo nome_exibicao ou nome_arquivo contenha o produto/marca citado pelo cliente.
 - frase_na_imagem: OBRIGATÓRIO quando o pedido tiver marco, promoção ou data — é o texto que aparece na imagem.
 - facts_for_image: pares curtos opcionais (ex.: ocasiao, tom); repita frase_na_imagem em facts_for_image.frase_na_imagem se quiser.
 - Tom profissional e cordial. Sem markdown na confirmation_message.
@@ -993,28 +1063,32 @@ ${formatEmpresaForLlm(empresaRow)}
       : {};
 
   const { campanhaRows } = partitionContextosIdentidade(contextoRows);
+  const hint = history
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join(" ")
+    .slice(-600);
+
   const derived = deriveFraseNaImagemFromHistory(history, campanhaRows);
-  if (derived) {
+  const explicitFrase = extractFraseFromUserText(hint);
+  if (derived && explicitFrase) {
     post_context_proposal.frase_na_imagem = derived;
     if (!post_context_proposal.facts_for_image || typeof post_context_proposal.facts_for_image !== "object") {
       post_context_proposal.facts_for_image = {};
     }
     post_context_proposal.facts_for_image.frase_na_imagem = derived;
-  } else if (!post_context_proposal.frase_na_imagem) {
-    const fallback = deriveFraseNaImagemFromHistory(history, campanhaRows);
-    if (fallback) post_context_proposal.frase_na_imagem = fallback;
+  } else if (!explicitFrase) {
+    post_context_proposal.frase_na_imagem = "";
   }
+
+  let mediaGate = applyProductMediaGate(post_context_proposal, midiaRows, hint, history);
+  post_context_proposal = mediaGate.proposal;
 
   const rawRefs = post_context_proposal.midias_referenced;
   if (Array.isArray(rawRefs) && rawRefs.length > 1 && midiaRows.length) {
     const ids = rawRefs
       .map((item) => (item && typeof item.id_midia === "string" ? item.id_midia.trim() : ""))
       .filter(Boolean);
-    const hint = history
-      .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join(" ")
-      .slice(-400);
     const ranked = rankReferenceMidiaIds(ids, midiaRows, hint);
     const byId = new Map(
       rawRefs
@@ -1025,12 +1099,31 @@ ${formatEmpresaForLlm(empresaRow)}
       .map((id) => byId.get(id))
       .filter(Boolean)
       .slice(0, 3);
+    mediaGate = applyProductMediaGate(post_context_proposal, midiaRows, hint, history);
+    post_context_proposal = mediaGate.proposal;
   }
   post_context_proposal.hero_product = normalizeHeroProductSelection(
     post_context_proposal.hero_product,
     post_context_proposal.midias_referenced,
   );
-  post_context_proposal.montagem_resumo = buildMontagemResumo(post_context_proposal);
+  post_context_proposal = finalizePostContextProposal(post_context_proposal, midiaRows, history, hint);
+
+  if (mediaGate.blocked) {
+    const blockedLinks = resolvePostSupplementLinks(
+      safe.data.links,
+      post_context_proposal,
+      contextoRows,
+      midiaRows,
+    ).filter((l) => l.kind === "contexto");
+    return {
+      confirmation_message: mediaGate.confirmation_message,
+      links: blockedLinks,
+      post_context_proposal,
+      briefing_status: "collecting",
+      missing_slots: mediaGate.missing_slots,
+      _meta: { used_panel_fallback: usedPanelFallback, ...(fallbackMeta || {}) },
+    };
+  }
 
   const links = resolvePostSupplementLinks(safe.data.links, post_context_proposal, contextoRows, midiaRows);
 
@@ -1055,7 +1148,7 @@ ${formatEmpresaForLlm(empresaRow)}
   return {
     confirmation_message:
       gated.briefing_status === "ready"
-        ? buildReadyConfirmationMessage(finalLinks)
+        ? buildReadyConfirmationMessage(finalLinks, gated.post_context_proposal)
         : gated.confirmation_message,
     links: finalLinks,
     post_context_proposal: gated.post_context_proposal,

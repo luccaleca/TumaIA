@@ -1,0 +1,4 @@
+#!/bin/sh
+# Remove trailers adicionados pelo Cursor em commits feitos pela IDE/CLI
+sed -i '/Co-authored-by: Cursor/d' "$1" 2>/dev/null || true
+sed -i '/Made-with: Cursor/d' "$1" 2>/dev/null || true

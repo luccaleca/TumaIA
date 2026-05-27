@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { formatFraseNaImagemFromProposal, formatMontagemFromProposal } from "./chatImageConfirmUtils";
+import {
+  formatResumoVisualFromProposal,
+  formatMontagemFromProposal,
+  midiaItemsFromProposal,
+} from "./chatImageConfirmUtils";
 
 const ROW_LABEL_CLASS = "min-w-[72px] pt-0.5 text-xs font-medium text-muted-foreground";
 const CHIP_CLASS =
@@ -15,87 +18,61 @@ export default function ChatImageConfirmBlock({
   supplement,
   contextosCampanha,
   selectedContextoId,
-  fraseNaImagem,
   onContextoChange,
-  onFraseChange,
   disabled,
   collecting = false,
   hasArteBrief = false,
 }) {
   const proposal = supplement?.post_context_proposal;
-  const frase = fraseNaImagem ?? formatFraseNaImagemFromProposal(proposal);
+  const resumoVisual = formatResumoVisualFromProposal(proposal);
   const montagem = formatMontagemFromProposal(proposal);
-  const [editingFrase, setEditingFrase] = useState(false);
+  const productMissing = proposal?.product_media_status === "missing";
+  const productsRequested = Array.isArray(proposal?.products_requested)
+    ? proposal.products_requested.filter(Boolean)
+    : [];
   const links = Array.isArray(supplement?.links) ? supplement.links : [];
   const confirmation =
     typeof supplement?.confirmation_message === "string" ? supplement.confirmation_message.trim() : "";
   const contextLinks = links.filter((item) => item?.kind === "contexto");
-  const itemLinks = links.filter((item) => item?.kind === "midia");
+  const itemLinks = midiaItemsFromProposal(proposal, links);
   const showConfirmation =
     confirmation && !/^clique nos itens que vou usar na arte\.?$/i.test(confirmation);
 
   if (collecting) {
-    if (!confirmation) return null;
     return (
-      <div className="mt-3 rounded-xl border border-border bg-surface-elevated/60 px-3 py-2.5 text-sm leading-relaxed">
-        <p className="whitespace-pre-wrap text-foreground">{confirmation}</p>
+      <div className="mt-3 space-y-2.5 rounded-xl border border-border bg-surface-elevated/60 px-3 py-2.5 text-sm leading-relaxed">
+        {productMissing ? (
+          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-sm text-foreground">
+            {confirmation || "Produto não encontrado no acervo."}{" "}
+            <Link href="/painel/midias" className="font-medium text-accent underline-offset-2 hover:underline">
+              Abrir Mídias
+            </Link>
+          </p>
+        ) : (
+          <p className="whitespace-pre-wrap text-foreground">{confirmation}</p>
+        )}
+        {productsRequested.length > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Produto(s) pedido(s): {productsRequested.map((p) => `«${p}»`).join(", ")}
+          </p>
+        ) : null}
       </div>
     );
   }
 
   return (
     <div className="mt-3 space-y-2.5 rounded-xl border border-border bg-surface-elevated/50 px-3 py-2.5 text-sm leading-relaxed">
-      {montagem ? (
+      {resumoVisual ? (
+        <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
+          <p className={ROW_LABEL_CLASS}>Resumo visual</p>
+          <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm text-foreground">{resumoVisual}</p>
+        </div>
+      ) : montagem ? (
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
           <p className={ROW_LABEL_CLASS}>Montagem</p>
           <p className="min-w-0 flex-1 text-sm text-foreground">{montagem}</p>
         </div>
       ) : null}
-
-      <div className="block">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-xs font-medium text-muted-foreground">Frase na imagem</span>
-          {frase && !editingFrase ? (
-            <button
-              type="button"
-              className="text-xs font-medium text-accent transition hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={disabled}
-              onClick={() => setEditingFrase(true)}
-            >
-              Editar
-            </button>
-          ) : null}
-        </div>
-
-        {frase && !editingFrase ? (
-          <div className="mt-1 rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground">
-            {frase}
-          </div>
-        ) : (
-          <input
-            type="text"
-            maxLength={56}
-            className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
-            value={frase || ""}
-            disabled={disabled}
-            placeholder="Ex.: Até 40% OFF"
-            onBlur={() => {
-              if (frase) setEditingFrase(false);
-            }}
-            onChange={(e) => onFraseChange(e.target.value)}
-          />
-        )}
-
-        <span className="mt-1 block text-xs text-muted-foreground">
-          {frase
-            ? hasArteBrief
-              ? "A sugestão já vem preenchida. Se quiser, clique em editar para sobrescrever o texto final usado na geração."
-              : "A sugestão já vem preenchida. Se quiser, clique em editar para trocar o texto que aparecerá na imagem."
-            : hasArteBrief
-              ? "Se quiser texto na arte, preencha aqui. Se deixar vazio, a geração segue sem frase legível."
-              : "Nenhuma frase sugerida ainda. Se quiser, preencha aqui o texto que deve aparecer na imagem."}
-        </span>
-      </div>
 
       {contextLinks.length > 0 ? (
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
@@ -112,7 +89,7 @@ export default function ChatImageConfirmBlock({
 
       {itemLinks.length > 0 ? (
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-          <p className={ROW_LABEL_CLASS}>Itens</p>
+          <p className={ROW_LABEL_CLASS}>PNG do acervo</p>
           <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
             {itemLinks.map((l) => (
               <Link key={`${l.kind}-${l.id}`} href={l.href} className={CHIP_CLASS}>
@@ -121,7 +98,15 @@ export default function ChatImageConfirmBlock({
             ))}
           </div>
         </div>
-      ) : null}
+      ) : productMissing ? null : (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Nenhum PNG vinculado —{" "}
+          <Link href="/painel/midias" className="font-medium underline-offset-2 hover:underline">
+            cadastre em Mídias
+          </Link>
+          .
+        </p>
+      )}
 
       {showConfirmation ? <p className="text-xs text-muted-foreground">{confirmation}</p> : null}
 
@@ -145,7 +130,6 @@ export default function ChatImageConfirmBlock({
           </span>
         </label>
       ) : null}
-
     </div>
   );
 }

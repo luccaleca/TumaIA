@@ -436,7 +436,11 @@ export async function composeGeneratedSceneWithProducts(
     const row = productRows[i];
     const slot = slots[i];
     const buffer = await loadCompanyMidiaBuffer(db, row);
-    const layer = await prepareProductLayer(buffer, Math.max(120, Math.round(width * slot.width)));
+    const rowId = String(row?.id_midia ?? "").trim();
+    const isHero = Boolean(heroProductId && rowId && rowId === heroProductId);
+    const sizeBoost = isHero ? 1.42 : 1.24;
+    const layerTargetWidth = Math.max(150, Math.round(width * slot.width * sizeBoost));
+    const layer = await prepareProductLayer(buffer, layerTargetWidth);
     const layerMeta = await sharp(layer).metadata();
     const lw = Math.max(1, layerMeta.width ?? 1);
     const lh = Math.max(1, layerMeta.height ?? 1);
@@ -457,12 +461,12 @@ export async function composeGeneratedSceneWithProducts(
 
   if (logoRow) {
     const buffer = await loadCompanyMidiaBuffer(db, logoRow);
-    const targetWidth = Math.max(72, Math.round(Math.min(width, height) * 0.12));
+    const targetWidth = Math.max(110, Math.round(Math.min(width, height) * 0.18));
     const logo = await prepareLogoLayer(buffer, targetWidth);
     const logoMeta = await sharp(logo).metadata();
     const lw = Math.max(1, logoMeta.width ?? targetWidth);
     const lh = Math.max(1, logoMeta.height ?? targetWidth);
-    const padding = Math.max(16, Math.round(Math.min(width, height) * 0.035));
+    const padding = Math.max(12, Math.round(Math.min(width, height) * 0.022));
     composites.push({
       input: logo,
       left: Math.max(0, width - lw - padding),

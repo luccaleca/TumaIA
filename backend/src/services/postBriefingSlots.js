@@ -4,9 +4,9 @@
 
 import { extractFraseFromUserText, normalizeFraseNaImagem } from "./imageHeadline.js";
 
-/** @typedef {'produto' | 'beneficio' | 'periodo' | 'frase_imagem'} BriefingSlotId */
+/** @typedef {'produto' | 'beneficio' | 'periodo' | 'frase_imagem' | 'midia_acervo'} BriefingSlotId */
 
-const VALID_SLOTS = new Set(["produto", "beneficio", "periodo", "frase_imagem"]);
+const VALID_SLOTS = new Set(["produto", "beneficio", "periodo", "frase_imagem", "midia_acervo"]);
 
 /** @type {Record<BriefingSlotId, { label: string, ask: string }>} */
 export const BRIEFING_SLOT_META = {
@@ -25,6 +25,10 @@ export const BRIEFING_SLOT_META = {
   frase_imagem: {
     label: "frase na imagem",
     ask: "Qual frase deve aparecer na imagem? (Ex.: «Até 40% OFF». Se não quiser texto na arte, diga «sem texto».)",
+  },
+  midia_acervo: {
+    label: "foto do produto no acervo",
+    ask: "Cadastre a foto do produto em Painel → Mídias (nome parecido com o pedido) e envie uma nova mensagem no chat.",
   },
 };
 
@@ -220,6 +224,25 @@ export function applyBriefingGate(history, proposalOut) {
     root.post_context_proposal && typeof root.post_context_proposal === "object"
       ? { ...root.post_context_proposal }
       : {};
+
+  if (proposal.product_media_status === "missing") {
+    const requested = Array.isArray(proposal.products_requested)
+      ? proposal.products_requested.map((x) => String(x)).filter(Boolean)
+      : [];
+    const labels = requested.slice(0, 2).map((m) => `«${m}»`).join(", ");
+    const msg =
+      String(root.confirmation_message ?? "").trim() ||
+      (labels
+        ? `Não encontrei ${labels} no acervo de Mídias. Cadastre a foto em Painel → Mídias e volte ao chat.`
+        : BRIEFING_SLOT_META.midia_acervo.ask);
+    return {
+      briefing_status: "collecting",
+      missing_slots: ["midia_acervo"],
+      confirmation_message: msg.slice(0, 900),
+      post_context_proposal: proposal,
+      links: root.links,
+    };
+  }
 
   const userText = userTextFromHistory(history);
   const extracted = extractFraseFromUserText(userText);

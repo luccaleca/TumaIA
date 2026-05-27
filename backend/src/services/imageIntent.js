@@ -1,4 +1,4 @@
-import { resolveFraseNaImagem, resolvePedidoCliente } from "./imageHeadline.js";
+import { buildResumoVisual, resolveFraseNaImagem, resolvePedidoCliente } from "./imageHeadline.js";
 
 function contextIdFromRow(row) {
   return String(row?.id_contexto_empresa ?? "").trim();
@@ -150,11 +150,13 @@ export function buildConfirmedImageIntent(opts = {}) {
     String(postContextProposal.intent_summary ?? "").trim() ||
     "";
   const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, prioritizedContextRows) || "";
+  const resumoVisual = buildResumoVisual(postContextProposal, history, pedido);
   const selectionHint = buildSelectionHint(postContextProposal, pedido, fraseNaImagem, matchedContexto);
 
   return {
     pedido,
     fraseNaImagem,
+    resumoVisual,
     matchedContexto,
     heroProduct,
     matchedContextRow: matchedRow,

@@ -3,6 +3,7 @@
  */
 
 import { wantsLogoAsHero } from "./logoReferencePolicy.js";
+import { extractProductMentions, scoreRowProductMention } from "./productMentionMatch.js";
 
 const PRODUCT_HINT =
   /oculos|óculos|arma(c|ç)(a|ã)o|lente|produto|whey|creatina|suplement|png|recorte|isolad|transparent|packshot|pote|embalagem/i;
@@ -111,6 +112,12 @@ function scoreMidiaRow(row, userHint, logoId = "") {
   if (/\.(jfif|jpe?g|webp)$/i.test(ext) && !mime.includes("png")) score += 5;
   if (String(row.tipo_midia ?? "").toLowerCase() !== "imagem") score -= 100;
   score += scoreExplicitHeroMatch(row, userHint);
+  const mentions = extractProductMentions(userHint);
+  if (mentions.length) {
+    const productScore = scoreRowProductMention(row, mentions);
+    if (productScore > 0) score += productScore;
+    else score -= 120;
+  }
   return score;
 }
 
@@ -166,6 +173,19 @@ export function pickHeroProductMidiaId(rows, userHint = "") {
  */
 export function pickBestProductMidiaId(rows, userHint = "") {
   if (!rows.length) return null;
+  const mentions = extractProductMentions(userHint);
+  if (mentions.length) {
+    let bestId = null;
+    let bestProductScore = 0;
+    for (const row of rows) {
+      const ps = scoreRowProductMention(row, mentions);
+      if (ps > bestProductScore) {
+        bestProductScore = ps;
+        bestId = String(row.id_midia ?? "").trim();
+      }
+    }
+    return bestProductScore >= 35 ? bestId : null;
+  }
   const ids = rows.map((r) => String(r.id_midia ?? "").trim()).filter(Boolean);
   const ranked = rankReferenceMidiaIds(ids, rows, userHint);
   const best = ranked[0];

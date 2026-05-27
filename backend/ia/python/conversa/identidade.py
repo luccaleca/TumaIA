@@ -13,7 +13,12 @@ RE_TECNICO = re.compile(
 )
 
 RE_IDENTIDADE = re.compile(
-    r"\b(nome|quem (é|e) (voc[eê]|tu)|quem te criou|criador|origem do nome|significa|motivo|raz[aã]o|tuma)\b",
+    r"\b("
+    r"nome|"
+    r"quem\s+(é|e)\s+(voc[eê]|voce|vc|tu)|"
+    r"o\s+que\s+(você|voce|vc)\s+faz|"
+    r"quem\s+te\s+criou|criador|origem\s+do\s+nome|significa|motivo|raz[aã]o|tuma"
+    r")\b",
     re.IGNORECASE,
 )
 RE_MENSAGEM_CURTA_CASUAL = re.compile(
@@ -132,6 +137,7 @@ def bloco_fatos_identidade_para_prompt(historico: list[dict[str, str]], q: str) 
     linhas = [
         "[Fatos fixos do assistente — use só o que for pedido; não liste como regras]",
         "- Nome: Tuma",
+        "- Papel: IA de conteúdo do TumaIA — posts e artes para Instagram da empresa em sessão (marketing interno)",
         "- Origem do nome: 'tuma' em suaíli (swahili) significa 'enviar'",
     ]
     if usuario_pergunta_sobre_criador(q):
@@ -159,9 +165,15 @@ def resposta_identidade(pergunta: str) -> str | None:
     if not RE_IDENTIDADE.search(p):
         return None
 
+    if re.search(r"quem\s+(é|e)\s+(você|voce|vc|tu)\b", p, re.IGNORECASE):
+        return (
+            "Sou o Tuma, a IA de conteúdo do TumaIA. Ajudo a empresa da sua sessão com posts e artes "
+            "para o Instagram — como um funcionário de marketing dela."
+        )
+
     if pergunta_motivo_origem_significado_do_nome(pergunta):
         base = (
-            "Sou o assistente Tuma. O nome vem do suaíli (swahili): "
+            "Sou o Tuma, IA de conteúdo do TumaIA. O nome vem do suaíli (swahili): "
             "'tuma' significa 'enviar'."
         )
         if usuario_pergunta_sobre_criador(pergunta):
@@ -187,8 +199,14 @@ def resposta_identidade(pergunta: str) -> str | None:
     if pergunta_criador and not (pergunta_nome or pergunta_significado):
         return "Fui criado por Diego Suhai Navarro."
 
+    if re.search(r"o\s+que\s+(você|voce|vc)\s+faz", p):
+        return (
+            "Ajudo a montar conteúdo da empresa da sua sessão: ideias, posts e artes para Instagram. "
+            "Quando você pedir uma arte, o painel mostra o resumo para confirmar antes da prévia."
+        )
+
     if pergunta_nome and not (pergunta_criador or pergunta_significado):
-        return "Meu nome é Tuma."
+        return "Meu nome é Tuma — sou a IA de conteúdo do TumaIA para a empresa em sessão."
 
     if pergunta_significado and not (pergunta_criador or pergunta_nome):
         return "O nome 'Tuma' vem do suaíli (Swahili) e significa 'enviar'."
@@ -196,15 +214,12 @@ def resposta_identidade(pergunta: str) -> str | None:
     if pergunta_criador or pergunta_nome or pergunta_significado:
         partes = []
         if pergunta_nome:
-            partes.append("Meu nome é Tuma.")
+            partes.append("Meu nome é Tuma — IA de conteúdo do TumaIA.")
         if pergunta_criador:
             partes.append("Fui criado por Diego Suhai Navarro.")
         if pergunta_significado:
             partes.append("O nome 'Tuma' vem do suaíli (Swahili) e significa 'enviar'.")
         return " ".join(partes)
-
-    if "quem é você" in p or "quem e voce" in p:
-        return "Sou o Tuma, assistente do TumaCore."
 
     return None
 

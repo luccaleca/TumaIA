@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildResumoVisual,
   deriveFraseNaImagemFromHistory,
   extractFraseFromUserText,
   resolveFraseNaImagem,
+  synthesizeResumoVisual,
 } from "../../backend/src/services/imageHeadline.js";
 
 describe("imageHeadline — frase na imagem", () => {
@@ -46,13 +48,44 @@ describe("imageHeadline — frase na imagem", () => {
     assert.equal(frase, "Até 30% OFF");
   });
 
+  it("resumo visual não repete o pedido literal do cliente", () => {
+    const intent =
+      "Academia Promo. quero um post de promoção dos monster de 15 por 9, bem chamativo, só para academias";
+    const proposal = {
+      intent_summary: intent,
+      midias_referenced: [
+        { id_midia: "m1", nome_exibicao: "Monster Energy Lata" },
+      ],
+      hero_product: { nome_exibicao: "Monster Energy Lata" },
+    };
+    const resumo = buildResumoVisual(proposal, [], intent);
+    assert.ok(resumo);
+    assert.doesNotMatch(resumo, /quero um post de promoção/i);
+    assert.match(resumo, /Monster Energy Lata/i);
+    assert.match(resumo, /academia/i);
+    assert.match(resumo, /15.*9|R\$\s*15.*R\$\s*9/i);
+  });
+
+  it("synthesizeResumoVisual lista PNGs do acervo", () => {
+    const resumo = synthesizeResumoVisual(
+      {
+        intent_summary: "promo monster",
+        midias_referenced: [{ nome_exibicao: "Monster Verde" }, { nome_exibicao: "Monster Rosa" }],
+      },
+      "promo monster",
+    );
+    assert.match(resumo, /Monster Verde/);
+    assert.match(resumo, /Monster Rosa/);
+    assert.match(resumo, /PNG do acervo/i);
+  });
+
   it("ignora linha automática de confirmação do painel", () => {
     const history = [
       { role: "user", content: "arte promo whey" },
       { role: "user", content: "Confirmar e gerar prévia da imagem." },
     ];
     const frase = deriveFraseNaImagemFromHistory(history, []);
-    assert.ok(frase);
-    assert.match(frase, /Promo/i);
+    assert.notEqual(frase, "Promoção");
+    assert.ok(frase === null || !/^promoção$/i.test(frase));
   });
 });

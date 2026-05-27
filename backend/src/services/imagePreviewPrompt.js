@@ -1,6 +1,12 @@
 import { env } from "../config.js";
 import { filterMidiasAcervo } from "../modules/empresas/midiaOrigem.js";
-import { normalizeFraseNaImagem, resolveFraseNaImagem, resolvePedidoCliente } from "./imageHeadline.js";
+import {
+  buildResumoVisual,
+  extractFraseFromUserText,
+  normalizeFraseNaImagem,
+  resolveFraseNaImagem,
+  resolvePedidoCliente,
+} from "./imageHeadline.js";
 import { buildConfirmedImageIntent } from "./imageIntent.js";
 import { aspectRatioFromArteBrief, promptFromArteBrief } from "./rawImageArteBrief.js";
 import {
@@ -88,18 +94,31 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
       base = `${base}\n\nO produto principal desta arte será «${heroProductName}». A maior área de destaque visual deve ser reservada para esse item, com mais presença que os produtos de apoio.`;
     }
   }
-  const fraseNaImagem =
-    hasPhraseOverride ? phraseOverride : imageIntent?.fraseNaImagem || resolveFraseNaImagem(proposal, history || []);
-  if (fraseNaImagem) {
-    base = `${base}\n\nO ÚNICO texto legível na imagem deve ser exatamente esta frase em português: «${fraseNaImagem}». Não adicione outro título, subtítulo, CTA, selo, preço ou parágrafo diferente.`;
-  } else if (hasPhraseOverride) {
-    base = `${base}\n\nNão renderize texto legível na imagem. Sem headline, subtítulo, CTA, preço ou qualquer palavra extra.`;
+  const pedidoTexto = imageIntent?.pedido || resolvePedidoCliente(proposal, history, 32_000);
+  const resumoVisual =
+    (proposal && typeof proposal.resumo_visual === "string" && proposal.resumo_visual.trim()) ||
+    buildResumoVisual(proposal, history || [], pedidoTexto);
+  base = `${base}\n\nDireção visual da arte (composição completa — preços, promoção, público e produtos do pedido; não limitar a uma única palavra): ${resumoVisual}`;
+
+  const fraseExplicita =
+    hasPhraseOverride && phraseOverride
+      ? phraseOverride
+      : extractFraseFromUserText(pedidoTexto) ||
+        (imageIntent?.fraseNaImagem && extractFraseFromUserText(String(imageIntent.fraseNaImagem))
+          ? imageIntent.fraseNaImagem
+          : null);
+  if (fraseExplicita) {
+    base = `${base}\n\nO cliente pediu este texto em destaque na arte: «${fraseExplicita}». Pode incluir também preços e chamadas do pedido de forma legível.`;
+  } else if (hasPhraseOverride && !phraseOverride) {
+    base = `${base}\n\nEvite texto legível longo; foque no visual e nos produtos do acervo.`;
+  } else {
+    base = `${base}\n\nUse os elementos textuais do pedido (ex.: preços, desconto, público-alvo) de forma legível na composição, conforme o resumo acima.`;
   }
   if (imageIntent?.matchedContexto?.nome) {
     base = `${base}\n\nContexto/campanha prioritário desta arte: ${imageIntent.matchedContexto.nome}.`;
   }
   if (identidadeDados?.id_midia_logo && !opts?.logoAsHero) {
-    base = `${base}\n\nReserve um canto limpo para aplicar a logo real da marca pequena no resultado final. Não invente wordmark, lettering ou texto de marca extra dentro da arte.`;
+    base = `${base}\n\nReserve um canto limpo para aplicar a logo real da marca com tamanho legível no resultado final (sem ficar minúscula). Não invente wordmark, lettering ou texto de marca extra dentro da arte.`;
   }
 
   const brand = identidadeDados ? formatBrandIdentityForRawPrompt(identidadeDados) : "";
