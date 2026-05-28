@@ -18,8 +18,9 @@ describe("brandColorScore", () => {
   it("assignRankedPalette ordena paleta completa", () => {
     const p = assignRankedPalette(["#A67C52", "#C41E3A", "#1E293B", "#F8FAFC"]);
     assert.equal(p.cor_primaria, "#C41E3A");
-    assert.equal(p.cor_secundaria, "#1E293B");
-    assert.ok(p.cores_adicionais.includes("#F8FAFC"));
+    assert.equal(p.cor_secundaria, "#F8FAFC");
+    assert.ok(p.cores_adicionais.includes("#1E293B"));
+    assert.ok(p.cores_adicionais.includes("#A67C52"));
   });
 });
 

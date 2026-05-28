@@ -93,7 +93,12 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
       Boolean(db) &&
       detectImageGenerationIntentFromHistory(parsed.data.history, parsed.data.question);
 
+    const t0 = Date.now();
     const result = await runChatSerialized(parsed.data);
+    const elapsedMs = Date.now() - t0;
+    if (elapsedMs > 15_000) {
+      console.info(`[ia/chat] resposta em ${Math.round(elapsedMs / 1000)}s`);
+    }
 
     if (!result?.ok) {
       res.status(502).json({ error: result?.error || "Falha na IA" });
@@ -115,8 +120,12 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
         : {}),
     });
   } catch (err) {
-    res.status(500).json({
-      error: err instanceof Error ? err.message : "Erro ao consultar IA",
+    const msg = err instanceof Error ? err.message : "Erro ao consultar IA";
+    const timedOut = /tempo esgotado|timed?\s*out/i.test(msg);
+    res.status(timedOut ? 504 : 500).json({
+      error: timedOut
+        ? "A IA demorou mais que o limite configurado. Na primeira mensagem após reiniciar o backend, o índice pode levar vários minutos — aguarde e tente de novo."
+        : msg,
     });
   }
 });

@@ -1,6 +1,7 @@
 import { env } from "../config.js";
 import { filterMidiasAcervo } from "../modules/empresas/midiaOrigem.js";
 import {
+  buildComposeSceneResumo,
   buildResumoVisual,
   extractFraseFromUserText,
   normalizeFraseNaImagem,
@@ -18,6 +19,33 @@ import {
 
 /** Limite legado FLUX. */
 export const FLUX_IMAGE_PROMPT_MAX = 2000;
+
+/**
+ * Instruções para pipeline raw com composição posterior de PNG do acervo.
+ *
+ * @param {{ productCount?: number, heroProductName?: string }} [opts]
+ */
+export function buildComposeBackgroundDirectives(opts = {}) {
+  const n = Math.max(1, Math.min(3, Number(opts.productCount) || 1));
+  const hero = String(opts.heroProductName ?? "").trim();
+  const zoneHint =
+    n === 1
+      ? "terço inferior central (~35–45% da largura, da base até ~55% da altura)"
+      : n === 2
+        ? "dois vãos no terço inferior (esquerda ~22% da largura; centro-direita ~30% para o hero)"
+        : "três vãos no terço inferior (laterais ~20% cada; centro ~30% para o hero)";
+  const heroLine = hero
+    ? `O maior vão é para «${hero}»; os demais são de apoio.`
+    : "O maior vão é para o produto principal; os demais são de apoio.";
+
+  return [
+    "MODO FUNDO PARA COLAGEM (obrigatório): gere APENAS cenário, iluminação, props decorativos, tipografia de campanha e superfície de apoio contínua.",
+    `Reserve ${n} zona(s) vazia(s) no ${zoneHint}, sem objeto sólido, sem silhueta e sem cor chapada de placeholder. ${heroLine}`,
+    "A superfície/pedestal deve ser contínua (mesmo material/textura do cenário), visível e vazia — os PNG reais do acervo serão colados depois.",
+    "PROIBIDO: desenhar pote, lata, sachê, caixa, rótulo, mockup de suplemento, frasco genérico, jar vazio, retângulo branco central, área em branco tipo placeholder, produto inventado ou layout de embalagem fictícia.",
+    "PERMITIDO: texto promocional (preço, CTA, frase), luz, fumaça, partículas, fundo gradiente/texturizado, elementos de cenário que NÃO ocupem as zonas reservadas.",
+  ].join(" ");
+}
 
 export const FLUX_IMAGE_PROMPT_COMPACT_TARGET = 520;
 
@@ -89,16 +117,20 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
       ? imageIntent.heroProduct.nome_exibicao.trim()
       : "";
   if (composeProductAssets) {
-    base = `${base}\n\nEsta geração deve criar SOMENTE o fundo/cenário/layout da campanha. Não renderize nenhum pote, embalagem, rótulo, sache, caixa ou produto fictício. Reserve uma área hero limpa no primeiro plano para inserção posterior de ${productCount} produto${productCount > 1 ? "s reais" : " real"} do acervo. Pode incluir luz, pedestal, cenário, props e atmosfera promocional, mas sem desenhar o produto.`;
-    if (heroProductName) {
-      base = `${base}\n\nO produto principal desta arte será «${heroProductName}». A maior área de destaque visual deve ser reservada para esse item, com mais presença que os produtos de apoio.`;
-    }
+    base = `${base}\n\n${buildComposeBackgroundDirectives({
+      productCount,
+      heroProductName,
+    })}`;
   }
   const pedidoTexto = imageIntent?.pedido || resolvePedidoCliente(proposal, history, 32_000);
-  const resumoVisual =
-    (proposal && typeof proposal.resumo_visual === "string" && proposal.resumo_visual.trim()) ||
-    buildResumoVisual(proposal, history || [], pedidoTexto);
-  base = `${base}\n\nDireção visual da arte (composição completa — preços, promoção, público e produtos do pedido; não limitar a uma única palavra): ${resumoVisual}`;
+  const resumoVisual = composeProductAssets
+    ? buildComposeSceneResumo(proposal, history || [], pedidoTexto)
+    : (proposal && typeof proposal.resumo_visual === "string" && proposal.resumo_visual.trim()) ||
+      buildResumoVisual(proposal, history || [], pedidoTexto);
+  const resumoLabel = composeProductAssets
+    ? "Direção do cenário (somente fundo — produtos reais entram depois na colagem)"
+    : "Direção visual da arte (composição completa — preços, promoção, público e produtos do pedido; não limitar a uma única palavra)";
+  base = `${base}\n\n${resumoLabel}: ${resumoVisual}`;
 
   const fraseExplicita =
     hasPhraseOverride && phraseOverride
@@ -111,14 +143,19 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
     base = `${base}\n\nO cliente pediu este texto em destaque na arte: «${fraseExplicita}». Pode incluir também preços e chamadas do pedido de forma legível.`;
   } else if (hasPhraseOverride && !phraseOverride) {
     base = `${base}\n\nEvite texto legível longo; foque no visual e nos produtos do acervo.`;
+  } else if (composeProductAssets) {
+    base = `${base}\n\nTipografia de campanha (preços, desconto, público) pode aparecer como texto gráfico; não desenhe embalagens nem mockups de produto.`;
   } else {
     base = `${base}\n\nUse os elementos textuais do pedido (ex.: preços, desconto, público-alvo) de forma legível na composição, conforme o resumo acima.`;
+  }
+  if (composeProductAssets) {
+    base = `${base}\n\nReforce: nenhum objeto de produto no quadro — apenas cenário vazio nas zonas reservadas para os PNG do acervo.`;
   }
   if (imageIntent?.matchedContexto?.nome) {
     base = `${base}\n\nContexto/campanha prioritário desta arte: ${imageIntent.matchedContexto.nome}.`;
   }
   if (identidadeDados?.id_midia_logo && !opts?.logoAsHero) {
-    base = `${base}\n\nReserve um canto limpo para aplicar a logo real da marca com tamanho legível no resultado final (sem ficar minúscula). Não invente wordmark, lettering ou texto de marca extra dentro da arte.`;
+    base = `${base}\n\nReserve o canto inferior direito limpo para a logo real da marca (será aplicada depois em ~25–30% da altura do quadro — legível, nunca minúscula). Não desenhe wordmark, lettering nem logo inventada na arte.`;
   }
 
   const brand = identidadeDados ? formatBrandIdentityForRawPrompt(identidadeDados) : "";
@@ -200,7 +237,7 @@ function introWithFrase(frase, hasReferenceImage, referenceKind = "product") {
   if (hasReferenceImage) {
     const refRule =
       referenceKind === "logo"
-        ? "The reference image is the brand LOGO only: place a SMALL logo mark in one corner (about 8–12% of the frame height), never centered, never full-bleed, never enlarged to fill the canvas. Build a new scene around it (product, promo background)."
+        ? "The reference image is the brand LOGO only: place a legible logo mark in one corner (about 22–28% of the frame height), never centered, never full-bleed, never enlarged to fill the canvas. Build a new scene around it (product, promo background)."
         : "The reference image is a PRODUCT packshot to feature as the hero (center or rule-of-thirds) — NOT an old post or banner to copy. Preserve the EXACT package design, label, colors, proportions and brand details of the referenced product. Do NOT redesign the packaging or invent a different label.";
     return (
       `Create a NEW Instagram key visual. ${refRule} ` +
@@ -234,7 +271,9 @@ function buildCompactImagePrompt({
         : "Hero product from reference image, new layout, preserve exact package design and label.",
     );
   } else if (logoConfigured) {
-    chunks.push(logoAsHero ? "Brand logo as focal point." : "Small brand logo bottom-right corner.");
+    chunks.push(
+      logoAsHero ? "Brand logo as focal point." : "Legible brand logo bottom-right corner (~25% frame height).",
+    );
   }
 
   const visual = compressPedidoVisual(pedido, 260);
@@ -271,7 +310,7 @@ function buildFullImagePrompt({
   const logoCornerHint = identidadeDados?.id_midia_logo
     ? referenceKind === "logo"
       ? "\n\nBrand logo is the HERO element (client requested); still avoid illegible stretching."
-      : "\n\nBrand logo: ALWAYS a small mark in a corner (bottom-right or top-left, ~8–12% of frame). Never centered, never full-bleed, unless the Client request explicitly says logo as hero."
+      : "\n\nBrand logo: legible mark in a corner (bottom-right preferred, ~22–28% of frame height). Never centered, never full-bleed, unless the Client request explicitly says logo as hero."
     : "";
 
   const parts = [intro];

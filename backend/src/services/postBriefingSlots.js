@@ -28,7 +28,7 @@ export const BRIEFING_SLOT_META = {
   },
   midia_acervo: {
     label: "foto do produto no acervo",
-    ask: "Cadastre a foto do produto em Painel → Mídias (nome parecido com o pedido) e envie uma nova mensagem no chat.",
+    ask: "Cadastre o PNG do produto em Mídias e tente de novo.",
   },
 };
 
@@ -233,7 +233,7 @@ export function applyBriefingGate(history, proposalOut) {
     const msg =
       String(root.confirmation_message ?? "").trim() ||
       (labels
-        ? `Não encontrei ${labels} no acervo de Mídias. Cadastre a foto em Painel → Mídias e volte ao chat.`
+        ? `Não encontrei ${labels} em Mídias. Cadastre o PNG e tente de novo.`
         : BRIEFING_SLOT_META.midia_acervo.ask);
     return {
       briefing_status: "collecting",

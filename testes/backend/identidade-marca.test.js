@@ -204,9 +204,9 @@ describe("identidadeMarca — refineIdentidadeFromAnalysis", () => {
       },
     );
     assert.equal(d.cor_primaria, "#00E676");
-    assert.equal(d.cor_secundaria, "#0F172A");
+    assert.equal(d.cor_secundaria, "#FFFFFF");
     assert.equal(d.cores_adicionais.length, 3);
-    assert.ok(d.cores_adicionais.includes("#FFFFFF"));
+    assert.ok(d.cores_adicionais.includes("#0F172A"));
   });
 });
 

@@ -31,9 +31,13 @@ import {
 const IMAGE_PREVIEW_TIMEOUT_MS = 310_000;
 /** Salvar conversa durante geração longa de imagem. */
 const SYNC_MENSAGENS_TIMEOUT_MS = 90_000;
-/** Chat com contextos + mídias no prompt (backend: 120s). */
 /** Painel imediato ~3s; com Llama no .env até ~32s + margem. */
 const POST_CONTEXT_TIMEOUT_MS = 55_000;
+/**
+ * POST /ia/chat: boot do worker (Chroma, até ~8 min) + pergunta (até ~6 min) + margem.
+ * Alinhar com CHAT_WORKER_* no backend/.env e proxyTimeout no next.config.mjs.
+ */
+const CHAT_IA_TIMEOUT_MS = 900_000;
 const CONFIRM_IMAGE_USER_LINE = "Confirmar e gerar prévia da imagem.";
 const HIDDEN_USER_LINES = new Set([
   CONFIRM_IMAGE_USER_LINE,
@@ -342,14 +346,23 @@ function fromApiMensagem(m) {
           : {}),
       };
     } else if (
-      post_supplementRaw.post_context_proposal?.arte_brief &&
-      typeof post_supplementRaw.post_context_proposal.arte_brief === "object"
+      post_supplementRaw.post_context_proposal &&
+      typeof post_supplementRaw.post_context_proposal === "object" &&
+      Object.keys(post_supplementRaw.post_context_proposal).length > 0
     ) {
+      const rawLinks = Array.isArray(post_supplementRaw.links) ? post_supplementRaw.links : [];
+      const links = rawLinks.map(normalizeSupplementLink).filter(Boolean);
       post_supplement = {
-        confirmation_message: String(post_supplementRaw.confirmation_message ?? "").trim(),
-        links: [],
+        confirmation_message:
+          String(post_supplementRaw.confirmation_message ?? "").trim() || CHAT_PEDIDO_RESUMO_MSG,
+        links,
         post_context_proposal: post_supplementRaw.post_context_proposal,
-        ...(post_supplementRaw.briefing_status ? { briefing_status: post_supplementRaw.briefing_status } : {}),
+        ...(post_supplementRaw.briefing_status === "collecting" || post_supplementRaw.briefing_status === "ready"
+          ? { briefing_status: post_supplementRaw.briefing_status }
+          : {}),
+        ...(Array.isArray(post_supplementRaw.missing_slots)
+          ? { missing_slots: post_supplementRaw.missing_slots }
+          : {}),
       };
     }
   }
@@ -1249,7 +1262,7 @@ export default function PainelChatPage() {
       const result = await authApiFetchWithToken("/ia/chat", {
         method: "POST",
         body: JSON.stringify(body),
-        timeoutMs: 180000,
+        timeoutMs: CHAT_IA_TIMEOUT_MS,
         timeoutLabel: "chat",
       });
 
@@ -1659,7 +1672,17 @@ export default function PainelChatPage() {
                   message.post_supplement && Array.isArray(message.post_supplement.links)
                     ? message.post_supplement.links
                     : [];
-                const hasSupplement = Boolean(supplementMsg) || supplementLinks.length > 0;
+                const confirmProposal = message.post_supplement?.post_context_proposal;
+                const hasProposalBody =
+                  confirmProposal &&
+                  typeof confirmProposal === "object" &&
+                  ((typeof confirmProposal.resumo_visual === "string" &&
+                    confirmProposal.resumo_visual.trim().length > 0) ||
+                    (Array.isArray(confirmProposal.midias_referenced) &&
+                      confirmProposal.midias_referenced.length > 0) ||
+                    confirmProposal.product_media_status === "missing");
+                const hasSupplement =
+                  Boolean(supplementMsg) || supplementLinks.length > 0 || Boolean(hasProposalBody);
                 const hasArteBrief =
                   message.post_supplement?.post_context_proposal?.arte_brief &&
                   typeof message.post_supplement.post_context_proposal.arte_brief === "object";

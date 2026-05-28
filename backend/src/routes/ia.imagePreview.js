@@ -18,7 +18,10 @@ import {
   buildImagePreviewContextMeta,
   loadContextosEmpresaAtivos,
   loadEmpresaResumoParaImagem,
+  loadMidiasEmpresaResumo,
 } from "../services/imagePreviewPrompt.js";
+import { resolveActivePedidoHint } from "../services/imageHeadline.js";
+import { filterReferenceMidiaIdsToPedido } from "../services/productMentionMatch.js";
 import { buildConfirmedImageIntent } from "../services/imageIntent.js";
 import { collectReferenceMidiaIds } from "../services/referenceMidiaFromProposal.js";
 import { pickHeroProductMidiaId, rankReferenceMidiaIds } from "../services/referenceMidiaRanking.js";
@@ -109,12 +112,10 @@ async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows, 
   );
   let refIds = [...new Set([...fromBody, ...fromProposal])].slice(0, REFERENCE_MIDIA_MAX);
   const userHint =
-    imageIntent?.selectionHint ||
-    parsed.history
-      .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join(" ")
-      .slice(-400);
+    (imageIntent && typeof imageIntent.pedido === "string" && imageIntent.pedido.trim()) ||
+    resolveActivePedidoHint(parsed.history, {
+      proposal: imageIntent?.postContextProposal || parsed.post_context_proposal,
+    });
   const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
   const logoAsHero = wantsLogoAsHero(userHint);
@@ -141,6 +142,7 @@ async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows, 
     .eq("ativo", true)
     .in("id_midia", refIds);
   if (Array.isArray(midiaRows) && midiaRows.length) {
+    refIds = filterReferenceMidiaIdsToPedido(refIds, midiaRows, userHint);
     const excludeRefIds = identidadeDados?.id_midia_referencia_analise
       ? [String(identidadeDados.id_midia_referencia_analise)]
       : [];
@@ -265,9 +267,10 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
   let empresaRow;
   let contextoRows;
   try {
-    [empresaRow, contextoRows] = await Promise.all([
+    [empresaRow, contextoRows, midiaRowsCatalog] = await Promise.all([
       loadEmpresaResumoParaImagem(db, idEmpresa),
       loadContextosEmpresaAtivos(db, idEmpresa),
+      loadMidiasEmpresaResumo(db, idEmpresa, 72),
     ]);
   } catch (err) {
     res.status(500).json({
@@ -280,6 +283,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     history: parsed.data.history,
     postContextProposal: parsed.data.post_context_proposal,
     contextoRows,
+    midiaRows: midiaRowsCatalog,
     focusContextoId: parsed.data.focus_contexto_id,
   });
   const prompt = buildFluxImagePrompt({
@@ -289,11 +293,9 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     focusContextoId: parsed.data.focus_contexto_id,
     hasReferenceImage: false,
   });
-  const previewUserHint = parsed.data.history
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join(" ")
-    .slice(-400);
+  const previewUserHint =
+    imageIntent.pedido ||
+    resolveActivePedidoHint(parsed.data.history, { proposal: imageIntent.postContextProposal });
   const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
   const logoAsHero = wantsLogoAsHero(imageIntent.selectionHint || previewUserHint);
@@ -417,16 +419,11 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
           .eq("ativo", true)
           .in("id_midia", refIds);
         if (Array.isArray(midiaRows) && midiaRows.length) {
+          refIds = filterReferenceMidiaIdsToPedido(refIds, midiaRows, previewUserHint);
           const excludeRefIds = identidadeDados?.id_midia_referencia_analise
             ? [String(identidadeDados.id_midia_referencia_analise)]
             : [];
-          refIds = rankReferenceMidiaIds(
-            refIds,
-            midiaRows,
-            imageIntent.selectionHint || previewUserHint,
-            excludeRefIds,
-            logoId,
-          );
+          refIds = rankReferenceMidiaIds(refIds, midiaRows, previewUserHint, excludeRefIds, logoId);
         }
         const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds, {
           logoId,

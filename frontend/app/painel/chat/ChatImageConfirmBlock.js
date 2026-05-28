@@ -43,7 +43,7 @@ export default function ChatImageConfirmBlock({
       <div className="mt-3 space-y-2.5 rounded-xl border border-border bg-surface-elevated/60 px-3 py-2.5 text-sm leading-relaxed">
         {productMissing ? (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-sm text-foreground">
-            {confirmation || "Produto não encontrado no acervo."}{" "}
+            {confirmation || "Produto não encontrado em Mídias."}{" "}
             <Link href="/painel/midias" className="font-medium text-accent underline-offset-2 hover:underline">
               Abrir Mídias
             </Link>
@@ -51,7 +51,7 @@ export default function ChatImageConfirmBlock({
         ) : (
           <p className="whitespace-pre-wrap text-foreground">{confirmation}</p>
         )}
-        {productsRequested.length > 0 ? (
+        {productsRequested.length > 0 && !productMissing ? (
           <p className="text-xs text-muted-foreground">
             Produto(s) pedido(s): {productsRequested.map((p) => `«${p}»`).join(", ")}
           </p>

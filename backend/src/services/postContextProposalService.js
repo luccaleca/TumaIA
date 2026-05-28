@@ -13,9 +13,14 @@ import {
   partitionContextosIdentidade,
 } from "../modules/empresas/identidadeMarca.js";
 import {
+  buildResumoVisual,
   deriveFraseNaImagemFromHistory,
+  extractFraseFromUserText,
   isPanelNoiseMessage,
+  looksLikeRawUserCopy,
   normalizeFraseNaImagem,
+  recentUserTexts,
+  resolveActivePedidoHint,
   resolvePedidoCliente,
 } from "./imageHeadline.js";
 import { pickBestProductMidiaId, pickHeroProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
@@ -23,9 +28,12 @@ import {
   applyProductMediaGate,
   extractProductMentions,
   narrowImageRowsByProductMention,
+  parseProductMentionSpec,
+  scoreRowForProductSpec,
+  pruneProposalMidiasToPedido,
+  reconcileProposalMidias,
   scoreRowProductMention,
 } from "./productMentionMatch.js";
-import { buildResumoVisual, extractFraseFromUserText } from "./imageHeadline.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
 import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
 import { TUMA_IA_REGRAS_RESUMO_IMAGEM } from "./tumaIaRegrasResumo.js";
@@ -277,20 +285,28 @@ function pickBestCampaignContext(contextoRows, userHint = "") {
 function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
   const rows = Array.isArray(midiaRows) ? midiaRows : [];
   if (!rows.length) return [];
-  const tokens = tokenizeSearchText(userHint);
+  const pedidoHint = String(userHint || "").trim();
+  const spec = parseProductMentionSpec(pedidoHint);
+  const mentions = spec.terms;
+  const tokens = tokenizeSearchText(pedidoHint);
   const imageRows = rows.filter((row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem");
   if (!imageRows.length) return [];
 
-  const { pool, strict } = narrowImageRowsByProductMention(imageRows, userHint);
+  const { pool, strict } = narrowImageRowsByProductMention(imageRows, pedidoHint);
   const searchPool = strict ? pool : imageRows;
   if (strict && !searchPool.length) return [];
 
   const scored = searchPool
     .map((row) => {
-      const blob = `${row?.nome_exibicao ?? ""} ${row?.nome_arquivo ?? ""} ${row?.descricao ?? ""} ${row?.alt_text ?? ""}`;
-      let score = scoreTokenOverlap(blob, tokens);
-      score += scoreRowProductMention(row, extractProductMentions(userHint));
-      if (PRODUCT_MATCH_HINT.test(userHint) && PRODUCT_MATCH_HINT.test(blob)) score += 5;
+      let score = 0;
+      if (strict && spec.mode !== "none") {
+        score = scoreRowForProductSpec(row, spec);
+      } else {
+        const blob = `${row?.nome_exibicao ?? ""} ${row?.nome_arquivo ?? ""} ${row?.descricao ?? ""} ${row?.alt_text ?? ""}`;
+        score = scoreTokenOverlap(blob, tokens);
+        score += scoreRowProductMention(row, mentions);
+        if (PRODUCT_MATCH_HINT.test(pedidoHint) && PRODUCT_MATCH_HINT.test(blob)) score += 5;
+      }
       return { row, score };
     })
     .filter((item) => item.score > 0)
@@ -298,18 +314,18 @@ function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
 
   if (!scored.length) {
     if (strict) return [];
-    const bestId = pickBestProductMidiaId(imageRows, userHint);
+    const bestId = pickBestProductMidiaId(imageRows, pedidoHint);
     return bestId ? imageRows.filter((row) => String(row.id_midia ?? "").trim() === bestId).slice(0, 1) : [];
   }
 
   const candidateIds = scored.map((item) => String(item.row.id_midia ?? "").trim()).filter(Boolean);
-  const ranked = rankReferenceMidiaIds(candidateIds, imageRows, userHint);
+  const ranked = rankReferenceMidiaIds(candidateIds, imageRows, pedidoHint);
   const byId = new Map(imageRows.map((row) => [String(row.id_midia ?? "").trim(), row]));
   let ordered = ranked
     .map((id) => byId.get(id))
     .filter(Boolean)
     .slice(0, limit);
-  const explicitHeroId = pickHeroProductMidiaId(searchPool.length ? searchPool : imageRows, userHint);
+  const explicitHeroId = pickHeroProductMidiaId(searchPool.length ? searchPool : imageRows, pedidoHint);
   if (explicitHeroId) {
     const heroRow = byId.get(explicitHeroId);
     if (heroRow) {
@@ -460,6 +476,36 @@ function coerceProposalParsed(parsed, contextoRows, midiaRows) {
   if (!out.post_context_proposal || typeof out.post_context_proposal !== "object") {
     out.post_context_proposal = {};
   }
+  const pcp = out.post_context_proposal;
+  const intent = String(pcp.intent_summary ?? "").trim();
+  const rv = typeof pcp.resumo_visual === "string" ? pcp.resumo_visual.trim() : "";
+  if (rv && intent && looksLikeRawUserCopy(rv, intent)) {
+    delete pcp.resumo_visual;
+  }
+  if (Array.isArray(pcp.midias_referenced)) {
+    const midById = new Map(
+      midiaRows.map((r) => [String(r.id_midia ?? "").trim(), r]),
+    );
+    pcp.midias_referenced = pcp.midias_referenced
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const id = typeof item.id_midia === "string" ? item.id_midia.trim() : "";
+        const row = id ? midById.get(id) : null;
+        if (!row) return null;
+        return {
+          id_midia: id,
+          nome_exibicao:
+            String(item.nome_exibicao ?? row.nome_exibicao ?? row.nome_arquivo ?? "Mídia").trim() ||
+            "Mídia",
+          why:
+            typeof item.why === "string" && item.why.trim()
+              ? item.why.trim().slice(0, 240)
+              : "PNG do acervo vinculado ao pedido.",
+        };
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+  }
   const frase = normalizeFraseNaImagem(out.post_context_proposal.frase_na_imagem);
   if (frase) {
     out.post_context_proposal.frase_na_imagem = frase;
@@ -603,9 +649,53 @@ function ensureProposalMidiasReferenced(proposal, midiaRows, userHint) {
   return p;
 }
 
+function normalizeMidiasReferencedRows(proposal, midiaRows) {
+  const p = proposal && typeof proposal === "object" ? proposal : {};
+  const byId = new Map(midiaRows.map((r) => [String(r.id_midia ?? "").trim(), r]));
+  const refs = Array.isArray(p.midias_referenced) ? p.midias_referenced : [];
+  p.midias_referenced = refs
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const id = typeof item.id_midia === "string" ? item.id_midia.trim() : "";
+      const row = id ? byId.get(id) : null;
+      if (!row) return null;
+      return {
+        id_midia: id,
+        nome_exibicao:
+          String(item.nome_exibicao ?? row.nome_exibicao ?? row.nome_arquivo ?? "Mídia").trim() ||
+          "Mídia",
+        why:
+          typeof item.why === "string" && item.why.trim()
+            ? item.why.trim().slice(0, 240)
+            : "PNG do acervo vinculado ao pedido.",
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+  return p;
+}
+
 function finalizePostContextProposal(proposal, midiaRows, history, userHint) {
-  let p = ensureProposalMidiasReferenced(proposal, midiaRows, userHint);
-  p.resumo_visual = buildResumoVisual(p, history, userHint);
+  const hint = resolveActivePedidoHint(history, {
+    proposal,
+    question: userHint,
+  });
+  let p = proposal && typeof proposal === "object" ? { ...proposal } : {};
+  if (!String(p.intent_summary ?? "").trim() && hint) {
+    p.intent_summary = hint.slice(0, 500);
+  }
+  const productMissing = p.product_media_status === "missing";
+  if (productMissing) {
+    p.midias_referenced = [];
+    p.hero_product = null;
+  } else {
+    p = reconcileProposalMidias(p, midiaRows, hint);
+    p = ensureProposalMidiasReferenced(p, midiaRows, hint);
+    p = normalizeMidiasReferencedRows(p, midiaRows);
+    p.hero_product = normalizeHeroProductSelection(p.hero_product, p.midias_referenced);
+  }
+  const forResumo = { ...p, resumo_visual: "" };
+  p.resumo_visual = buildResumoVisual(forResumo, history, hint);
   p.montagem_resumo = buildMontagemResumo(p);
   return p;
 }
@@ -678,8 +768,7 @@ function formatEmpresaForLlm(emp) {
  * @param {Array<Record<string, unknown>>} midiaRows
  */
 function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
-  const lastUser = [...history].reverse().find((m) => m.role === "user");
-  const hint = lastUser ? String(lastUser.content) : "";
+  const hint = resolveActivePedidoHint(history);
   const ctx = pickBestCampaignContext(contextoRows, hint);
   const midias = pickReferencedMidias(midiaRows, hint, 3);
   const frase = deriveFraseNaImagemFromHistory(history, contextoRows);
@@ -710,7 +799,7 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
     nome_exibicao: String(mid.nome_exibicao ?? mid.nome_arquivo ?? "Mídia").trim(),
     why: "Referência escolhida automaticamente a partir do pedido.",
   }));
-  const intent = lastUser ? String(lastUser.content).trim().slice(0, 500) : "";
+  const intent = hint.slice(0, 500);
   const missing = listMissingBriefingSlots(history, { intent_summary: intent, frase_na_imagem: frase });
   let proposal = {
     intent_summary: intent,
@@ -798,7 +887,12 @@ function buildRawPostContextProposal(history, brandColors = [], existingBrief = 
   const arte_brief = existingBrief
     ? mergeArteBriefUserEdits(existingBrief, extracted)
     : extracted;
-  if (intent && !arte_brief.tema) arte_brief.tema = intent.slice(0, 200);
+  if (intent && !arte_brief.tema) {
+    const scene = detectMontagemScene(intent);
+    const goal = detectMontagemGoal(intent);
+    const temaParts = [goal, scene].filter(Boolean).map((part) => titleWord(part));
+    arte_brief.tema = temaParts.length ? temaParts.join(" · ") : "Arte promocional";
+  }
   const ready = Boolean(String(arte_brief.tema ?? "").trim());
   const proposal = {
     intent_summary: intent || arte_brief.tema,
@@ -854,27 +948,29 @@ export async function generatePostContextProposal(opts) {
       brandColors,
       arteBriefDraft && typeof arteBriefDraft === "object" ? arteBriefDraft : null,
     );
-    const rawHint = history
-      .filter((m) => m.role === "user")
-      .map((m) => m.content)
-      .join(" ")
-      .slice(-600);
+    const rawProposal =
+      raw.post_context_proposal && typeof raw.post_context_proposal === "object"
+        ? raw.post_context_proposal
+        : {};
+    const briefProposal =
+      rawBrief.post_context_proposal && typeof rawBrief.post_context_proposal === "object"
+        ? rawBrief.post_context_proposal
+        : {};
+    const rawRefs = Array.isArray(rawProposal.midias_referenced) ? rawProposal.midias_referenced : [];
+    const briefRefs = Array.isArray(briefProposal.midias_referenced) ? briefProposal.midias_referenced : [];
+    const mergedRefs = rawRefs.length ? rawRefs : briefRefs;
     let mergedProposal = {
-      ...raw.post_context_proposal,
-      ...rawBrief.post_context_proposal,
-      matched_contexto:
-        raw.post_context_proposal?.matched_contexto || rawBrief.post_context_proposal?.matched_contexto || null,
-      midias_referenced:
-        raw.post_context_proposal?.midias_referenced || rawBrief.post_context_proposal?.midias_referenced || [],
+      ...briefProposal,
+      ...rawProposal,
+      matched_contexto: rawProposal.matched_contexto || briefProposal.matched_contexto || null,
+      midias_referenced: mergedRefs,
+      arte_brief: briefProposal.arte_brief || rawProposal.arte_brief,
       hero_product:
-        raw.post_context_proposal?.hero_product ||
-        rawBrief.post_context_proposal?.hero_product ||
-        buildHeroProductSelection(
-          raw.post_context_proposal?.midias_referenced || rawBrief.post_context_proposal?.midias_referenced || [],
-          rawHint,
-          true,
-        ),
+        rawProposal.hero_product ||
+        briefProposal.hero_product ||
+        buildHeroProductSelection(mergedRefs, resolveActivePedidoHint(history), true),
     };
+    const rawHint = resolveActivePedidoHint(history, { proposal: mergedProposal });
     const rawGate = applyProductMediaGate(mergedProposal, midiaRows, rawHint, history);
     mergedProposal = finalizePostContextProposal(rawGate.proposal, midiaRows, history, rawHint);
     const links = resolvePostSupplementLinks(raw.links, mergedProposal, contextoRows, midiaRows);
@@ -1063,11 +1159,7 @@ ${formatEmpresaForLlm(empresaRow)}
       : {};
 
   const { campanhaRows } = partitionContextosIdentidade(contextoRows);
-  const hint = history
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join(" ")
-    .slice(-600);
+  const hint = resolveActivePedidoHint(history, { proposal: post_context_proposal });
 
   const derived = deriveFraseNaImagemFromHistory(history, campanhaRows);
   const explicitFrase = extractFraseFromUserText(hint);

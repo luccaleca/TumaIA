@@ -39,6 +39,21 @@ const envSchema = z.object({
     (v) => (v === "" || v === undefined ? 32_000 : Number(v)),
     z.number().int().min(8_000).max(600_000),
   ),
+  /**
+   * Boot do worker Python (Chroma + embeddings). Primeira subida pode levar vários minutos.
+   * Padrão 8 min.
+   */
+  CHAT_WORKER_BOOT_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 480_000 : Number(v)),
+    z.number().int().min(60_000).max(900_000),
+  ),
+  /**
+   * Uma pergunta no worker após o boot (RAG + LLM). Padrão 6 min.
+   */
+  CHAT_WORKER_REQUEST_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 360_000 : Number(v)),
+    z.number().int().min(30_000).max(900_000),
+  ),
   /** Modelo multimodal para análise de imagem (ex. `llava:7b` no Ollama). */
   LLAMA_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   /** Vision só para identidade da marca (ex. `llava:13b` ou `llama3.2-vision:11b`). */

@@ -81,23 +81,49 @@ export function midiaItemsFromProposal(proposal, supplementLinks = []) {
     });
 }
 
+function normalizeLiteText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+/** Evita mostrar o pedido literal do cliente como “resumo visual”. */
+function looksLikeRawUserCopy(resumo, intent) {
+  const r = normalizeLiteText(resumo);
+  const i = normalizeLiteText(intent);
+  if (!r || !i || i.length < 14) return false;
+  if (r === i) return true;
+  const chunk = i.slice(0, Math.min(56, i.length));
+  return chunk.length >= 14 && r.includes(chunk);
+}
+
 export function formatResumoVisualFromProposal(proposal) {
   if (!proposal || typeof proposal !== "object") return null;
+  const intent = typeof proposal.intent_summary === "string" ? proposal.intent_summary.trim() : "";
   const direct = proposal.resumo_visual;
-  if (typeof direct === "string" && direct.trim()) return direct.trim();
-  return formatMontagemFromProposal(proposal);
+  if (typeof direct === "string" && direct.trim()) {
+    const trimmed = direct.trim();
+    if (!looksLikeRawUserCopy(trimmed, intent)) return trimmed;
+  }
+  const montagem = formatMontagemFromProposal(proposal);
+  if (montagem && !looksLikeRawUserCopy(montagem, intent)) return montagem;
+  return null;
 }
 
 export function formatMontagemFromProposal(proposal) {
   if (!proposal || typeof proposal !== "object") return null;
+  const intent = typeof proposal.intent_summary === "string" ? proposal.intent_summary.trim() : "";
   const direct = proposal.montagem_resumo;
-  if (typeof direct === "string" && direct.trim()) return compactMontagemLabel(direct) || direct.trim();
+  if (typeof direct === "string" && direct.trim()) {
+    const montagem = compactMontagemLabel(direct) || direct.trim();
+    if (!looksLikeRawUserCopy(montagem, intent)) return montagem;
+  }
   const arteBrief = proposal.arte_brief;
   if (arteBrief && typeof arteBrief === "object" && typeof arteBrief.tema === "string" && arteBrief.tema.trim()) {
-    return compactMontagemLabel(arteBrief.tema) || arteBrief.tema.trim();
+    const tema = compactMontagemLabel(arteBrief.tema) || arteBrief.tema.trim();
+    if (!looksLikeRawUserCopy(tema, intent)) return tema;
   }
-  const summary = proposal.intent_summary;
-  if (typeof summary === "string" && summary.trim()) return compactMontagemLabel(summary) || summary.trim();
   return null;
 }
 

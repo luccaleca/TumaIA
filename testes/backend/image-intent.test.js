@@ -101,4 +101,45 @@ describe("imageIntent", () => {
     assert.equal(intent.heroProduct?.nome_exibicao, "creatina integral");
     assert.match(intent.selectionHint, /hero: creatina integral/i);
   });
+
+  it("ignora PNG de creatina no proposal quando o pedido atual é monster", () => {
+    const history = [
+      { role: "user", content: "post da creatina integral" },
+      { role: "assistant", content: "ok" },
+      { role: "user", content: "quero promoção dos monster de 15 para 9 reais" },
+    ];
+    const midiaRows = [
+      {
+        id_midia: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        nome_exibicao: "Monster Energy 473ml",
+        nome_arquivo: "monster.png",
+      },
+      {
+        id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        nome_exibicao: "creatina integral",
+        nome_arquivo: "creatina.png",
+      },
+    ];
+    const proposal = {
+      midias_referenced: [
+        { id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", nome_exibicao: "creatina integral" },
+        { id_midia: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nome_exibicao: "Monster Energy 473ml" },
+      ],
+      hero_product: {
+        id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        nome_exibicao: "creatina integral",
+      },
+    };
+
+    const intent = buildConfirmedImageIntent({
+      history,
+      postContextProposal: proposal,
+      contextoRows: [],
+      midiaRows,
+    });
+
+    assert.equal(intent.heroProduct?.id_midia, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+    assert.equal(intent.postContextProposal.midias_referenced.length, 1);
+    assert.doesNotMatch(intent.pedido, /creatina integral/i);
+  });
 });

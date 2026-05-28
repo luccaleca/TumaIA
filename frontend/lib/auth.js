@@ -134,7 +134,7 @@ async function refreshAccessToken() {
 function messageForFetchTimeout(timeoutMs, requestLabel) {
   const label = String(requestLabel || "").trim();
   if (label === "chat") {
-    return "A IA demorou demais para responder. Aguarde um instante e tente de novo (se persistir, reinicie o backend e o chat-worker).";
+    return "A IA demorou mais que o limite (até ~15 min). Na primeira mensagem após reiniciar o backend, carregar o índice pode demorar — aguarde e tente de novo. Se persistir, reinicie o backend.";
   }
   if (label === "post-context") {
     return "O resumo demorou mais que o esperado. Tente de novo em instantes.";

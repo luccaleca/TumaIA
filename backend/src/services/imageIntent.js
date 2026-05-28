@@ -1,4 +1,10 @@
-import { buildResumoVisual, resolveFraseNaImagem, resolvePedidoCliente } from "./imageHeadline.js";
+import {
+  buildResumoVisual,
+  resolveActivePedidoHint,
+  resolveFraseNaImagem,
+  resolvePedidoCliente,
+} from "./imageHeadline.js";
+import { pruneProposalMidiasToPedido } from "./productMentionMatch.js";
 
 function contextIdFromRow(row) {
   return String(row?.id_contexto_empresa ?? "").trim();
@@ -52,12 +58,6 @@ function buildSelectionHint(proposal, pedido, fraseNaImagem, matchedContexto) {
     parts.push(`hero: ${String(proposal.hero_product.nome_exibicao).trim()}`);
   }
   if (proposal?.arte_brief?.tema) parts.push(`tema: ${String(proposal.arte_brief.tema).trim()}`);
-  if (Array.isArray(proposal?.midias_referenced)) {
-    for (const item of proposal.midias_referenced.slice(0, 3)) {
-      const nome = String(item?.nome_exibicao ?? "").trim();
-      if (nome) parts.push(`midia: ${nome}`);
-    }
-  }
   return parts.join(" | ").slice(0, 900);
 }
 
@@ -108,15 +108,23 @@ function normalizeHeroProduct(proposal) {
  *   postContextProposal?: Record<string, unknown> | null,
  *   contextoRows?: Array<Record<string, unknown>>,
  *   focusContextoId?: string | null,
+ *   midiaRows?: Array<Record<string, unknown>>,
  * }} opts
  */
 export function buildConfirmedImageIntent(opts = {}) {
   const history = Array.isArray(opts.history) ? opts.history : [];
   const contextoRows = Array.isArray(opts.contextoRows) ? opts.contextoRows : [];
-  const baseProposal =
+  const midiaRows = Array.isArray(opts.midiaRows) ? opts.midiaRows : [];
+  const pedidoHint = resolveActivePedidoHint(history, {
+    proposal: opts.postContextProposal,
+  });
+  const baseProposal = pruneProposalMidiasToPedido(
     opts.postContextProposal && typeof opts.postContextProposal === "object"
       ? { ...opts.postContextProposal }
-      : {};
+      : {},
+    midiaRows,
+    pedidoHint,
+  );
 
   const focusedRow = findContextRowById(contextoRows, opts.focusContextoId);
   const proposalMatchedId =
@@ -145,10 +153,7 @@ export function buildConfirmedImageIntent(opts = {}) {
   }
 
   const prioritizedContextRows = uniqueContextRows(contextoRows, matchedRow);
-  const pedido =
-    resolvePedidoCliente(postContextProposal, history, 2000) ||
-    String(postContextProposal.intent_summary ?? "").trim() ||
-    "";
+  const pedido = pedidoHint || resolvePedidoCliente(postContextProposal, history, 2000) || "";
   const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, prioritizedContextRows) || "";
   const resumoVisual = buildResumoVisual(postContextProposal, history, pedido);
   const selectionHint = buildSelectionHint(postContextProposal, pedido, fraseNaImagem, matchedContexto);

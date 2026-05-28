@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { env } from "../config.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -19,6 +20,9 @@ let bootPromise = null;
 
 /** Fila simples: uma requisição por vez no stdin do worker. */
 let chain = Promise.resolve();
+
+const CHAT_WORKER_BOOT_TIMEOUT_MS = Number(env.CHAT_WORKER_BOOT_TIMEOUT_MS) || 480_000;
+const CHAT_WORKER_REQUEST_TIMEOUT_MS = Number(env.CHAT_WORKER_REQUEST_TIMEOUT_MS) || 360_000;
 
 function logStderr(chunk) {
   const t = String(chunk).trimEnd();
@@ -179,10 +183,17 @@ export function ensureChatWorkerReady() {
         killChild();
         bootPromise = null;
       }
-    }, 180000).unref();
+    }, CHAT_WORKER_BOOT_TIMEOUT_MS).unref();
   });
 
   return bootPromise;
+}
+
+export function getChatWorkerTimeoutMs() {
+  return {
+    bootMs: CHAT_WORKER_BOOT_TIMEOUT_MS,
+    requestMs: CHAT_WORKER_REQUEST_TIMEOUT_MS,
+  };
 }
 
 /**
@@ -190,7 +201,8 @@ export function ensureChatWorkerReady() {
  * @param {{ timeoutMs?: number }} [opts]
  */
 export function runChatPythonWorker(payload, opts = {}) {
-  const timeoutMs = typeof opts.timeoutMs === "number" ? opts.timeoutMs : 180000;
+  const timeoutMs =
+    typeof opts.timeoutMs === "number" ? opts.timeoutMs : CHAT_WORKER_REQUEST_TIMEOUT_MS;
 
   return new Promise((resolve, reject) => {
     if (!child?.stdin || !booted) {
@@ -232,9 +244,14 @@ export function runChatPythonWorker(payload, opts = {}) {
  * Serializa chamadas ao worker (stdin é um único fluxo).
  * @param {{ question: string, history?: Array<{ role: string, content: string }>, id_empresa?: string }} payload
  */
-export async function runChatSerialized(payload) {
+export async function runChatSerialized(payload, opts = {}) {
   await ensureChatWorkerReady();
-  const run = chain.then(() => runChatPythonWorker(payload));
+  const run = chain.then(() =>
+    runChatPythonWorker(payload, {
+      timeoutMs:
+        typeof opts.timeoutMs === "number" ? opts.timeoutMs : CHAT_WORKER_REQUEST_TIMEOUT_MS,
+    }),
+  );
   chain = run.catch(() => {});
   return run;
 }

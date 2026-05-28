@@ -126,6 +126,26 @@ export function normalizeFraseNaImagem(raw) {
  * @param {Array<{ role: string, content: string }>} history
  * @param {number} maxUserMessages
  */
+/**
+ * Pedido ativo para produto/mídia: última mensagem real do cliente (não mistura pedidos antigos).
+ *
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {{ question?: string, proposal?: Record<string, unknown> | null }} [opts]
+ */
+export function resolveActivePedidoHint(history, opts = {}) {
+  const question = typeof opts.question === "string" ? opts.question.trim() : "";
+  if (question) return question.slice(0, 2000);
+
+  const latestUser = recentUserTexts(history, 1).join(" ").trim();
+  if (latestUser) return latestUser.slice(0, 2000);
+
+  const proposal = opts.proposal && typeof opts.proposal === "object" ? opts.proposal : null;
+  const fromProposal = proposal ? String(proposal.intent_summary ?? "").trim() : "";
+  if (fromProposal) return fromProposal.slice(0, 2000);
+
+  return "";
+}
+
 export function recentUserTexts(history, maxUserMessages = 3) {
   const out = [];
   for (let i = history.length - 1; i >= 0 && out.length < maxUserMessages; i--) {
@@ -211,7 +231,7 @@ function normalizeLiteText(value) {
     .toLowerCase();
 }
 
-function looksLikeRawUserCopy(resumo, intent) {
+export function looksLikeRawUserCopy(resumo, intent) {
   const r = normalizeLiteText(resumo);
   const i = normalizeLiteText(intent);
   if (!r || !i || i.length < 14) return false;
@@ -226,6 +246,17 @@ function looksLikeRawUserCopy(resumo, intent) {
  * @param {Record<string, unknown>} proposal
  * @param {string} [userHint]
  */
+function extractPromoPricePair(text) {
+  const lower = String(text || "").toLowerCase();
+  const m =
+    lower.match(/de\s+(\d{1,4})\s+por\s+(\d{1,4})/) ||
+    lower.match(/(\d{1,4})\s+por\s+(\d{1,4})/) ||
+    lower.match(/de\s+(\d{1,4})\s+reais?\s+para\s+(\d{1,4})/) ||
+    lower.match(/(\d{1,4})\s+reais?\s+para\s+(\d{1,4})/);
+  if (!m) return null;
+  return { de: m[1], por: m[2] };
+}
+
 export function synthesizeResumoVisual(proposal, userHint = "") {
   const p = proposal && typeof proposal === "object" ? proposal : {};
   const intent =
@@ -233,7 +264,7 @@ export function synthesizeResumoVisual(proposal, userHint = "") {
   const lower = intent.toLowerCase();
   const parts = [];
 
-  if (/promo|desconto|off|%\b|de\s+\d+\s+por\s+\d+/i.test(intent)) {
+  if (/promo|desconto|off|%\b|de\s+\d+\s+por\s+\d+|\d+\s+reais?\s+para\s+\d+/i.test(intent)) {
     parts.push("Post promocional para feed do Instagram, visual chamativo e energético.");
   } else {
     parts.push("Arte para feed do Instagram alinhada à marca.");
@@ -243,11 +274,9 @@ export function synthesizeResumoVisual(proposal, userHint = "") {
     parts.push("Público-alvo: academias.");
   }
 
-  const priceMatch = lower.match(/de\s+(\d+)\s+por\s+(\d+)|(\d+)\s+por\s+(\d+)/);
-  if (priceMatch) {
-    const de = priceMatch[1] || priceMatch[3];
-    const por = priceMatch[2] || priceMatch[4];
-    parts.push(`Destaque de preço: de R$ ${de} por R$ ${por}.`);
+  const price = extractPromoPricePair(lower);
+  if (price) {
+    parts.push(`Destaque de preço: de R$ ${price.de} por R$ ${price.por}.`);
   }
 
   const refs = Array.isArray(p.midias_referenced) ? p.midias_referenced : [];
@@ -270,13 +299,10 @@ export function synthesizeResumoVisual(proposal, userHint = "") {
     const mentions = extractProductMentions(intent);
     if (mentions.length) {
       parts.push(
-        `Produto(s) pedido(s): ${mentions.map((m) => `«${m}»`).join(", ")}. ` +
-          "Nenhum PNG correspondente no acervo ainda — confira os itens abaixo ou cadastre em Mídias.",
+        `Produto ${mentions.map((m) => `«${m}»`).join(", ")} sem PNG em Mídias — cadastre e tente de novo.`,
       );
     } else if (/monster|creatina|whey|pro\s*force|produto/i.test(lower)) {
-      parts.push(
-        "Nenhum PNG do produto foi vinculado ainda — confira os itens abaixo ou cadastre em Mídias.",
-      );
+      parts.push("Sem PNG do produto em Mídias — cadastre e tente de novo.");
     }
   }
 
@@ -293,6 +319,83 @@ export function synthesizeResumoVisual(proposal, userHint = "") {
 }
 
 /**
+ * Direção visual para geração só do fundo (PNG do produto entra depois na composição).
+ *
+ * @param {Record<string, unknown>} proposal
+ * @param {string} [userHint]
+ */
+export function synthesizeComposeSceneResumo(proposal, userHint = "") {
+  const p = proposal && typeof proposal === "object" ? proposal : {};
+  const intent =
+    String(p.intent_summary ?? "").trim() || String(userHint || "").trim();
+  const lower = intent.toLowerCase();
+  const parts = [];
+
+  if (/promo|desconto|off|%\b|de\s+\d+\s+por\s+\d+|\d+\s+reais?\s+para\s+\d+/i.test(intent)) {
+    parts.push("Cenário promocional para feed do Instagram: tipografia, cores e atmosfera energética.");
+  } else {
+    parts.push("Cenário de campanha para feed do Instagram: clima visual e tipografia da marca.");
+  }
+
+  if (/academia/i.test(lower)) parts.push("Público-alvo: academias.");
+
+  const price = extractPromoPricePair(lower);
+  if (price) {
+    parts.push(
+      `Tipografia de preço na arte: de R$ ${price.de} por R$ ${price.por} (texto gráfico, não em embalagem).`,
+    );
+  }
+
+  const refs = Array.isArray(p.midias_referenced) ? p.midias_referenced : [];
+  const refNames = refs
+    .map((r) => String(r?.nome_exibicao ?? "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const heroName =
+    p.hero_product && typeof p.hero_product === "object"
+      ? String(p.hero_product.nome_exibicao ?? "").trim()
+      : "";
+
+  if (refNames.length) {
+    parts.push(
+      `Reservar espaço vazio no cenário para colagem posterior de ${refNames.length} PNG real(is) do acervo${heroName ? ` (hero: ${heroName})` : ""}. Não desenhar embalagens nem mockups.`,
+    );
+  } else {
+    const mentions = extractProductMentions(intent);
+    if (mentions.length) {
+      parts.push(
+        `Reservar zona hero para colagem de ${mentions.map((m) => `«${m}»`).join(", ")} quando o PNG estiver no acervo.`,
+      );
+    }
+  }
+
+  const explicit = extractFraseFromUserText(intent) || fraseFromProposal(p);
+  if (explicit) {
+    parts.push(`Texto gráfico pedido: «${explicit}».`);
+  }
+
+  parts.push(
+    "Fundo contínuo (gradiente, textura ou piso real); proibido retângulo branco, silhueta de pote ou produto inventado no centro.",
+  );
+
+  return parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 480);
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} proposal
+ * @param {Array<{ role: string, content: string }>} [history]
+ * @param {string} [userHint]
+ */
+export function buildComposeSceneResumo(proposal, history = [], userHint = "") {
+  const p = proposal && typeof proposal === "object" ? proposal : {};
+  const intent =
+    String(p.intent_summary ?? "").trim() ||
+    resolveActivePedidoHint(history, { proposal: p, question: userHint }) ||
+    String(userHint || "").trim();
+  return synthesizeComposeSceneResumo(p, intent || userHint);
+}
+
+/**
  * Resumo do que a arte deve comunicar (direção visual para o modelo — não o pedido literal).
  *
  * @param {Record<string, unknown> | null | undefined} proposal
@@ -303,7 +406,7 @@ export function buildResumoVisual(proposal, history = [], userHint = "") {
   const p = proposal && typeof proposal === "object" ? proposal : {};
   const intent =
     String(p.intent_summary ?? "").trim() ||
-    recentUserTexts(history, 2).join(" ").trim() ||
+    resolveActivePedidoHint(history, { proposal: p, question: userHint }) ||
     String(userHint || "").trim();
 
   const fromProposal =

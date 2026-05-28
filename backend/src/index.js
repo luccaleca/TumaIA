@@ -27,7 +27,13 @@ const server = app.listen(env.PORT, () => {
   console.log(`tumaia-backend ${baseUrl}`);
   // Primeira mensagem do chat não paga sozinha o boot do Python + Chroma.
   ensureChatWorkerReady().catch((err) =>
-    console.warn("[chat-worker] warm-up (subirá na 1ª mensagem):", err instanceof Error ? err.message : err),
+    console.warn(
+      "[chat-worker] warm-up (subirá na 1ª mensagem se falhar):",
+      err instanceof Error ? err.message : err,
+    ),
+  );
+  console.info(
+    `[chat-worker] timeouts boot=${Math.round(env.CHAT_WORKER_BOOT_TIMEOUT_MS / 1000)}s request=${Math.round(env.CHAT_WORKER_REQUEST_TIMEOUT_MS / 1000)}s`,
   );
 });
 

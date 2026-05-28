@@ -129,7 +129,8 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
       ],
       postContextProposal: proposal,
     });
-    assert.match(prompt, /500k seguidores/i);
+    assert.match(prompt, /500\s*mil\s+seguidores|comemorando/i);
+    assert.match(prompt, /Direção visual da arte/i);
     assert.match(prompt, /Identidade da marca/i);
     assert.match(prompt, /#00B341/);
     assert.match(prompt, /limpo, premium/i);
@@ -146,17 +147,20 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
         tom_voz: "profissional",
       },
     );
-    assert.match(p, /Post planos Starter Pro Business/);
+    assert.match(p, /Post planos TumaIA/);
+    assert.match(p, /Direção visual da arte/i);
     assert.match(p, /Identidade da marca/i);
     assert.match(p, /#6B2D9E/);
   });
 
-  it("buildRawImagePrompt repete intent_summary sem identidade", () => {
+  it("buildRawImagePrompt monta pedido + resumo visual sem identidade", () => {
     const p = buildRawImagePrompt(
       [{ role: "user", content: "Post planos TumaIA" }],
       { intent_summary: "Post planos Starter Pro Business" },
     );
-    assert.equal(p, "Post planos Starter Pro Business");
+    assert.match(p, /^Post planos TumaIA/m);
+    assert.match(p, /Direção visual da arte/i);
+    assert.doesNotMatch(p, /Identidade da marca/i);
   });
 
   it("buildRawImagePrompt reforça fidelidade ao produto quando há referência do acervo", () => {
@@ -177,9 +181,10 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
       { estilo_visual: "premium" },
       { composeProductAssets: true, productCount: 3 },
     );
-    assert.match(p, /SOMENTE o fundo\/cenário\/layout/i);
-    assert.match(p, /Não renderize nenhum pote, embalagem, rótulo/i);
-    assert.match(p, /inserção posterior de 3 produtos reais/i);
+    assert.match(p, /MODO FUNDO PARA COLAGEM/i);
+    assert.match(p, /PROIBIDO.*mockup|placeholder|retângulo branco/i);
+    assert.match(p, /três vãos no terço inferior/i);
+    assert.match(p, /colagem posterior|produtos reais entram depois/i);
   });
 
   it("buildRawImagePrompt deixa a frase explícita sobrescrever o texto do brief", () => {
@@ -196,7 +201,7 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
       },
       { estilo_visual: "premium" },
     );
-    assert.match(p, /O ÚNICO texto legível na imagem deve ser exatamente esta frase/i);
+    assert.match(p, /O cliente pediu este texto em destaque na arte/i);
     assert.match(p, /Até 40% OFF/);
     assert.doesNotMatch(p, /Título na imagem: «Texto antigo»/i);
     assert.doesNotMatch(p, /Texto na imagem: «Texto antigo maior»/i);
@@ -215,7 +220,7 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
       },
       { estilo_visual: "clean" },
     );
-    assert.match(p, /Não renderize texto legível na imagem/i);
+    assert.match(p, /Evite texto legível longo/i);
     assert.doesNotMatch(p, /Título na imagem:/i);
     assert.doesNotMatch(p, /Texto na imagem:/i);
   });
@@ -246,7 +251,7 @@ describe("productSceneComposer — buildProductLayoutSlots", () => {
   it("usa um produto maior em layouts verticais", () => {
     const slots = buildProductLayoutSlots(1, 900, 1600);
     assert.equal(slots.length, 1);
-    assert.ok(slots[0].width >= 0.5);
+    assert.ok(slots[0].width >= 0.55);
     assert.ok(slots[0].bottom <= 0.05);
   });
 

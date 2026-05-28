@@ -4,6 +4,14 @@ import { fetchImageBuffer } from "./llamaVisionImage.js";
 import { resolveFetchableImageUrlForMidia } from "./referenceMidiaUrls.js";
 
 const COMPOSE_FETCH_MAX_BYTES = 20 * 1024 * 1024;
+
+/** Escala do PNG do produto hero na composição final. */
+export const COMPOSE_HERO_SIZE_BOOST = 1.72;
+/** Escala dos produtos de apoio. */
+export const COMPOSE_SUPPORT_SIZE_BOOST = 1.38;
+/** Logo ocupa até esta fração do menor lado do quadro (legível, não minúscula). */
+export const COMPOSE_LOGO_FRAME_FRACTION = 0.26;
+export const COMPOSE_LOGO_MIN_PX = 140;
 const BG_EDGE_MAX_AVG_DIFF = 20;
 const BG_EDGE_NEAR_RATIO_MIN = 0.78;
 const BG_FLOOD_BASE_THRESHOLD = 26;
@@ -168,8 +176,15 @@ export function buildProductLayoutSlots(count, width, height, opts = {}) {
     return [
       {
         x: 0.5,
-        width: ratio < 0.8 ? (heroBottom && heroBottom > 0.12 ? 0.42 : 0.5) : ratio > 1.2 ? 0.34 : 0.42,
-        bottom: heroBottom ?? (ratio < 0.8 ? 0.04 : 0.05),
+        width:
+          ratio < 0.8
+            ? heroBottom && heroBottom > 0.12
+              ? 0.56
+              : 0.62
+            : ratio > 1.2
+              ? 0.48
+              : 0.58,
+        bottom: heroBottom ?? (ratio < 0.8 ? 0.035 : 0.045),
       },
     ];
   }
@@ -178,46 +193,46 @@ export function buildProductLayoutSlots(count, width, height, opts = {}) {
     if (heroPreferred) {
       if (ratio < 0.8) {
         return [
-          { x: 0.27, width: 0.21, bottom: 0.06 },
-          { x: 0.58, width: heroBottom && heroBottom > 0.12 ? 0.29 : 0.33, bottom: heroBottom ?? 0.04 },
+          { x: 0.27, width: 0.24, bottom: 0.055 },
+          { x: 0.58, width: heroBottom && heroBottom > 0.12 ? 0.38 : 0.42, bottom: heroBottom ?? 0.035 },
         ];
       }
       return [
-        { x: 0.3, width: ratio > 1.2 ? 0.18 : 0.22, bottom: 0.055 },
-        { x: 0.58, width: ratio > 1.2 ? 0.24 : 0.3, bottom: heroBottom ?? 0.04 },
+        { x: 0.3, width: ratio > 1.2 ? 0.22 : 0.26, bottom: 0.05 },
+        { x: 0.58, width: ratio > 1.2 ? 0.32 : 0.38, bottom: heroBottom ?? 0.035 },
       ];
     }
     if (ratio < 0.8) {
       return [
-        { x: 0.31, width: 0.29, bottom: 0.05 },
-        { x: 0.69, width: 0.29, bottom: 0.05 },
+        { x: 0.31, width: 0.34, bottom: 0.05 },
+        { x: 0.69, width: 0.34, bottom: 0.05 },
       ];
     }
     return [
-      { x: 0.33, width: ratio > 1.2 ? 0.22 : 0.26, bottom: 0.05 },
-      { x: 0.67, width: ratio > 1.2 ? 0.22 : 0.26, bottom: 0.05 },
+      { x: 0.33, width: ratio > 1.2 ? 0.26 : 0.3, bottom: 0.05 },
+      { x: 0.67, width: ratio > 1.2 ? 0.26 : 0.3, bottom: 0.05 },
     ];
   }
 
   const centerBottom = heroBottom ?? 0.03;
   if (ratio < 0.8) {
     return [
-      { x: 0.22, width: 0.22, bottom: 0.055 },
-      { x: 0.5, width: heroBottom && heroBottom > 0.12 ? 0.29 : 0.34, bottom: centerBottom },
-      { x: 0.78, width: 0.22, bottom: 0.055 },
+      { x: 0.22, width: 0.26, bottom: 0.05 },
+      { x: 0.5, width: heroBottom && heroBottom > 0.12 ? 0.38 : 0.42, bottom: centerBottom },
+      { x: 0.78, width: 0.26, bottom: 0.05 },
     ];
   }
   if (ratio > 1.2) {
     return [
-      { x: 0.26, width: 0.18, bottom: 0.05 },
-      { x: 0.5, width: heroBottom && heroBottom > 0.1 ? 0.22 : 0.26, bottom: centerBottom },
-      { x: 0.74, width: 0.18, bottom: 0.05 },
+      { x: 0.26, width: 0.22, bottom: 0.05 },
+      { x: 0.5, width: heroBottom && heroBottom > 0.1 ? 0.3 : 0.34, bottom: centerBottom },
+      { x: 0.74, width: 0.22, bottom: 0.05 },
     ];
   }
   return [
-    { x: 0.22, width: 0.24, bottom: 0.055 },
-    { x: 0.5, width: heroBottom && heroBottom > 0.1 ? 0.28 : 0.34, bottom: centerBottom },
-    { x: 0.78, width: 0.24, bottom: 0.055 },
+    { x: 0.22, width: 0.28, bottom: 0.05 },
+    { x: 0.5, width: heroBottom && heroBottom > 0.1 ? 0.36 : 0.42, bottom: centerBottom },
+    { x: 0.78, width: 0.28, bottom: 0.05 },
   ];
 }
 
@@ -438,8 +453,8 @@ export async function composeGeneratedSceneWithProducts(
     const buffer = await loadCompanyMidiaBuffer(db, row);
     const rowId = String(row?.id_midia ?? "").trim();
     const isHero = Boolean(heroProductId && rowId && rowId === heroProductId);
-    const sizeBoost = isHero ? 1.42 : 1.24;
-    const layerTargetWidth = Math.max(150, Math.round(width * slot.width * sizeBoost));
+    const sizeBoost = isHero ? COMPOSE_HERO_SIZE_BOOST : COMPOSE_SUPPORT_SIZE_BOOST;
+    const layerTargetWidth = Math.max(180, Math.round(width * slot.width * sizeBoost));
     const layer = await prepareProductLayer(buffer, layerTargetWidth);
     const layerMeta = await sharp(layer).metadata();
     const lw = Math.max(1, layerMeta.width ?? 1);
@@ -461,16 +476,36 @@ export async function composeGeneratedSceneWithProducts(
 
   if (logoRow) {
     const buffer = await loadCompanyMidiaBuffer(db, logoRow);
-    const targetWidth = Math.max(110, Math.round(Math.min(width, height) * 0.18));
+    const frameMin = Math.min(width, height);
+    const targetWidth = Math.max(
+      COMPOSE_LOGO_MIN_PX,
+      Math.round(frameMin * COMPOSE_LOGO_FRAME_FRACTION),
+    );
     const logo = await prepareLogoLayer(buffer, targetWidth);
     const logoMeta = await sharp(logo).metadata();
     const lw = Math.max(1, logoMeta.width ?? targetWidth);
     const lh = Math.max(1, logoMeta.height ?? targetWidth);
-    const padding = Math.max(12, Math.round(Math.min(width, height) * 0.022));
+    const padding = Math.max(16, Math.round(frameMin * 0.028));
+    const platePad = Math.max(8, Math.round(padding * 0.45));
+    const plateW = lw + platePad * 2;
+    const plateH = lh + platePad * 2;
+    const plateLeft = Math.max(0, width - plateW - padding);
+    const plateTop = Math.max(0, height - plateH - padding);
+    const plate = await sharp({
+      create: {
+        width: plateW,
+        height: plateH,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 0.82 },
+      },
+    })
+      .png()
+      .toBuffer();
+    composites.push({ input: plate, left: plateLeft, top: plateTop });
     composites.push({
       input: logo,
-      left: Math.max(0, width - lw - padding),
-      top: Math.max(0, height - lh - padding),
+      left: plateLeft + platePad,
+      top: plateTop + platePad,
     });
   }
 
