@@ -46,4 +46,5 @@ logs/
 Thumbs.db
 .idea/
 .vscode/
+.cursor/
 *.swp
