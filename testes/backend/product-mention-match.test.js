@@ -226,6 +226,20 @@ describe("productMentionMatch — especificidade estrita", () => {
     assert.equal(pool[0].id, "barra-dark");
   });
 
+  it("naked wafer avela branco e chocolate branco → 2 PNGs", async () => {
+    const { resolveMidiaRowsForPedido, parseProductMentionSpec } = await import(
+      "../../backend/src/services/productMentionMatch.js"
+    );
+    const pedido =
+      "post promocao naked wafer para avela branco e chocolate branco 30 de desconto white friday";
+    const spec = parseProductMentionSpec(pedido);
+    assert.ok(spec.specificPhrases.length >= 2);
+    const rows = resolveMidiaRowsForPedido(ACERVO_SUPLEMENTOS, pedido, 3);
+    assert.equal(rows.length, 2);
+    const ids = rows.map((r) => r.id ?? r.id_midia).sort();
+    assert.deepEqual(ids, ["barra-avela", "barra-branco"]);
+  });
+
   it("tudo de cookie com barrinha naked não expande linha inteira de barras", () => {
     const { pool } = narrowImageRowsByProductMention(
       ACERVO_SUPLEMENTOS,
@@ -241,5 +255,90 @@ describe("productMentionMatch — especificidade estrita", () => {
       "quero post de todos os pro force",
     );
     assert.equal(pool.length, 5);
+  });
+});
+
+const WHEY_DE_ROWS = [
+  {
+    id_midia: "11111111-1111-4111-8111-111111111101",
+    nome_exibicao: "whey de cookie",
+    nome_arquivo: "whey de cookie.png",
+    tipo_midia: "imagem",
+  },
+  {
+    id_midia: "11111111-1111-4111-8111-111111111102",
+    nome_exibicao: "whey de chocolate",
+    nome_arquivo: "whey de chocolate.png",
+    tipo_midia: "imagem",
+  },
+  {
+    id_midia: "11111111-1111-4111-8111-111111111103",
+    nome_exibicao: "whey de baunilha",
+    nome_arquivo: "whey de baunilha.png",
+    tipo_midia: "imagem",
+  },
+];
+
+const PEDIDO_TRES_WHEYS_DE =
+  "quero um post de promocao de whey, quero foto dos wheys de baunilha chocolate e de cookies, a promocao sera so para nossa loja fisica de sao bernardo, 40% de desconto, de 99,99 por 59,99";
+
+describe("productMentionMatch — whey de * no acervo", () => {
+  it("encontra os tres sabores com nomes whey de baunilha/chocolate/cookie", () => {
+    const { pool, strict } = narrowImageRowsByProductMention(WHEY_DE_ROWS, PEDIDO_TRES_WHEYS_DE);
+    assert.equal(strict, true);
+    assert.equal(pool.length, 3);
+    const ids = pool.map((r) => r.id_midia).sort();
+    assert.deepEqual(ids, [
+      "11111111-1111-4111-8111-111111111101",
+      "11111111-1111-4111-8111-111111111102",
+      "11111111-1111-4111-8111-111111111103",
+    ]);
+  });
+
+  it("nao bloqueia o gate quando os tres PNGs existem", () => {
+    const gate = applyProductMediaGate(
+      { intent_summary: PEDIDO_TRES_WHEYS_DE, midias_referenced: [] },
+      WHEY_DE_ROWS,
+      PEDIDO_TRES_WHEYS_DE,
+    );
+    assert.equal(gate.blocked, false);
+    assert.equal(gate.proposal.product_media_status, "matched");
+    assert.equal(gate.proposal.midias_referenced.length, 3);
+  });
+
+  it("aceita vanilla no pedido para whey de baunilha", () => {
+    const pedido = "post promocional whey vanilla e chocolate";
+    const { pool } = narrowImageRowsByProductMention(WHEY_DE_ROWS, pedido);
+    assert.equal(pool.length, 2);
+    assert.ok(pool.some((r) => /baunilha/i.test(String(r.nome_arquivo))));
+    assert.ok(pool.some((r) => /chocolate/i.test(String(r.nome_arquivo))));
+  });
+
+  it("aceita pedido solto whey sabor choco", () => {
+    const { pool } = narrowImageRowsByProductMention(
+      WHEY_DE_ROWS,
+      "quero arte com whey sabor choco",
+    );
+    assert.equal(pool.length, 1);
+    assert.match(String(pool[0].nome_arquivo), /chocolate/i);
+  });
+
+  it("os 3 wheys sem citar sabores pega linha inteira do acervo", () => {
+    const { pool } = narrowImageRowsByProductMention(
+      WHEY_DE_ROWS,
+      "foto dos 3 wheys na promocao da loja",
+    );
+    assert.equal(pool.length, 3);
+  });
+
+  it("mensagem de falta usa rotulo whey sabor, nao whey growth", () => {
+    const gate = applyProductMediaGate(
+      { midias_referenced: [] },
+      [WHEY_DE_ROWS[0]],
+      PEDIDO_TRES_WHEYS_DE,
+    );
+    assert.equal(gate.blocked, true);
+    assert.match(gate.confirmation_message, /whey chocolate/i);
+    assert.doesNotMatch(gate.confirmation_message, /whey growth chocolate/i);
   });
 });

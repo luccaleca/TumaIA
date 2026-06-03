@@ -1,4 +1,5 @@
 import { env } from "../config.js";
+import { DEFAULT_OLLAMA_CHAT_MODEL } from "../ollamaDefaults.js";
 import {
   IDENTIDADE_CONTEXTO_NOME,
   IDENTIDADE_TIPO,
@@ -281,7 +282,7 @@ export async function analisarIdentidadeMarca(supabase, idEmpresa, opts, empresa
     env.IDENTIDADE_ANALISE_MODEL ||
     env.LLAMA_PROPOSAL_MODEL ||
     env.LLAMA_MODEL ||
-    "llama3.2:3b"
+    DEFAULT_OLLAMA_CHAT_MODEL
   ).trim();
   const visionModel = (env.IDENTIDADE_VISION_MODEL || env.LLAMA_VISION_MODEL || "llava:7b").trim();
 

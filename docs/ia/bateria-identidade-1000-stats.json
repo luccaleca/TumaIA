@@ -1,0 +1,15 @@
+{
+  "total": 1204,
+  "resposta_direta": 462,
+  "identity_llm": 410,
+  "por_categoria": {
+    "CRIADOR": 340,
+    "ORIGEM": 348,
+    "NATUREZA": 206,
+    "QUEM_E": 174,
+    "NOME": 40,
+    "FUNCAO": 40,
+    "CAPACIDADE": 32,
+    "SIGNIFICADO": 24
+  }
+}

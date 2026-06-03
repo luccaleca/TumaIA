@@ -2,8 +2,8 @@ import { env } from "../config.js";
 import { wantsLogoAsHero } from "./logoReferencePolicy.js";
 import { ensureReplicateImagePromptUrl } from "./replicateImagePromptPrep.js";
 
-/** Limite por chamada Replicate (1× image_prompt + demais só texto no prompt). */
-export const REFERENCE_MIDIA_MAX = 3;
+/** Alinhado a GPT_IMAGE_REFERENCE_MAX (images.edit / input_images). */
+export const REFERENCE_MIDIA_MAX = 4;
 
 const IMAGE_MIME = /^image\/(jpeg|jpe|jpg|png|gif|webp|jfif|pjpeg)$/i;
 const IMAGE_EXT = /\.(jpe?g|jfif|png|gif|webp)$/i;

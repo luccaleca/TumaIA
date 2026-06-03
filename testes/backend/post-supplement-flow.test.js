@@ -251,7 +251,7 @@ describe("productSceneComposer — buildProductLayoutSlots", () => {
   it("usa um produto maior em layouts verticais", () => {
     const slots = buildProductLayoutSlots(1, 900, 1600);
     assert.equal(slots.length, 1);
-    assert.ok(slots[0].width >= 0.55);
+    assert.ok(slots[0].width >= 0.48);
     assert.ok(slots[0].bottom <= 0.05);
   });
 

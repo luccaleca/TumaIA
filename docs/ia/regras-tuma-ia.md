@@ -4,6 +4,8 @@ Documentação legível das regras de comportamento da IA. O arquivo **canônico
 
 `backend/ia/python/conversa/instrucoes/regras_tuma_ia.txt`
 
+Treino dinâmico (empresa + mídias, tom de funcionário): [`treino-dinamico-tuma.md`](./treino-dinamico-tuma.md) e `papel_funcionario_empresa.txt`.
+
 Após alterar as regras, reinicie o worker Python do chat para recarregar os `.txt`.
 
 ## Blocos
@@ -18,6 +20,14 @@ Após alterar as regras, reinicie o worker Python do chat para recarregar os `.t
 | 76–85 | Tom, limites e compliance |
 | 86–95 | Dados, privacidade e qualidade |
 | 96–100 | Regras de ouro |
+
+## Interpretação nativa — 100 dicas (como gente)
+
+Documentação: [`100-dicas-interpretacao-nativa.md`](./100-dicas-interpretacao-nativa.md)
+
+Arquivo para o prompt: `backend/ia/python/conversa/instrucoes/interpretacao_nativa.txt`
+
+Foco: **várias perguntas na mesma mensagem → responder todas**; não parar no primeiro “oi”.
 
 ## Interpretação de intenção (100 regras)
 

@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
     "dev:backend": "npm run dev -w tumaia-backend",
+    "dev:backend:stable": "npm run dev:stable -w tumaia-backend",
     "dev:frontend": "npm run dev -w frontend",
     "test": "node testes/run-backend.mjs",
     "test:backend": "node testes/run-backend.mjs",
@@ -16,7 +17,9 @@
     "test:all": "node testes/run-backend.mjs && node testes/run-frontend.mjs",
     "test:post-supplement": "node --test testes/backend/post-supplement-flow.test.js",
     "check:replicate": "npm run check:replicate -w tumaia-backend",
-    "test:replicate:smoke": "npm run test:replicate:smoke -w tumaia-backend"
+    "test:replicate:smoke": "npm run test:replicate:smoke -w tumaia-backend",
+    "repertorio:1000": "node backend/scripts/gerar-repertorio-1000.mjs",
+    "repertorio:simular": "node backend/scripts/simular-repertorio-tuma.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

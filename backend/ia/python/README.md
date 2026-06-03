@@ -36,11 +36,14 @@ Defina no `.env` (raiz do projeto ou `config/.env`):
 
 ```env
 OLLAMA_HOST=http://127.0.0.1:11434
-OLLAMA_CHAT_MODEL=llama3.2:3b
+OLLAMA_CHAT_MODEL=qwen2.5:3b
+LLAMA_MODEL=qwen2.5:3b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 ```
 
-Com `OLLAMA_CHAT_MODEL` preenchido, o fluxo prioriza Ollama para chat.
+Padrão do repositório: **`qwen2.5:3b`** (cabe em ~4 GB VRAM). Instale com `ollama pull qwen2.5:3b`.
+
+Com `OLLAMA_CHAT_MODEL` ou `LLAMA_MODEL` preenchido, o fluxo prioriza Ollama para chat.
 
 ## Latência (opcional)
 

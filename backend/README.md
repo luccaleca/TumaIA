@@ -48,7 +48,7 @@ As rotas em `/internal/*` são protegidas por `INTERNAL_WEBHOOK_SECRET`.
 - `REPLICATE_PING_PER_MINUTE` (opcional; padrão **10**; `0` = sem limite)
 - `REPLICATE_DAILY_SUCCESS_CAP` (opcional; padrão **50** sucessos/dia; `0` = ilimitado)
 - `LLAMA_BASE_URL` (opcional; padrão `http://127.0.0.1:11434/v1` — API **OpenAI-compatible**, ex. Ollama)
-- `LLAMA_MODEL` (opcional; padrão `llama3.2:3b` nas rotas Node que geram JSON — alinhe ao `ollama list`)
+- `LLAMA_MODEL` (opcional; padrão `qwen2.5:3b` — `ollama pull qwen2.5:3b`; alinhe ao `ollama list`)
 - `LLAMA_API_KEY` (opcional; muitos servidores locais usam `ollama`)
 - `LLAMA_DAILY_TOKEN_BUDGET` (opcional; só para a rota `GET /internal/social-content/usage`)
 

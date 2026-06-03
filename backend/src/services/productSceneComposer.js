@@ -5,13 +5,23 @@ import { resolveFetchableImageUrlForMidia } from "./referenceMidiaUrls.js";
 
 const COMPOSE_FETCH_MAX_BYTES = 20 * 1024 * 1024;
 
-/** Escala do PNG do produto hero na composição final. */
-export const COMPOSE_HERO_SIZE_BOOST = 1.72;
+/** Escala do PNG do produto hero na composição final (evitar invadir texto da campanha). */
+export const COMPOSE_HERO_SIZE_BOOST = 1.38;
 /** Escala dos produtos de apoio. */
-export const COMPOSE_SUPPORT_SIZE_BOOST = 1.38;
-/** Logo ocupa até esta fração do menor lado do quadro (legível, não minúscula). */
-export const COMPOSE_LOGO_FRAME_FRACTION = 0.26;
-export const COMPOSE_LOGO_MIN_PX = 140;
+export const COMPOSE_SUPPORT_SIZE_BOOST = 1.14;
+/** Teto de largura do hero em relação ao quadro. */
+export const COMPOSE_HERO_MAX_WIDTH_FRACTION = 0.44;
+/** Teto de largura dos apoios. */
+export const COMPOSE_SUPPORT_MAX_WIDTH_FRACTION = 0.26;
+/** Altura máxima de qualquer PNG composto (proporção do quadro). */
+export const COMPOSE_PRODUCT_MAX_HEIGHT_FRACTION = 0.5;
+/** Marca d'água no canto — identifica a empresa sem roubar o foco. */
+export const COMPOSE_LOGO_FRAME_FRACTION = 0.085;
+export const COMPOSE_LOGO_MAX_HEIGHT_FRACTION = 0.075;
+export const COMPOSE_LOGO_MIN_PX = 48;
+export const COMPOSE_LOGO_MAX_PX = 88;
+/** Opacidade da logo composta (0–1), estilo watermark. */
+export const COMPOSE_LOGO_WATERMARK_ALPHA = 0.72;
 const BG_EDGE_MAX_AVG_DIFF = 20;
 const BG_EDGE_NEAR_RATIO_MIN = 0.78;
 const BG_FLOOD_BASE_THRESHOLD = 26;
@@ -179,11 +189,11 @@ export function buildProductLayoutSlots(count, width, height, opts = {}) {
         width:
           ratio < 0.8
             ? heroBottom && heroBottom > 0.12
-              ? 0.56
-              : 0.62
+              ? 0.5
+              : 0.54
             : ratio > 1.2
-              ? 0.48
-              : 0.58,
+              ? 0.42
+              : 0.5,
         bottom: heroBottom ?? (ratio < 0.8 ? 0.035 : 0.045),
       },
     ];
@@ -194,12 +204,12 @@ export function buildProductLayoutSlots(count, width, height, opts = {}) {
       if (ratio < 0.8) {
         return [
           { x: 0.27, width: 0.24, bottom: 0.055 },
-          { x: 0.58, width: heroBottom && heroBottom > 0.12 ? 0.38 : 0.42, bottom: heroBottom ?? 0.035 },
+          { x: 0.58, width: heroBottom && heroBottom > 0.12 ? 0.32 : 0.36, bottom: heroBottom ?? 0.04 },
         ];
       }
       return [
         { x: 0.3, width: ratio > 1.2 ? 0.22 : 0.26, bottom: 0.05 },
-        { x: 0.58, width: ratio > 1.2 ? 0.32 : 0.38, bottom: heroBottom ?? 0.035 },
+        { x: 0.58, width: ratio > 1.2 ? 0.3 : 0.34, bottom: heroBottom ?? 0.04 },
       ];
     }
     if (ratio < 0.8) {
@@ -217,9 +227,9 @@ export function buildProductLayoutSlots(count, width, height, opts = {}) {
   const centerBottom = heroBottom ?? 0.03;
   if (ratio < 0.8) {
     return [
-      { x: 0.22, width: 0.26, bottom: 0.05 },
-      { x: 0.5, width: heroBottom && heroBottom > 0.12 ? 0.38 : 0.42, bottom: centerBottom },
-      { x: 0.78, width: 0.26, bottom: 0.05 },
+      { x: 0.22, width: 0.23, bottom: 0.06 },
+      { x: 0.5, width: heroBottom && heroBottom > 0.12 ? 0.32 : 0.34, bottom: centerBottom },
+      { x: 0.78, width: 0.23, bottom: 0.06 },
     ];
   }
   if (ratio > 1.2) {
@@ -230,10 +240,26 @@ export function buildProductLayoutSlots(count, width, height, opts = {}) {
     ];
   }
   return [
-    { x: 0.22, width: 0.28, bottom: 0.05 },
-    { x: 0.5, width: heroBottom && heroBottom > 0.1 ? 0.36 : 0.42, bottom: centerBottom },
-    { x: 0.78, width: 0.28, bottom: 0.05 },
+    { x: 0.22, width: 0.24, bottom: 0.06 },
+    { x: 0.5, width: heroBottom && heroBottom > 0.1 ? 0.32 : 0.34, bottom: centerBottom },
+    { x: 0.78, width: 0.24, bottom: 0.06 },
   ];
+}
+
+/**
+ * Largura alvo do PNG após boost, respeitando teto para não cobrir tipografia.
+ * @param {number} frameWidth
+ * @param {number} slotWidth
+ * @param {boolean} isHero
+ */
+export function resolveProductLayerTargetWidth(frameWidth, slotWidth, isHero) {
+  const w = Math.max(1, Math.round(Number(frameWidth) || 1));
+  const slot = clamp(Number(slotWidth) || 0.3, 0.12, 0.7);
+  const boost = isHero ? COMPOSE_HERO_SIZE_BOOST : COMPOSE_SUPPORT_SIZE_BOOST;
+  const capFrac = isHero ? COMPOSE_HERO_MAX_WIDTH_FRACTION : COMPOSE_SUPPORT_MAX_WIDTH_FRACTION;
+  const raw = Math.round(w * slot * boost);
+  const cap = Math.round(w * capFrac);
+  return Math.max(120, Math.min(raw, cap));
 }
 
 async function detectCentralSupportBottom(buffer, width, height) {
@@ -321,6 +347,83 @@ async function prepareLogoLayer(buffer, targetWidth) {
     // keep original if trim fails
   }
   return img.resize({ width: targetWidth, fit: "inside", withoutEnlargement: false }).png().toBuffer();
+}
+
+/**
+ * Aplica opacidade estilo marca d'água (logo identifica a marca, não é protagonista).
+ * @param {Buffer} buffer
+ * @param {number} [alpha]
+ */
+/**
+ * @param {number} productCount
+ * @returns {"bl" | "br"}
+ */
+export function pickLogoWatermarkCorner(productCount) {
+  return Math.max(0, Math.round(Number(productCount) || 0)) >= 2 ? "bl" : "br";
+}
+
+/**
+ * @param {Buffer} buffer
+ * @param {number} frameWidth
+ * @param {number} frameHeight
+ */
+async function prepareLogoWatermark(buffer, frameWidth, frameHeight) {
+  const frameMin = Math.min(frameWidth, frameHeight);
+  const targetWidth = Math.max(
+    COMPOSE_LOGO_MIN_PX,
+    Math.min(
+      COMPOSE_LOGO_MAX_PX,
+      Math.round(frameMin * COMPOSE_LOGO_FRAME_FRACTION),
+    ),
+  );
+  let logoRaw = await prepareLogoLayer(buffer, targetWidth);
+  const maxH = Math.round(frameHeight * COMPOSE_LOGO_MAX_HEIGHT_FRACTION);
+  const meta = await sharp(logoRaw).metadata();
+  const h = Math.max(1, meta.height ?? targetWidth);
+  if (h > maxH) {
+    logoRaw = await sharp(logoRaw)
+      .resize({ height: maxH, fit: "inside", withoutEnlargement: true })
+      .png()
+      .toBuffer();
+  }
+  return applyLogoWatermarkOpacity(logoRaw);
+}
+
+/**
+ * @param {"bl" | "br" | "tl" | "tr"} corner
+ * @param {number} width
+ * @param {number} height
+ * @param {number} lw
+ * @param {number} lh
+ * @param {number} padding
+ */
+function logoCompositePosition(corner, width, height, lw, lh, padding) {
+  switch (corner) {
+    case "tl":
+      return { left: padding, top: padding };
+    case "tr":
+      return { left: Math.max(0, width - lw - padding), top: padding };
+    case "bl":
+      return { left: padding, top: Math.max(0, height - lh - padding) };
+    case "br":
+    default:
+      return {
+        left: Math.max(0, width - lw - padding),
+        top: Math.max(0, height - lh - padding),
+      };
+  }
+}
+
+async function applyLogoWatermarkOpacity(buffer, alpha = COMPOSE_LOGO_WATERMARK_ALPHA) {
+  const a = clamp(alpha, 0.35, 1);
+  const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const w = Math.max(1, info.width ?? 1);
+  const h = Math.max(1, info.height ?? 1);
+  const out = Buffer.from(data);
+  for (let i = 3; i < out.length; i += 4) {
+    out[i] = Math.round(out[i] * a);
+  }
+  return sharp(out, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
 }
 
 /**
@@ -453,9 +556,17 @@ export async function composeGeneratedSceneWithProducts(
     const buffer = await loadCompanyMidiaBuffer(db, row);
     const rowId = String(row?.id_midia ?? "").trim();
     const isHero = Boolean(heroProductId && rowId && rowId === heroProductId);
-    const sizeBoost = isHero ? COMPOSE_HERO_SIZE_BOOST : COMPOSE_SUPPORT_SIZE_BOOST;
-    const layerTargetWidth = Math.max(180, Math.round(width * slot.width * sizeBoost));
-    const layer = await prepareProductLayer(buffer, layerTargetWidth);
+    const layerTargetWidth = resolveProductLayerTargetWidth(width, slot.width, isHero);
+    let layer = await prepareProductLayer(buffer, layerTargetWidth);
+    const maxLayerHeight = Math.round(height * COMPOSE_PRODUCT_MAX_HEIGHT_FRACTION);
+    const layerMeta0 = await sharp(layer).metadata();
+    const lh0 = Math.max(1, layerMeta0.height ?? 1);
+    if (lh0 > maxLayerHeight) {
+      layer = await sharp(layer)
+        .resize({ height: maxLayerHeight, fit: "inside", withoutEnlargement: true })
+        .png()
+        .toBuffer();
+    }
     const layerMeta = await sharp(layer).metadata();
     const lw = Math.max(1, layerMeta.width ?? 1);
     const lh = Math.max(1, layerMeta.height ?? 1);
@@ -477,36 +588,14 @@ export async function composeGeneratedSceneWithProducts(
   if (logoRow) {
     const buffer = await loadCompanyMidiaBuffer(db, logoRow);
     const frameMin = Math.min(width, height);
-    const targetWidth = Math.max(
-      COMPOSE_LOGO_MIN_PX,
-      Math.round(frameMin * COMPOSE_LOGO_FRAME_FRACTION),
-    );
-    const logo = await prepareLogoLayer(buffer, targetWidth);
+    const logo = await prepareLogoWatermark(buffer, width, height);
     const logoMeta = await sharp(logo).metadata();
-    const lw = Math.max(1, logoMeta.width ?? targetWidth);
-    const lh = Math.max(1, logoMeta.height ?? targetWidth);
-    const padding = Math.max(16, Math.round(frameMin * 0.028));
-    const platePad = Math.max(8, Math.round(padding * 0.45));
-    const plateW = lw + platePad * 2;
-    const plateH = lh + platePad * 2;
-    const plateLeft = Math.max(0, width - plateW - padding);
-    const plateTop = Math.max(0, height - plateH - padding);
-    const plate = await sharp({
-      create: {
-        width: plateW,
-        height: plateH,
-        channels: 4,
-        background: { r: 255, g: 255, b: 255, alpha: 0.82 },
-      },
-    })
-      .png()
-      .toBuffer();
-    composites.push({ input: plate, left: plateLeft, top: plateTop });
-    composites.push({
-      input: logo,
-      left: plateLeft + platePad,
-      top: plateTop + platePad,
-    });
+    const lw = Math.max(1, logoMeta.width ?? COMPOSE_LOGO_MIN_PX);
+    const lh = Math.max(1, logoMeta.height ?? COMPOSE_LOGO_MIN_PX);
+    const padding = Math.max(12, Math.round(frameMin * 0.022));
+    const corner = pickLogoWatermarkCorner(productRows.length);
+    const { left, top } = logoCompositePosition(corner, width, height, lw, lh, padding);
+    composites.push({ input: logo, left, top });
   }
 
   const out = await sharp(backgroundBuffer).composite(composites).png().toBuffer();

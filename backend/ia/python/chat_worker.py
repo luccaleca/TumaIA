@@ -60,9 +60,22 @@ def main() -> int:
         id_raw = payload.get("id_empresa")
         id_empresa = id_raw.strip() if isinstance(id_raw, str) and id_raw.strip() else None
 
+        acervo_raw = payload.get("acervo_context")
+        acervo_context = (
+            acervo_raw.strip() if isinstance(acervo_raw, str) and acervo_raw.strip() else None
+        )
+
+        modo_raw = payload.get("chat_mode")
+        chat_mode = modo_raw.strip() if isinstance(modo_raw, str) and modo_raw.strip() else None
+
         try:
             resposta = responder_mensagem(
-                vector_store, question, history=history, id_empresa=id_empresa
+                vector_store,
+                question,
+                history=history,
+                id_empresa=id_empresa,
+                acervo_context=acervo_context,
+                chat_mode=chat_mode,
             )
         except Exception as e:  # noqa: BLE001
             _emit({"ok": False, "error": str(e)})

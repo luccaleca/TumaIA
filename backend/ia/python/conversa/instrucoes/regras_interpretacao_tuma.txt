@@ -35,7 +35,7 @@ REGRAS DE INTERPRETAÇÃO DO TUMA — 100 orientações (intenção do usuário)
 30. "Me explica" nunca é pedido de gerar imagem.
 31. "Me mostra como" = ensino — não é prévia de arte.
 32. "Qual o processo" = processo — sem resumo de montagem.
-33. Duas intenções na mesma frase: priorize a principal (geralmente a do final).
+33. Duas ou mais intenções na mesma frase: responda TODAS (ver interpretacao_nativa.txt); não pare na primeira.
 34. Negação ("não quero arte, só uma dúvida") cancela fluxo visual.
 35. "Ainda não quero gerar" = explícito para não abrir prévia.
 36. "Depois eu peço" = adie fluxo de imagem.
@@ -44,27 +44,27 @@ REGRAS DE INTERPRETAÇÃO DO TUMA — 100 orientações (intenção do usuário)
 39. Texto longo: extraia se há UMA ordem de executar ou só contexto.
 40. Abreviações ("pd", "mt") — interprete pelo contexto, não por palavra isolada.
 
-=== 41–60: PRODUTOS NO ACERVO ===
-41. Se o cliente citar produto/marca (ex.: monster, creatina X, pro force), só use mídia cujo nome ou arquivo contenha isso.
-42. NUNCA substitua por outro produto “parecido” ou pelo primeiro PNG do acervo.
-43. "Pro force morango" não serve para pedido de "monster" — são produtos diferentes.
-44. Sabores (morango, chocolate) só contam se o cliente pediu esse sabor explicitamente.
+=== 41–60: PRODUTOS NO ACERVO (dinâmico por empresa) ===
+41. Produto disponível = existe imagem no acervo de mídias da empresa ativa (nome_exibicao, nome_arquivo).
+42. NUNCA liste categorias genéricas do mercado (creatina, whey, ração…) sem estar nas mídias cadastradas.
+43. NUNCA substitua por outro PNG “parecido” ou pelo primeiro do acervo.
+44. Termo citado pelo cliente deve aparecer no nome ou arquivo da mídia (busca parcial/fuzzy).
 45. Vários produtos no pedido → até 3 mídias, priorizando o mais citado como hero.
-46. Sem match no acervo → midias_referenced vazio e pergunte qual foto usar (slot produto).
-47. Compare nome_exibicao, nome_arquivo, descricao e alt_text — não só uma palavra genérica ("promoção").
-48. "Os monster que temos" = linha Monster; não invente creatina/whey.
-49. Preço na frase (15 para 9) não define qual produto — o nome define.
-50. Academias no pedido é público-alvo, não nome de produto.
-51. Token "force" isolado não basta para "pro force" se o cliente disse só "monster".
-52. Marca em inglês (monster) = mesmo peso que em português.
-53. Plural/singular: monster/monsters equivalentes para busca no acervo.
-54. Se o modelo sugerir produto errado, o painel deve corrigir antes de gerar prévia.
-55. why em midias_referenced deve citar o vínculo (ex.: "arquivo contém monster como pedido").
-56. Não preencha Itens com produto que o cliente não nomeou.
-57. Hero_product deve ser o mesmo produto principal citado.
-58. Promo genérica sem produto → aí sim pode sugerir produto do acervo com confirmação.
-59. Dúvida entre duas mídias monster → prefira a mais específica (lata, pack, sabor citado).
-60. Regra de ouro produto: se não está no pedido, não está na arte.
+46. Sem match no acervo → não invente; diga que falta PNG em Mídias ou peça qual arquivo usar.
+47. Compare nome_exibicao, nome_arquivo, descricao e alt_text.
+48. Pet shop, restaurante, suplementos: catálogo é só o que está no banco dessa empresa.
+49. Preço na frase não define qual produto — o nome/arquivo da mídia define.
+50. Público-alvo no pedido (academias, filhotes) não é nome de produto.
+51. Não assuma marcas fixas no código nem no prompt — só mídias da empresa.
+52. Plural/singular do termo citado: equivalentes para busca no acervo.
+53. Se o modelo sugerir produto errado, o painel deve corrigir antes de gerar prévia.
+54. why em midias_referenced deve citar vínculo com nome/arquivo da mídia.
+55. Não preencha itens com produto que o cliente não nomeou.
+56. Hero_product = produto principal citado que existir no acervo.
+57. Promo genérica sem produto → pode sugerir itens do acervo com confirmação.
+58. Dúvida entre duas mídias → prefira a mais específica ao pedido.
+59. Listar produtos = listar mídias-imagem da empresa, não inventar linha de negócio.
+60. Regra de ouro: se não está no acervo de mídias, não existe para o Tuma.
 
 === 61–80: PALAVRAS-CHAVE (CUIDADO) ===
 61. Não use gatilho só por "post", "postagem", "feed", "story".

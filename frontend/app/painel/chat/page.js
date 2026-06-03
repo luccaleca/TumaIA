@@ -123,10 +123,14 @@ function normalizeSupplementLink(l) {
   return { kind, id, label, href };
 }
 
+/** Alinhado ao limite do POST /ia/chat (backend/src/services/chatHistoryLimit.js). */
+const CHAT_HISTORY_API_MAX = 80;
+
 function historyFromMessages(msgs) {
-  return msgs
+  const full = msgs
     .filter((m) => m && !m.hidden && !isHiddenUserMessage(m))
     .map((m) => ({ role: m.role, content: messageConteudoForApi(m) }));
+  return full.length > CHAT_HISTORY_API_MAX ? full.slice(-CHAT_HISTORY_API_MAX) : full;
 }
 
 function findLatestImageProposalObject(msgs) {
@@ -803,10 +807,7 @@ export default function PainelChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, sending]);
 
-  const historyForApi = useMemo(
-    () => messages.map((m) => ({ role: m.role, content: m.content })),
-    [messages],
-  );
+  const historyForApi = useMemo(() => historyFromMessages(messages), [messages]);
 
   const syncMensagens = useCallback(
     async (chatId, lista) => {
@@ -858,12 +859,23 @@ export default function PainelChatPage() {
         timeoutLabel: "image-preview",
       });
       if (!result.ok || result.networkError) {
+        const qualitySummary =
+          result.json?.quality_review &&
+          typeof result.json.quality_review === "object" &&
+          typeof result.json.quality_review.summary === "string"
+            ? result.json.quality_review.summary.trim()
+            : "";
         const msg =
           result.networkError?.message ||
-          result.json?.error ||
+          (typeof result.json?.error === "string" ? result.json.error : null) ||
+          (qualitySummary && result.json?.rejected_preview ? qualitySummary : null) ||
+          formatAuthError(result.json) ||
+          (result.status === 422
+            ? "A prévia foi barrada na revisão automática. Ajuste o pedido ou tente de novo."
+            : null) ||
           "Não foi possível gerar a imagem agora.";
-        const errText = typeof msg === "string" ? msg : formatAuthError(result.json) || "Erro desconhecido.";
-        return { ok: false, error: String(errText) };
+        const errText = typeof msg === "string" ? msg : "Erro desconhecido.";
+        return { ok: false, error: String(errText), status: result.status };
       }
       const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
       return {
@@ -1372,6 +1384,7 @@ export default function PainelChatPage() {
       syncMensagens,
       attachPostContextSupplement,
       invokeImagePreview,
+      showErr,
     ],
   );
 
@@ -1686,7 +1699,6 @@ export default function PainelChatPage() {
                 const hasArteBrief =
                   message.post_supplement?.post_context_proposal?.arte_brief &&
                   typeof message.post_supplement.post_context_proposal.arte_brief === "object";
-
                 return (
                   <article key={message.id} className="flex items-start gap-3">
                     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border bg-background">

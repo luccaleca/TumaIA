@@ -71,7 +71,10 @@ export function midiaItemsFromProposal(proposal, supplementLinks = []) {
     .filter((r) => r && typeof r === "object" && String(r.id_midia ?? "").trim())
     .map((r) => {
       const id = String(r.id_midia).trim();
-      const label = String(r.nome_exibicao ?? "Mídia").trim() || "Mídia";
+      const nome = String(r.nome_exibicao ?? "").trim();
+      const arquivo = String(r.nome_arquivo ?? "").trim();
+      const label =
+        nome && arquivo && arquivo !== nome ? `${nome} · ${arquivo}` : nome || arquivo || "Mídia";
       return {
         kind: "midia",
         id,

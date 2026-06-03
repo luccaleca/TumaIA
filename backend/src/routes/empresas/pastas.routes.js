@@ -3,10 +3,12 @@ import {
   PASTA_IDENTIDADE_MARCA_NOME,
   PASTA_UPLOAD_RAIZ_NOME,
   coletarSubpastas,
+  contarConteudoPasta,
   createPastaBody,
   db,
   getMembroAtivoEmpresa,
   getOrCreatePastaUploadRaiz,
+  removerPastaComConteudo,
   reparentPastasAcervoOrfas,
   resolvePastaPaiAcervo,
   patchPastaBody,
@@ -375,36 +377,65 @@ export function registerPastasRoutes(r) {
         return;
       }
 
-      const { count: hasFilhos, error: eFilhos } = await supabase
+      const { data: pastaIdentidade } = await supabase
         .from("pasta")
-        .select("id_pasta", { count: "exact", head: true })
+        .select("id_pasta")
         .eq("id_empresa", p.data.idEmpresa)
-        .eq("id_pasta_pai", p.data.idPasta)
-        .eq("ativo", true);
-      if (eFilhos) {
-        res.status(500).json({ error: eFilhos.message });
+        .eq("nome", PASTA_IDENTIDADE_MARCA_NOME)
+        .eq("ativo", true)
+        .maybeSingle();
+      const idPastaIdentidade = pastaIdentidade?.id_pasta
+        ? String(pastaIdentidade.id_pasta).trim()
+        : null;
+      if (idPastaIdentidade && p.data.idPasta === idPastaIdentidade) {
+        res.status(400).json({ error: "A pasta de identidade da marca não pode ser removida." });
         return;
       }
 
-      const { count: hasMidias, error: eMidias } = await supabase
-        .from("midia")
-        .select("id_midia", { count: "exact", head: true })
-        .eq("id_empresa", p.data.idEmpresa)
-        .eq("id_pasta", p.data.idPasta)
-        .eq("ativo", true);
-      if (eMidias) {
-        res.status(500).json({ error: eMidias.message });
+      const recursive =
+        String(req.query?.recursive ?? "")
+          .trim()
+          .toLowerCase() === "1" ||
+        String(req.query?.recursive ?? "")
+          .trim()
+          .toLowerCase() === "true";
+
+      const { subpastas, midias } = await contarConteudoPasta(supabase, p.data.idEmpresa, p.data.idPasta);
+      const temConteudo = subpastas > 0 || midias > 0;
+
+      if (temConteudo && !recursive) {
+        res.status(409).json({
+          error:
+            subpastas > 0 && midias > 0
+              ? `A pasta não está vazia (${subpastas} subpasta${subpastas === 1 ? "" : "s"} e ${midias} mídia${midias === 1 ? "" : "s"}).`
+              : subpastas > 0
+                ? `A pasta não está vazia (${subpastas} subpasta${subpastas === 1 ? "" : "s"}). Abra a pasta, esvazie ou confirme remoção com todo o conteúdo.`
+                : `A pasta não está vazia (${midias} mídia${midias === 1 ? "" : "s"}). Remova as mídias antes ou confirme remoção com todo o conteúdo.`,
+          subpastas,
+          midias,
+          codigo: "PASTA_NAO_VAZIA",
+        });
         return;
       }
 
-      if ((hasFilhos || 0) > 0 || (hasMidias || 0) > 0) {
-        res.status(409).json({ error: "A pasta não está vazia" });
+      if (recursive && temConteudo) {
+        const proteger = new Set([idPastaUploadRaiz]);
+        if (idPastaIdentidade) proteger.add(idPastaIdentidade);
+        const stats = await removerPastaComConteudo(supabase, p.data.idEmpresa, p.data.idPasta, {
+          protegerIds: proteger,
+        });
+        res.json({
+          removida: true,
+          id_pasta: p.data.idPasta,
+          recursivo: true,
+          ...stats,
+        });
         return;
       }
 
       const { error: eDelete } = await supabase
         .from("pasta")
-        .update({ ativo: false })
+        .update({ ativo: false, data_atualizacao: new Date().toISOString() })
         .eq("id_pasta", p.data.idPasta)
         .eq("id_empresa", p.data.idEmpresa)
         .eq("ativo", true);

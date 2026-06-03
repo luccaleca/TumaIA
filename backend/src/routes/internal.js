@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { env } from "../config.js";
+import { DEFAULT_OLLAMA_CHAT_MODEL } from "../ollamaDefaults.js";
 import { requireInternalSecret } from "../middleware/internalAuth.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { getLlamaTextUsage, recordLlamaTextCall } from "../services/llamaUsage.js";
@@ -94,7 +95,7 @@ Regras:
       hashtags: Array.isArray(result?.parsed?.hashtags)
         ? result.parsed.hashtags.map((h) => String(h).trim()).filter(Boolean).slice(0, limiteHashtags)
         : [],
-      model: result?.model || env.LLAMA_MODEL || "llama3.2:3b",
+      model: result?.model || env.LLAMA_MODEL || DEFAULT_OLLAMA_CHAT_MODEL,
     };
 
     if (!normalized.copy || !normalized.descricao) {

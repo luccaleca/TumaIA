@@ -1,11 +1,25 @@
 """Normalização e formatação do histórico da conversa para o prompt."""
 
+import os
+
+# Alinhado a CHAT_PROMPT_HISTORY_MAX em backend/src/services/chatHistoryLimit.js
+_DEFAULT_MAX_TURNOS = 48
+
+
+def _max_turnos_historico() -> int:
+    raw = os.getenv("TUMACORE_CHAT_HISTORY_TURNS", str(_DEFAULT_MAX_TURNOS))
+    try:
+        n = int(raw)
+    except ValueError:
+        n = _DEFAULT_MAX_TURNOS
+    return max(4, min(80, n))
+
 
 def normalizar_historico(history: list[dict] | None) -> list[dict[str, str]]:
     if not history:
         return []
     out: list[dict[str, str]] = []
-    for item in history[-12:]:
+    for item in history[-_max_turnos_historico() :]:
         if not isinstance(item, dict):
             continue
         role = str(item.get("role") or "").strip().lower()

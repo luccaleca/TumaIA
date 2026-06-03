@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { env } from "../config.js";
+import { DEFAULT_OLLAMA_CHAT_MODEL } from "../ollamaDefaults.js";
 import { llamaChatCompletionJson } from "./llamaOpenAiClient.js";
 import { recordLlamaTextCall } from "./llamaUsage.js";
 import {
@@ -32,6 +33,7 @@ import {
   scoreRowForProductSpec,
   pruneProposalMidiasToPedido,
   reconcileProposalMidias,
+  resolveMidiaRowsForPedido,
   scoreRowProductMention,
 } from "./productMentionMatch.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
@@ -283,59 +285,7 @@ function pickBestCampaignContext(contextoRows, userHint = "") {
 }
 
 function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
-  const rows = Array.isArray(midiaRows) ? midiaRows : [];
-  if (!rows.length) return [];
-  const pedidoHint = String(userHint || "").trim();
-  const spec = parseProductMentionSpec(pedidoHint);
-  const mentions = spec.terms;
-  const tokens = tokenizeSearchText(pedidoHint);
-  const imageRows = rows.filter((row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem");
-  if (!imageRows.length) return [];
-
-  const { pool, strict } = narrowImageRowsByProductMention(imageRows, pedidoHint);
-  const searchPool = strict ? pool : imageRows;
-  if (strict && !searchPool.length) return [];
-
-  const scored = searchPool
-    .map((row) => {
-      let score = 0;
-      if (strict && spec.mode !== "none") {
-        score = scoreRowForProductSpec(row, spec);
-      } else {
-        const blob = `${row?.nome_exibicao ?? ""} ${row?.nome_arquivo ?? ""} ${row?.descricao ?? ""} ${row?.alt_text ?? ""}`;
-        score = scoreTokenOverlap(blob, tokens);
-        score += scoreRowProductMention(row, mentions);
-        if (PRODUCT_MATCH_HINT.test(pedidoHint) && PRODUCT_MATCH_HINT.test(blob)) score += 5;
-      }
-      return { row, score };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score);
-
-  if (!scored.length) {
-    if (strict) return [];
-    const bestId = pickBestProductMidiaId(imageRows, pedidoHint);
-    return bestId ? imageRows.filter((row) => String(row.id_midia ?? "").trim() === bestId).slice(0, 1) : [];
-  }
-
-  const candidateIds = scored.map((item) => String(item.row.id_midia ?? "").trim()).filter(Boolean);
-  const ranked = rankReferenceMidiaIds(candidateIds, imageRows, pedidoHint);
-  const byId = new Map(imageRows.map((row) => [String(row.id_midia ?? "").trim(), row]));
-  let ordered = ranked
-    .map((id) => byId.get(id))
-    .filter(Boolean)
-    .slice(0, limit);
-  const explicitHeroId = pickHeroProductMidiaId(searchPool.length ? searchPool : imageRows, pedidoHint);
-  if (explicitHeroId) {
-    const heroRow = byId.get(explicitHeroId);
-    if (heroRow) {
-      ordered = [heroRow, ...ordered.filter((row) => String(row.id_midia ?? "").trim() !== explicitHeroId)].slice(
-        0,
-        limit,
-      );
-    }
-  }
-  return ordered;
+  return resolveMidiaRowsForPedido(midiaRows, userHint, limit);
 }
 
 function buildHeroProductSelection(rows, userHint = "", fallbackToFirst = false) {
@@ -635,14 +585,60 @@ function buildReadyConfirmationMessage(links, proposal) {
   return "Revise o resumo antes de gerar.";
 }
 
+/**
+ * Inclui imagens anexadas no chat como referências de mídia (prioridade sobre heurística).
+ * @param {Record<string, unknown>} proposal
+ * @param {string[]} attachmentIds
+ * @param {Array<Record<string, unknown>>} midiaRows
+ */
+function mergeChatAttachmentMidiasIntoProposal(proposal, attachmentIds, midiaRows) {
+  const p = proposal && typeof proposal === "object" ? { ...proposal } : {};
+  const ids = [...new Set((attachmentIds || []).map((x) => String(x || "").trim()).filter(Boolean))].slice(
+    0,
+    3,
+  );
+  if (!ids.length) return p;
+
+  const byId = new Map(midiaRows.map((r) => [String(r.id_midia ?? "").trim(), r]));
+  const fromChat = ids
+    .map((id) => {
+      const row = byId.get(id);
+      if (!row) return null;
+      return {
+        id_midia: id,
+        nome_exibicao: String(row.nome_exibicao ?? row.nome_arquivo ?? "Imagem do chat").trim(),
+        why: "Imagem anexada pelo cliente no chat.",
+      };
+    })
+    .filter(Boolean);
+
+  if (!fromChat.length) return p;
+
+  const existing = Array.isArray(p.midias_referenced) ? p.midias_referenced : [];
+  const seen = new Set(fromChat.map((r) => r.id_midia));
+  const rest = existing.filter((item) => {
+    const id = item && typeof item === "object" ? String(item.id_midia ?? "").trim() : "";
+    return id && !seen.has(id);
+  });
+  p.midias_referenced = [...fromChat, ...rest].slice(0, 3);
+  if (!p.hero_product) {
+    p.hero_product = buildHeroProductSelection(
+      fromChat.map((item) => byId.get(item.id_midia)).filter(Boolean),
+      "",
+      true,
+    );
+  }
+  return p;
+}
+
 function ensureProposalMidiasReferenced(proposal, midiaRows, userHint) {
   const p = proposal && typeof proposal === "object" ? { ...proposal } : {};
-  if (proposalHasMidiaRefs(p)) return p;
   const picked = pickReferencedMidias(midiaRows, userHint, 3);
   if (!picked.length) return p;
   p.midias_referenced = picked.map((row) => ({
     id_midia: String(row.id_midia ?? "").trim(),
     nome_exibicao: String(row.nome_exibicao ?? row.nome_arquivo ?? "Mídia").trim() || "Mídia",
+    nome_arquivo: String(row.nome_arquivo ?? "").trim() || undefined,
     why: "PNG do acervo selecionado conforme o pedido.",
   }));
   p.hero_product = buildHeroProductSelection(picked, userHint, true);
@@ -664,6 +660,7 @@ function normalizeMidiasReferencedRows(proposal, midiaRows) {
         nome_exibicao:
           String(item.nome_exibicao ?? row.nome_exibicao ?? row.nome_arquivo ?? "Mídia").trim() ||
           "Mídia",
+        nome_arquivo: String(row.nome_arquivo ?? "").trim() || undefined,
         why:
           typeof item.why === "string" && item.why.trim()
             ? item.why.trim().slice(0, 240)
@@ -856,7 +853,7 @@ async function llamaGenerateJson(promptUser) {
       "Configure LLAMA_BASE_URL e/ou LLAMA_MODEL no .env do backend (API OpenAI-compatível, ex. Ollama).",
     );
   }
-  const proposalModel = (env.LLAMA_PROPOSAL_MODEL || env.LLAMA_MODEL || "llama3.2:1b").trim();
+  const proposalModel = (env.LLAMA_PROPOSAL_MODEL || env.LLAMA_MODEL || DEFAULT_OLLAMA_CHAT_MODEL).trim();
   const timeoutMs = Number(env.LLAMA_PROPOSAL_TIMEOUT_MS) || 90_000;
   const strictSuffix =
     "\n\nIMPORTANTE: responda SOMENTE um objeto JSON válido, sem markdown.";
@@ -929,7 +926,10 @@ function buildRawPostContextProposal(history, brandColors = [], existingBrief = 
  * }} opts
  */
 export async function generatePostContextProposal(opts) {
-  const { history, idEmpresa, db, arteBriefDraft = null } = opts;
+  const { history, idEmpresa, db, arteBriefDraft = null, attachmentMidiaIds = [] } = opts;
+  const attachmentIds = Array.isArray(attachmentMidiaIds)
+    ? attachmentMidiaIds.map((x) => String(x || "").trim()).filter(Boolean)
+    : [];
 
   if ((env.IMAGE_PIPELINE || "raw") === "raw") {
     const [contextoRows, midiaRows] = await Promise.all([
@@ -971,6 +971,7 @@ export async function generatePostContextProposal(opts) {
         buildHeroProductSelection(mergedRefs, resolveActivePedidoHint(history), true),
     };
     const rawHint = resolveActivePedidoHint(history, { proposal: mergedProposal });
+    mergedProposal = mergeChatAttachmentMidiasIntoProposal(mergedProposal, attachmentIds, midiaRows);
     const rawGate = applyProductMediaGate(mergedProposal, midiaRows, rawHint, history);
     mergedProposal = finalizePostContextProposal(rawGate.proposal, midiaRows, history, rawHint);
     const links = resolvePostSupplementLinks(raw.links, mergedProposal, contextoRows, midiaRows);
@@ -1081,7 +1082,7 @@ ${formatEmpresaForLlm(empresaRow)}
 
   let parsed;
   let usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
-  let model = env.LLAMA_MODEL || "llama3.2:3b";
+  let model = env.LLAMA_MODEL || DEFAULT_OLLAMA_CHAT_MODEL;
   let usedPanelFallback = false;
   let fallbackMeta = null;
 
@@ -1172,6 +1173,12 @@ ${formatEmpresaForLlm(empresaRow)}
   } else if (!explicitFrase) {
     post_context_proposal.frase_na_imagem = "";
   }
+
+  post_context_proposal = mergeChatAttachmentMidiasIntoProposal(
+    post_context_proposal,
+    attachmentIds,
+    midiaRows,
+  );
 
   let mediaGate = applyProductMediaGate(post_context_proposal, midiaRows, hint, history);
   post_context_proposal = mediaGate.proposal;

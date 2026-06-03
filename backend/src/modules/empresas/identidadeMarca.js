@@ -326,7 +326,7 @@ export function formatBrandIdentityForRawPrompt(dados, maxLen = 900) {
   if (d.publico) lines.push(`Público-alvo (estética): ${d.publico}.`);
   if (d.id_midia_logo) {
     lines.push(
-      "Logo da marca: canto inferior direito em tamanho legível (~25% da altura); nunca minúscula, salvo pedido explícito de logo em destaque.",
+      "Logo da marca: marca d'água discreta num canto livre (~7–9% da altura, semitransparente) — identifica a empresa sem ser o foco; não desenhar logo na arte gerada, salvo pedido explícito de logo em destaque.",
     );
   }
   if (d.segmento) lines.push(`Segmento: ${d.segmento}.`);

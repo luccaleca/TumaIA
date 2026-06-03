@@ -17,11 +17,8 @@ import {
   pickHeroProductMidiaId,
   rankReferenceMidiaIds,
 } from "../../backend/src/services/referenceMidiaRanking.js";
-import {
-  buildProductLayoutSlots,
-  COMPOSE_HERO_SIZE_BOOST,
-  COMPOSE_LOGO_FRAME_FRACTION,
-} from "../../backend/src/services/productSceneComposer.js";
+import { orderGptImage2ReferenceIds } from "../../backend/src/services/gptImage2OfficialRequest.js";
+import { getImageProductMode, usesGptIntegratedProducts } from "../../backend/src/services/imageProductDelivery.js";
 import { partitionContextosIdentidade } from "../../backend/src/modules/empresas/identidadeMarca.js";
 import { resolveActivePedidoHint } from "../../backend/src/services/imageHeadline.js";
 import { createMockEmpresaDb } from "./helpers/mockEmpresaDb.js";
@@ -134,24 +131,20 @@ function simulatePreviewComposition(proposal, midiaRows, imageIntent, logoId) {
     productRefIds.map((id) => midiaRows.find((r) => r.id_midia === id)).filter(Boolean),
     pedido,
   );
-  const slots = buildProductLayoutSlots(productRefIds.length, 1080, 1080, { heroPreferred: true });
-  const heroIndex = Math.max(0, productRefIds.findIndex((id) => id === heroProductId));
-  const heroSlot = slots[heroIndex] ?? slots[0];
-  const heroPixelWidth = Math.round(1080 * (heroSlot?.width ?? 0.5) * COMPOSE_HERO_SIZE_BOOST);
-  const maxProductPixelWidth = Math.max(
-    ...slots.map((slot) => Math.round(1080 * slot.width * COMPOSE_HERO_SIZE_BOOST)),
-  );
-  const logoPixelWidth = Math.round(1080 * COMPOSE_LOGO_FRAME_FRACTION);
+  const productMode = getImageProductMode();
+  const integrated = usesGptIntegratedProducts(productMode);
+  const gptInputIds = integrated
+    ? orderGptImage2ReferenceIds(productRefIds, { heroProductId, logoId, logoAsHero: false })
+    : productRefIds;
 
   return {
     refIds,
     productRefIds,
     heroProductId,
-    composeProductAssets: productRefIds.length > 0,
-    heroPixelWidth,
-    maxProductPixelWidth,
-    logoPixelWidth,
-    slots,
+    composeProductAssets: integrated ? false : productRefIds.length > 0,
+    gpt_input_ids: gptInputIds,
+    product_mode: productMode,
+    api_shape: integrated ? "images.edit" : "collage",
   };
 }
 
@@ -246,7 +239,10 @@ describe("fluxo completo — pedido creatina integral", () => {
       contextoRows,
       postContextProposal: imageIntent.postContextProposal,
       focusContextoId: CTX_PROMO,
-      composeProductAssets: true,
+      integratedProductGeneration: true,
+      productNames: ["creatina integral"],
+      logoInReferences: true,
+      aspectRatio: "1:1",
       productCount: 1,
       pipeline: "raw",
     });
@@ -254,20 +250,19 @@ describe("fluxo completo — pedido creatina integral", () => {
       length: prompt.length,
       trechos: {
         creatina: /creatina/i.test(prompt),
-        modo_colagem: /MODO FUNDO PARA COLAGEM/i.test(prompt),
-        cor_marca: /#6B2D9E|#00E676/i.test(prompt),
-        identidade: /Identidade da marca/i.test(prompt),
+        official_shape: /reference pictures/i.test(prompt),
         promo_academias: /academia/i.test(prompt),
-        logo_legivel: /logo real|25–30%|legível/i.test(prompt),
+        logo_watermark: /watermark/i.test(prompt),
         sem_monster: !/monster/i.test(prompt),
+        sem_colagem_sharp: !/MODO FUNDO PARA COLAGEM/i.test(prompt),
       },
     };
 
     assert.match(prompt, /creatina/i);
-    assert.match(prompt, /MODO FUNDO PARA COLAGEM/i);
-    assert.match(prompt, /#6B2D9E|#00E676/);
-    assert.match(prompt, /Identidade da marca/i);
+    assert.match(prompt, /reference pictures/i);
     assert.match(prompt, /academia/i);
+    assert.match(prompt, /watermark/i);
+    assert.doesNotMatch(prompt, /MODO FUNDO PARA COLAGEM/i);
     assert.doesNotMatch(prompt, /monster/i);
 
     // 4) Composição planejada (PNG + logo)
@@ -283,13 +278,10 @@ describe("fluxo completo — pedido creatina integral", () => {
     assert.deepEqual(compose.productRefIds, [MID_CREATINA_INTEGRAL]);
     assert.equal(compose.productRefIds.includes(MID_MONSTER), false);
     assert.equal(compose.heroProductId, MID_CREATINA_INTEGRAL);
-    assert.equal(compose.composeProductAssets, true);
-    const minLargestPx = 900;
-    assert.ok(
-      compose.maxProductPixelWidth >= minLargestPx,
-      `maior produto ~${compose.maxProductPixelWidth}px (mín. ${minLargestPx})`,
-    );
-    assert.ok(compose.logoPixelWidth >= 250, "logo deve ser legível");
+    assert.equal(compose.composeProductAssets, false);
+    assert.equal(compose.api_shape, "images.edit");
+    assert.ok(compose.gpt_input_ids.includes(MID_CREATINA_INTEGRAL));
+    assert.ok(compose.gpt_input_ids.includes(logoId));
     assert.equal(logoId, MID_LOGO);
 
     // 5) Acervo: só creatinas no pool estrito do pedido

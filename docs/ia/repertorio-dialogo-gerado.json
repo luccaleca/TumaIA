@@ -1,0 +1,3108 @@
+{
+  "generated_at": "2026-06-02T02:29:24.481Z",
+  "mode": "pipeline",
+  "total": 229,
+  "ok": 229,
+  "fail": 0,
+  "taxa_ok": "100.0%",
+  "rotas": {
+    "identity": 74,
+    "llm_skipped": 104,
+    "acervo": 26,
+    "composite": 1,
+    "empresa": 2,
+    "out_of_scope": 18,
+    "contextos": 4
+  },
+  "problemas": {},
+  "entries": [
+    {
+      "id": 1,
+      "session": "single",
+      "question": "oi",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 2,
+      "session": "single",
+      "question": "olá",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 3,
+      "session": "single",
+      "question": "ola",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 4,
+      "session": "single",
+      "question": "e aí",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 5,
+      "session": "single",
+      "question": "e ai",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 6,
+      "session": "single",
+      "question": "bom dia",
+      "history": [],
+      "route": "identity",
+      "answer": "Bom dia! Sou o Tuma IA, da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 7,
+      "session": "single",
+      "question": "boa tarde",
+      "history": [],
+      "route": "identity",
+      "answer": "Boa tarde! Sou o Tuma IA, da FYT. Em que posso ajudar?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 8,
+      "session": "single",
+      "question": "boa noite",
+      "history": [],
+      "route": "identity",
+      "answer": "Boa noite! Sou o Tuma IA, da FYT. Em que posso ajudar?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 9,
+      "session": "single",
+      "question": "fala",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 10,
+      "session": "single",
+      "question": "opa",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 11,
+      "session": "single",
+      "question": "qual seu nome",
+      "history": [],
+      "route": "identity",
+      "answer": "Meu nome é Tuma IA — assistente de criação de artes da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 12,
+      "session": "single",
+      "question": "como você se chama",
+      "history": [],
+      "route": "identity",
+      "answer": "Meu nome é Tuma IA — assistente de criação de artes da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 13,
+      "session": "single",
+      "question": "quem é você",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [
+        "IDENTIDADE_QUEM"
+      ],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 14,
+      "session": "single",
+      "question": "vc é quem",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, da FYT — ajudo com posts, artes e o que tem cadastrado em Mídias.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 15,
+      "session": "single",
+      "question": "fala sobre você",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 16,
+      "session": "single",
+      "question": "se apresenta",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, da FYT — ajudo com posts, artes e o que tem cadastrado em Mídias.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 17,
+      "session": "single",
+      "question": "o que você faz",
+      "history": [],
+      "route": "identity",
+      "answer": "Ajudo a FYT com posts e artes pro Instagram usando as fotos de Mídias, tiro dúvidas sobre produtos do acervo e sobre o cadastro da empresa.",
+      "topics": [
+        "IDENTIDADE_FUNCAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 18,
+      "session": "single",
+      "question": "para que você serve",
+      "history": [],
+      "route": "identity",
+      "answer": "Sirvo a FYT no marketing visual: listo produtos das fotos em Mídias, explico a empresa e contextos cadastrados, e monto posts/artes pro Instagram. Quando você pedir uma arte, o painel mostra o resumo antes da prévia.",
+      "topics": [
+        "IDENTIDADE_FUNCAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 19,
+      "session": "single",
+      "question": "quem te criou",
+      "history": [],
+      "route": "identity",
+      "answer": "Fui criado por Diego Suhai Navarro.",
+      "topics": [
+        "CRIADOR"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 20,
+      "session": "single",
+      "question": "o que significa Tuma",
+      "history": [],
+      "route": "identity",
+      "answer": "O nome Tuma vem do suaíli (swahili) e significa «enviar». Sou a IA de conteúdo do TumaIA.",
+      "topics": [
+        "SIGNIFICADO_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 21,
+      "session": "single",
+      "question": "quem tá falando",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, da FYT — ajudo com posts, artes e o que tem cadastrado em Mídias.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 22,
+      "session": "single",
+      "question": "me fala de você",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 23,
+      "session": "single",
+      "question": "você consegue me ajudar?",
+      "history": [],
+      "route": "identity",
+      "answer": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 24,
+      "session": "single",
+      "question": "você consegue?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 25,
+      "session": "single",
+      "question": "consegue ajudar",
+      "history": [],
+      "route": "identity",
+      "answer": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 26,
+      "session": "single",
+      "question": "vc pode ajudar",
+      "history": [],
+      "route": "identity",
+      "answer": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 27,
+      "session": "single",
+      "question": "se eu pedir uma postagem você ajuda",
+      "history": [],
+      "route": "identity",
+      "answer": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 28,
+      "session": "single",
+      "question": "dá pra fazer arte aqui?",
+      "history": [],
+      "route": "identity",
+      "answer": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 29,
+      "session": "single",
+      "question": "como faço pra pedir um post",
+      "history": [],
+      "route": "identity",
+      "answer": "Escreve o que quer — produto, formato, texto — tipo «monta um post do whey pro feed». Eu monto o resumo no painel da FYT pra você confirmar antes da prévia.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 30,
+      "session": "single",
+      "question": "como funciona",
+      "history": [],
+      "route": "identity",
+      "answer": "Você conversa comigo aqui; para arte, o painel da FYT mostra um resumo do pedido antes da prévia. Produtos e campanhas vêm do que está em Mídias e Contextos.",
+      "topics": [
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 31,
+      "session": "single",
+      "question": "como funciona o chat",
+      "history": [],
+      "route": "identity",
+      "answer": "Você conversa comigo aqui; para arte, o painel da FYT mostra um resumo do pedido antes da prévia. Produtos e campanhas vêm do que está em Mídias e Contextos.",
+      "topics": [
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 32,
+      "session": "single",
+      "question": "como funciona o tuma",
+      "history": [],
+      "route": "identity",
+      "answer": "Você conversa comigo aqui; para arte, o painel da FYT mostra um resumo do pedido antes da prévia. Produtos e campanhas vêm do que está em Mídias e Contextos.",
+      "topics": [
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 33,
+      "session": "single",
+      "question": "como funciona o painel",
+      "history": [],
+      "route": "identity",
+      "answer": "Você conversa comigo aqui; para arte, o painel da FYT mostra um resumo do pedido antes da prévia. Produtos e campanhas vêm do que está em Mídias e Contextos.",
+      "topics": [
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 34,
+      "session": "single",
+      "question": "para que serve",
+      "history": [],
+      "route": "identity",
+      "answer": "Sirvo a FYT no marketing visual: listo produtos das fotos em Mídias, explico a empresa e contextos cadastrados, e monto posts/artes pro Instagram. Quando você pedir uma arte, o painel mostra o resumo antes da prévia.",
+      "topics": [
+        "IDENTIDADE_FUNCAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 35,
+      "session": "single",
+      "question": "quais produtos temos?",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 36,
+      "session": "single",
+      "question": "lista o acervo",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 37,
+      "session": "single",
+      "question": "o que temos em mídias",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 38,
+      "session": "single",
+      "question": "produtos cadastrados",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 39,
+      "session": "single",
+      "question": "me lista os produtos",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 40,
+      "session": "single",
+      "question": "tem o que no acervo",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 41,
+      "session": "single",
+      "question": "quais itens temos",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 42,
+      "session": "single",
+      "question": "temos monster?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Sim — temos monster no acervo da FYT.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 43,
+      "session": "single",
+      "question": "tem whey?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Sim — temos whey de chocolate no acervo da FYT.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 44,
+      "session": "single",
+      "question": "tem creatina?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Sim — temos creatina growth no acervo da FYT.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 45,
+      "session": "single",
+      "question": "tem produto xyz123?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Não encontrei «produto xyz123» cadastrado em Mídias da FYT. Se for produto novo, cadastre a imagem no painel com esse nome.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 46,
+      "session": "single",
+      "question": "quanto custa o whey?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 47,
+      "session": "single",
+      "question": "tem estoque?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Não encontrei «estoque» cadastrado em Mídias da FYT. Se for produto novo, cadastre a imagem no painel com esse nome.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 48,
+      "session": "single",
+      "question": "valeu",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [
+        "AGRADECIMENTO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 49,
+      "session": "single",
+      "question": "obrigado",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 50,
+      "session": "single",
+      "question": "obrigada",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 51,
+      "session": "single",
+      "question": "show",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [
+        "AGRADECIMENTO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 52,
+      "session": "single",
+      "question": "perfeito",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [
+        "AGRADECIMENTO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 53,
+      "session": "single",
+      "question": "tchau",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [
+        "AGRADECIMENTO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 54,
+      "session": "single",
+      "question": "até mais",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [
+        "AGRADECIMENTO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 55,
+      "session": "single",
+      "question": "falou",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 56,
+      "session": "single",
+      "question": "não era isso",
+      "history": [],
+      "route": "identity",
+      "answer": "Entendi — me diz de novo o que você precisa que eu respondo direto.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 57,
+      "session": "single",
+      "question": "entendeu errado",
+      "history": [],
+      "route": "identity",
+      "answer": "Entendi — me diz de novo o que você precisa que eu respondo direto.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 58,
+      "session": "single",
+      "question": "para de repetir",
+      "history": [],
+      "route": "identity",
+      "answer": "Entendi — me diz de novo o que você precisa que eu respondo direto.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 59,
+      "session": "single",
+      "question": "não era isso só queria seu nome",
+      "history": [],
+      "route": "identity",
+      "answer": "Desculpa! Meu nome é Tuma IA, da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 60,
+      "session": "single",
+      "question": "já falei",
+      "history": [],
+      "route": "identity",
+      "answer": "Entendi — me diz de novo o que você precisa que eu respondo direto.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 61,
+      "session": "single",
+      "question": "não perguntei isso",
+      "history": [],
+      "route": "identity",
+      "answer": "Entendi — me diz de novo o que você precisa que eu respondo direto.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 62,
+      "session": "single",
+      "question": "oi, quem é vc e como funciona?",
+      "history": [],
+      "route": "composite",
+      "answer": "Sou o Tuma IA — ajudo o marketing da FYT com posts e artes pro Instagram.\n\nVocê conversa comigo aqui no chat; quando pedir uma arte, o painel mostra um resumo do pedido antes de gerar a prévia. Produtos e campanhas vêm do que está cadastrado em Mídias e Contextos.\n\nQuer listar produtos em Mídias ou montar um post?",
+      "topics": [
+        "IDENTIDADE_QUEM",
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 63,
+      "session": "single",
+      "question": "oi qual seu nome e quais produtos",
+      "history": [],
+      "route": "identity",
+      "answer": "Meu nome é Tuma IA — assistente de criação de artes da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 64,
+      "session": "single",
+      "question": "tem monster?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Sim — temos monster no acervo da FYT.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 65,
+      "session": "single",
+      "question": "fala sobre a empresa",
+      "history": [],
+      "route": "empresa",
+      "answer": "Trabalho com a FYT. segmento: Suplementos e fitness. Loja de suplementos com foco em performance..",
+      "topics": [
+        "EMPRESA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 66,
+      "session": "single",
+      "question": "e os produtos?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 67,
+      "session": "single",
+      "question": "quais produtos",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 68,
+      "session": "single",
+      "question": "e aí quem fala",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 69,
+      "session": "single",
+      "question": "o que é vc",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, da FYT — ajudo com posts, artes e o que tem cadastrado em Mídias.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 70,
+      "session": "single",
+      "question": "quem é vc",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, assistente de criação de artes da FYT. Ajudo com posts e conteúdo pro Instagram — falo como alguém do marketing de vocês.",
+      "topics": [
+        "IDENTIDADE_QUEM"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 71,
+      "session": "single",
+      "question": "me explica quem é você",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [
+        "IDENTIDADE_QUEM"
+      ],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 72,
+      "session": "single",
+      "question": "fala de voce",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, da FYT — ajudo com posts, artes e o que tem cadastrado em Mídias.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 73,
+      "session": "single",
+      "question": "apresentação",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, da FYT — ajudo com posts, artes e o que tem cadastrado em Mídias.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 74,
+      "session": "single",
+      "question": "qual é seu nome",
+      "history": [],
+      "route": "identity",
+      "answer": "Meu nome é Tuma IA — assistente de criação de artes da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 75,
+      "session": "single",
+      "question": "seu nome é o que",
+      "history": [],
+      "route": "identity",
+      "answer": "Meu nome é Tuma IA — assistente de criação de artes da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 76,
+      "session": "single",
+      "question": "lista produtos",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 77,
+      "session": "single",
+      "question": "mostra o acervo",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 78,
+      "session": "single",
+      "question": "quais mídias temos",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 79,
+      "session": "single",
+      "question": "o que tem cadastrado",
+      "history": [],
+      "route": "acervo",
+      "answer": "Não encontrei «cadastrado» cadastrado em Mídias da FYT. Se for produto novo, cadastre a imagem no painel com esse nome.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 80,
+      "session": "single",
+      "question": "produto disponível",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 81,
+      "session": "single",
+      "question": "tem powerade?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Sim — temos powerade no acervo da FYT.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 82,
+      "session": "single",
+      "question": "obrigado pela ajuda",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 83,
+      "session": "single",
+      "question": "bom dia tudo bem",
+      "history": [],
+      "route": "identity",
+      "answer": "Bom dia! Sou o Tuma IA, da FYT. O que você precisa hoje?",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 84,
+      "session": "single",
+      "question": "como você funciona",
+      "history": [],
+      "route": "identity",
+      "answer": "Você conversa comigo aqui; para arte, o painel da FYT mostra um resumo do pedido antes da prévia. Produtos e campanhas vêm do que está em Mídias e Contextos.",
+      "topics": [
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 85,
+      "session": "single",
+      "question": "vc ajuda com post?",
+      "history": [],
+      "route": "identity",
+      "answer": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 86,
+      "session": "single",
+      "question": "blz",
+      "history": [],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 87,
+      "session": "single",
+      "question": "então?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 88,
+      "session": "single",
+      "question": "hm",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 89,
+      "session": "single",
+      "question": "ok e agora?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 90,
+      "session": "single",
+      "question": "não entendi",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 91,
+      "session": "single",
+      "question": "explica melhor",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 92,
+      "session": "single",
+      "question": "tipo assim, vc lista o que tem?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 93,
+      "session": "single",
+      "question": "cadê os produtos",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 94,
+      "session": "single",
+      "question": "tem coisa de whey?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Não encontrei «coisa de whey» cadastrado em Mídias da FYT. Se for produto novo, cadastre a imagem no painel com esse nome.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 95,
+      "session": "single",
+      "question": "monster energy tá aí?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 96,
+      "session": "single",
+      "question": "quero saber da loja",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 97,
+      "session": "single",
+      "question": "instagram da fy",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 98,
+      "session": "single",
+      "question": "monta post do monster",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 99,
+      "session": "single",
+      "question": "faz um stories do whey",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 100,
+      "session": "single",
+      "question": "gera arte",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 101,
+      "session": "single",
+      "question": "sim",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 102,
+      "session": "single",
+      "question": "não",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 103,
+      "session": "single",
+      "question": "pode ser",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 104,
+      "session": "single",
+      "question": "isso mesmo",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 105,
+      "session": "single",
+      "question": "qual a diferença entre vocês e o chatgpt",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 106,
+      "session": "single",
+      "question": "vc é chatgpt?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 107,
+      "session": "single",
+      "question": "me fala uma piada",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Isso foge do que faço aqui — sou o Tuma IA da FYT, focado em Mídias, posts e informações da empresa. Quer ajuda com algum desses?",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 108,
+      "session": "single",
+      "question": "que horas são",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Agora são 23:29 em Brasília (segunda-feira, 1 de junho de 2026).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 109,
+      "session": "single",
+      "question": "o que significa LOL",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 110,
+      "session": "single",
+      "question": "tuma significa o que mesmo?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 111,
+      "session": "single",
+      "question": "quem criou você?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 112,
+      "session": "single",
+      "question": "vc é robô?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 113,
+      "session": "single",
+      "question": "ajuda aí",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 114,
+      "session": "single",
+      "question": "preciso de ajuda",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 115,
+      "session": "single",
+      "question": "to perdido",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 116,
+      "session": "single",
+      "question": "primeira vez aqui",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 117,
+      "session": "single",
+      "question": "como cadastro produto",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 118,
+      "session": "single",
+      "question": "onde subo foto",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 119,
+      "session": "single",
+      "question": "quantos produtos cadastrados",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 120,
+      "session": "single",
+      "question": "lista tudo",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 121,
+      "session": "single",
+      "question": "tem zzz produto fake",
+      "history": [],
+      "route": "acervo",
+      "answer": "Não encontrei «zzz produto fake» cadastrado em Mídias da FYT. Se for produto novo, cadastre a imagem no painel com esse nome.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 122,
+      "session": "single",
+      "question": "preço do whey",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 123,
+      "session": "single",
+      "question": "vocês entregam?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 124,
+      "session": "single",
+      "question": "campanha black friday",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 125,
+      "session": "single",
+      "question": "contexto black friday",
+      "history": [],
+      "route": "contextos",
+      "answer": "Temos 2 contextos ativos:\n\n• Black Friday\n• Tom de voz",
+      "topics": [
+        "CONTEXTOS"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 126,
+      "session": "single",
+      "question": "oi tudo bem?",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 127,
+      "session": "single",
+      "question": "fala mano",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 128,
+      "session": "single",
+      "question": "eae tuma",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 129,
+      "session": "single",
+      "question": "hey",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 130,
+      "session": "single",
+      "question": "bom dia equipe",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 131,
+      "session": "single",
+      "question": "boa noite galera",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 132,
+      "session": "single",
+      "question": "vlw flw",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 133,
+      "session": "single",
+      "question": "obrigado pela lista",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 134,
+      "session": "single",
+      "question": "errei foi mal",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 135,
+      "session": "single",
+      "question": "só queria o nome",
+      "history": [],
+      "route": "identity",
+      "answer": "Desculpa! Meu nome é Tuma IA, da FYT.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 136,
+      "session": "single",
+      "question": "para de listar produto",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 137,
+      "session": "single",
+      "question": "já perguntei isso",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 138,
+      "session": "single",
+      "question": "repetiu de novo",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 139,
+      "session": "single",
+      "question": "oi quem é vc",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, assistente de criação de artes da FYT. Ajudo com posts e conteúdo pro Instagram — falo como alguém do marketing de vocês.",
+      "topics": [
+        "IDENTIDADE_QUEM"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 140,
+      "session": "single",
+      "question": "oi como funciona o painel",
+      "history": [],
+      "route": "identity",
+      "answer": "Você conversa comigo aqui; para arte, o painel da FYT mostra um resumo do pedido antes da prévia. Produtos e campanhas vêm do que está em Mídias e Contextos.",
+      "topics": [
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 141,
+      "session": "single",
+      "question": "qual nome e quais produtos",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 142,
+      "session": "single",
+      "question": "fala de vc e lista produtos",
+      "history": [],
+      "route": "identity",
+      "answer": "Sou o Tuma IA, da FYT — ajudo com posts, artes e o que tem cadastrado em Mídias.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 143,
+      "session": "single",
+      "question": "pra que serve e tem monster?",
+      "history": [],
+      "route": "identity",
+      "answer": "Sirvo a FYT no marketing visual: listo produtos das fotos em Mídias, explico a empresa e contextos cadastrados, e monto posts/artes pro Instagram. Quando você pedir uma arte, o painel mostra o resumo antes da prévia.",
+      "topics": [
+        "IDENTIDADE_FUNCAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 144,
+      "session": "single",
+      "question": "como funciona e o que tem no acervo",
+      "history": [],
+      "route": "identity",
+      "answer": "Você conversa comigo aqui; para arte, o painel da FYT mostra um resumo do pedido antes da prévia. Produtos e campanhas vêm do que está em Mídias e Contextos.",
+      "topics": [
+        "COMO_FUNCIONA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 145,
+      "session": "single",
+      "question": "oq vc faz",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 146,
+      "session": "single",
+      "question": "vc faz oq",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 147,
+      "session": "single",
+      "question": "me explica vc",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 148,
+      "session": "single",
+      "question": "tuma quem é",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 149,
+      "session": "single",
+      "question": "cadê minha arte",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 150,
+      "session": "single",
+      "question": "gerou a imagem?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 151,
+      "session": "single",
+      "question": "formato stories",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 152,
+      "session": "single",
+      "question": "feed ou stories",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 153,
+      "session": "single",
+      "question": "texto na imagem",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 154,
+      "session": "single",
+      "question": "coloca preço no post",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 155,
+      "session": "single",
+      "question": "post promocional",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 156,
+      "session": "single",
+      "question": "arte com duas fotos",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 157,
+      "session": "single",
+      "question": "usa logo da empresa",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 158,
+      "session": "single",
+      "question": "cores da marca",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 159,
+      "session": "single",
+      "question": "tom da black friday",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 160,
+      "session": "single",
+      "question": "campanha de verão",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 161,
+      "session": "single",
+      "question": "produto em destaque monster",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 162,
+      "session": "single",
+      "question": "combo whey e creatina",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 163,
+      "session": "single",
+      "question": "tem desconto?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Não encontrei «desconto» cadastrado em Mídias da FYT. Se for produto novo, cadastre a imagem no painel com esse nome.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 164,
+      "session": "single",
+      "question": "quando abre a loja",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 165,
+      "session": "single",
+      "question": "onde fica a fy",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 166,
+      "session": "single",
+      "question": "telefone da loja",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 167,
+      "session": "single",
+      "question": "me manda o insta",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 168,
+      "session": "single",
+      "question": "link do instagram",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 169,
+      "session": "single",
+      "question": "quantas fotos no acervo",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 170,
+      "session": "single",
+      "question": "só imagens ou vídeo também",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 171,
+      "session": "single",
+      "question": "apaga contexto",
+      "history": [],
+      "route": "contextos",
+      "answer": "Temos 2 contextos ativos:\n\n• Black Friday\n• Tom de voz",
+      "topics": [
+        "CONTEXTOS"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 172,
+      "session": "single",
+      "question": "adiciona contexto",
+      "history": [],
+      "route": "contextos",
+      "answer": "Temos 2 contextos ativos:\n\n• Black Friday\n• Tom de voz",
+      "topics": [
+        "CONTEXTOS"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 173,
+      "session": "single",
+      "question": "treina a ia",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 174,
+      "session": "single",
+      "question": "vc aprende?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 175,
+      "session": "single",
+      "question": "memória da conversa",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 176,
+      "session": "single",
+      "question": "esquece o que falei",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 177,
+      "session": "single",
+      "question": "nova conversa",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 178,
+      "session": "single",
+      "question": "resetar chat",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 179,
+      "session": "single",
+      "question": "teste 123",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 180,
+      "session": "single",
+      "question": "asdfgh",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 181,
+      "session": "single",
+      "question": "???",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 182,
+      "session": "single",
+      "question": "hmm não sei",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 183,
+      "session": "single",
+      "question": "talvez um post",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 184,
+      "session": "single",
+      "question": "pensando aqui",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 185,
+      "session": "single",
+      "question": "deixa eu ver",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 186,
+      "session": "single",
+      "question": "um momento",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 187,
+      "session": "single",
+      "question": "continua",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 188,
+      "session": "single",
+      "question": "e daí?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 189,
+      "session": "single",
+      "question": "e o resto?",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 190,
+      "session": "single",
+      "question": "mais detalhes",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 191,
+      "session": "single",
+      "question": "resumo",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 192,
+      "session": "single",
+      "question": "tl;dr",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 193,
+      "session": "single",
+      "question": "que dia é hoje",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 194,
+      "session": "single",
+      "question": "qual a data de hoje",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 195,
+      "session": "single",
+      "question": "quero o dia da semana mes e ano",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 196,
+      "session": "single",
+      "question": "me diz a data",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 197,
+      "session": "single",
+      "question": "hoje é que dia",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 198,
+      "session": "single",
+      "question": "qual dia estamos",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 199,
+      "session": "single",
+      "question": "data completa por favor",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 200,
+      "session": "single",
+      "question": "que dia da semana é hoje",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 201,
+      "session": "single",
+      "question": "conta uma piada",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Isso foge do que faço aqui — sou o Tuma IA da FYT, focado em Mídias, posts e informações da empresa. Quer ajuda com algum desses?",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 202,
+      "session": "single",
+      "question": "qual a previsão do tempo",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Isso foge do que faço aqui — sou o Tuma IA da FYT, focado em Mídias, posts e informações da empresa. Quer ajuda com algum desses?",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 203,
+      "session": "single",
+      "question": "receita de bolo",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Isso foge do que faço aqui — sou o Tuma IA da FYT, focado em Mídias, posts e informações da empresa. Quer ajuda com algum desses?",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 204,
+      "session": "single",
+      "question": "quem ganhou o jogo",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Isso foge do que faço aqui — sou o Tuma IA da FYT, focado em Mídias, posts e informações da empresa. Quer ajuda com algum desses?",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 205,
+      "session": "single",
+      "question": "notícia do dia",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Isso foge do que faço aqui — sou o Tuma IA da FYT, focado em Mídias, posts e informações da empresa. Quer ajuda com algum desses?",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 206,
+      "session": "single",
+      "question": "quanto tá o dólar",
+      "history": [],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 207,
+      "session": "oi → que dia é hoje",
+      "question": "oi",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 208,
+      "session": "oi → que dia é hoje",
+      "question": "que dia é hoje",
+      "history": [
+        {
+          "role": "user",
+          "content": "oi"
+        },
+        {
+          "role": "assistant",
+          "content": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?"
+        }
+      ],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 209,
+      "session": "que dia é hoje → quero o dia da semana mes e ano",
+      "question": "que dia é hoje",
+      "history": [],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 210,
+      "session": "que dia é hoje → quero o dia da semana mes e ano",
+      "question": "quero o dia da semana mes e ano",
+      "history": [
+        {
+          "role": "user",
+          "content": "que dia é hoje"
+        },
+        {
+          "role": "assistant",
+          "content": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29)."
+        }
+      ],
+      "route": "out_of_scope",
+      "answer": "Hoje é segunda-feira, 1 de junho de 2026 (horário de Brasília, 23:29).",
+      "topics": [
+        "FORA_ESCOPO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 211,
+      "session": "oi → para oq vc serve",
+      "question": "oi",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 212,
+      "session": "oi → para oq vc serve",
+      "question": "para oq vc serve",
+      "history": [
+        {
+          "role": "user",
+          "content": "oi"
+        },
+        {
+          "role": "assistant",
+          "content": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?"
+        }
+      ],
+      "route": "identity",
+      "answer": "Sirvo a FYT no marketing visual: listo produtos das fotos em Mídias, explico a empresa e contextos cadastrados, e monto posts/artes pro Instagram. Quando você pedir uma arte, o painel mostra o resumo antes da prévia.",
+      "topics": [
+        "IDENTIDADE_FUNCAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 213,
+      "session": "oi → quais produtos temos? → tem monster?",
+      "question": "oi",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 214,
+      "session": "oi → quais produtos temos? → tem monster?",
+      "question": "quais produtos temos?",
+      "history": [
+        {
+          "role": "user",
+          "content": "oi"
+        },
+        {
+          "role": "assistant",
+          "content": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?"
+        }
+      ],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 215,
+      "session": "oi → quais produtos temos? → tem monster?",
+      "question": "tem monster?",
+      "history": [
+        {
+          "role": "user",
+          "content": "oi"
+        },
+        {
+          "role": "assistant",
+          "content": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?"
+        },
+        {
+          "role": "user",
+          "content": "quais produtos temos?"
+        },
+        {
+          "role": "assistant",
+          "content": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?"
+        }
+      ],
+      "route": "acervo",
+      "answer": "Sim — temos monster no acervo da FYT.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 216,
+      "session": "bom dia → qual seu nome → valeu",
+      "question": "bom dia",
+      "history": [],
+      "route": "identity",
+      "answer": "Bom dia! Sou o Tuma IA, da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 217,
+      "session": "bom dia → qual seu nome → valeu",
+      "question": "qual seu nome",
+      "history": [
+        {
+          "role": "user",
+          "content": "bom dia"
+        },
+        {
+          "role": "assistant",
+          "content": "Bom dia! Sou o Tuma IA, da FYT. O que você precisa hoje?"
+        }
+      ],
+      "route": "identity",
+      "answer": "Meu nome é Tuma IA — assistente de criação de artes da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 218,
+      "session": "bom dia → qual seu nome → valeu",
+      "question": "valeu",
+      "history": [
+        {
+          "role": "user",
+          "content": "bom dia"
+        },
+        {
+          "role": "assistant",
+          "content": "Bom dia! Sou o Tuma IA, da FYT. O que você precisa hoje?"
+        },
+        {
+          "role": "user",
+          "content": "qual seu nome"
+        },
+        {
+          "role": "assistant",
+          "content": "Meu nome é Tuma IA — assistente de criação de artes da FYT."
+        }
+      ],
+      "route": "identity",
+      "answer": "Perfeito! Quando a FYT precisar de algo, é só chamar.",
+      "topics": [
+        "AGRADECIMENTO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 219,
+      "session": "quais produtos temos? → fala sobre a empresa",
+      "question": "quais produtos temos?",
+      "history": [],
+      "route": "acervo",
+      "answer": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?",
+      "topics": [
+        "ACERVO_LISTA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 220,
+      "session": "quais produtos temos? → fala sobre a empresa",
+      "question": "fala sobre a empresa",
+      "history": [
+        {
+          "role": "user",
+          "content": "quais produtos temos?"
+        },
+        {
+          "role": "assistant",
+          "content": "No acervo da FYT temos 4 produtos:\n\n• creatina growth\n• monster\n• powerade\n• whey de chocolate\n\nQuer montar post de algum deles?"
+        }
+      ],
+      "route": "empresa",
+      "answer": "Trabalho com a FYT. segmento: Suplementos e fitness. Loja de suplementos com foco em performance..",
+      "topics": [
+        "EMPRESA"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 221,
+      "session": "qual seu nome → não era isso só queria seu nome",
+      "question": "qual seu nome",
+      "history": [],
+      "route": "identity",
+      "answer": "Meu nome é Tuma IA — assistente de criação de artes da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 222,
+      "session": "qual seu nome → não era isso só queria seu nome",
+      "question": "não era isso só queria seu nome",
+      "history": [
+        {
+          "role": "user",
+          "content": "qual seu nome"
+        },
+        {
+          "role": "assistant",
+          "content": "Meu nome é Tuma IA — assistente de criação de artes da FYT."
+        }
+      ],
+      "route": "identity",
+      "answer": "Desculpa! Meu nome é Tuma IA, da FYT.",
+      "topics": [
+        "IDENTIDADE_NOME"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 223,
+      "session": "oi → vc consegue me ajudar? → como faço pra pedir um post",
+      "question": "oi",
+      "history": [],
+      "route": "identity",
+      "answer": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?",
+      "topics": [
+        "SAUDACAO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 224,
+      "session": "oi → vc consegue me ajudar? → como faço pra pedir um post",
+      "question": "vc consegue me ajudar?",
+      "history": [
+        {
+          "role": "user",
+          "content": "oi"
+        },
+        {
+          "role": "assistant",
+          "content": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?"
+        }
+      ],
+      "route": "identity",
+      "answer": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 225,
+      "session": "oi → vc consegue me ajudar? → como faço pra pedir um post",
+      "question": "como faço pra pedir um post",
+      "history": [
+        {
+          "role": "user",
+          "content": "oi"
+        },
+        {
+          "role": "assistant",
+          "content": "Oi! Sou o Tuma IA, assistente de criação de artes da FYT. O que você precisa hoje?"
+        },
+        {
+          "role": "user",
+          "content": "vc consegue me ajudar?"
+        },
+        {
+          "role": "assistant",
+          "content": "Consigo sim! Ajudo a FYT com posts, artes e produtos do acervo em Mídias — é só dizer o que você precisa."
+        }
+      ],
+      "route": "identity",
+      "answer": "Escreve o que quer — produto, formato, texto — tipo «monta um post do whey pro feed». Eu monto o resumo no painel da FYT pra você confirmar antes da prévia.",
+      "topics": [],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 226,
+      "session": "tem whey? → monta um post do whey chocolate",
+      "question": "tem whey?",
+      "history": [],
+      "route": "acervo",
+      "answer": "Sim — temos whey de chocolate no acervo da FYT.",
+      "topics": [
+        "ACERVO_INFO"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 227,
+      "session": "tem whey? → monta um post do whey chocolate",
+      "question": "monta um post do whey chocolate",
+      "history": [
+        {
+          "role": "user",
+          "content": "tem whey?"
+        },
+        {
+          "role": "assistant",
+          "content": "Sim — temos whey de chocolate no acervo da FYT."
+        }
+      ],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 228,
+      "session": "quais contextos temos? → o que é black friday?",
+      "question": "quais contextos temos?",
+      "history": [],
+      "route": "contextos",
+      "answer": "Temos 2 contextos ativos:\n\n• Black Friday\n• Tom de voz",
+      "topics": [
+        "CONTEXTOS"
+      ],
+      "source": "deterministic",
+      "issues": [],
+      "ok": true
+    },
+    {
+      "id": 229,
+      "session": "quais contextos temos? → o que é black friday?",
+      "question": "o que é black friday?",
+      "history": [
+        {
+          "role": "user",
+          "content": "quais contextos temos?"
+        },
+        {
+          "role": "assistant",
+          "content": "Temos 2 contextos ativos:\n\n• Black Friday\n• Tom de voz"
+        }
+      ],
+      "route": "llm_skipped",
+      "answer": "[LLM não executado — use --llm]",
+      "topics": [],
+      "source": "skipped",
+      "issues": [],
+      "ok": true
+    }
+  ]
+}

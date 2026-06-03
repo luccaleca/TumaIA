@@ -89,10 +89,16 @@ export default function ChatImageConfirmBlock({
 
       {itemLinks.length > 0 ? (
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-          <p className={ROW_LABEL_CLASS}>PNG do acervo</p>
-          <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+          <p className={ROW_LABEL_CLASS}>
+            PNG do acervo{itemLinks.length > 1 ? ` (${itemLinks.length})` : ""}
+          </p>
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             {itemLinks.map((l) => (
-              <Link key={`${l.kind}-${l.id}`} href={l.href} className={CHIP_CLASS}>
+              <Link
+                key={`${l.kind}-${l.id}`}
+                href={l.href}
+                className={`${CHIP_CLASS} w-fit max-w-full truncate`}
+              >
                 {l.label}
               </Link>
             ))}

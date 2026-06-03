@@ -2,6 +2,11 @@
  * Vincula produtos do acervo ao que o cliente citou no pedido (ex.: "monster" ≠ "pro force morango").
  */
 
+import {
+  pickBestProductMidiaId,
+  pickHeroProductMidiaId,
+  rankReferenceMidiaIds,
+} from "./referenceMidiaRanking.js";
 
 const PRODUCT_MENTION_STOP = new Set([
   "com",
@@ -218,12 +223,156 @@ export function normalizeProductSearchText(value) {
   return String(value || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/\bwaffer\b/g, "wafer")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Remove espaços, hífens e pontuação — "pro-force" e "pro force" ficam iguais. */
 export function compactProductKey(value) {
   return normalizeProductSearchText(value).replace(/[^a-z0-9]/g, "");
+}
+
+/** Variantes de sabor no nome do arquivo (cookie ↔ cookies). */
+function flavorTokenVariants(token) {
+  const t = normalizeProductSearchText(token);
+  if (t === "cookies") return ["cookies", "cookie"];
+  if (t === "cookie") return ["cookie", "cookies"];
+  return [t];
+}
+
+/** Sinônimos que o cliente pode escrever no chat (não precisa bater com o nome do PNG). */
+const FLAVOR_DETECTORS = [
+  { canon: "baunilha", re: /\b(baunilha|vanilla)\b/i },
+  { canon: "chocolate", re: /\b(chocolate|choco)\b/i },
+  { canon: "cookies", re: /\b(cookies?|cook)\b/i },
+  { canon: "morango", re: /\b(morango|strawberry)\b/i },
+  { canon: "cafe", re: /\b(cafe|coffee)\b/i },
+  { canon: "canela", re: /\b(canela|cinnamon)\b/i },
+  { canon: "avela", re: /\bavela\b/i },
+];
+
+/**
+ * Sabores citados no pedido (texto livre).
+ * @param {string} text
+ * @returns {string[]}
+ */
+function extractFlavorsFromText(text) {
+  const n = normalizeProductSearchText(text);
+  const found = [];
+  for (const { canon, re } of FLAVOR_DETECTORS) {
+    re.lastIndex = 0;
+    if (re.test(n) && !found.includes(canon)) found.push(canon);
+  }
+  return found;
+}
+
+/**
+ * @param {string} token
+ * @returns {string | null}
+ */
+function mapLooseTokenToFlavor(token) {
+  const t = normalizeProductSearchText(token);
+  if (WHEY_LOOSE_CAPTURE_SKIP.has(t)) return null;
+  const aliases = {
+    vanilla: "baunilha",
+    baunilha: "baunilha",
+    choco: "chocolate",
+    chocolate: "chocolate",
+    cookie: "cookies",
+    cookies: "cookies",
+    cook: "cookies",
+    morango: "morango",
+    strawberry: "morango",
+    cafe: "cafe",
+    coffee: "cafe",
+    canela: "canela",
+    cinnamon: "canela",
+    avela: "avela",
+  };
+  if (aliases[t]) return aliases[t];
+  if (t === "cookie") return "cookies";
+  if (PRODUCT_VARIANT_QUALIFIERS.has(t)) return t;
+  return null;
+}
+
+/** Expande tokens de discriminador com sinônimos (vanilla → baunilha, etc.). */
+function expandFlavorSynonyms(tokens) {
+  const out = new Set();
+  for (const raw of tokens) {
+    for (const v of flavorTokenVariants(raw)) out.add(v);
+    const mapped = mapLooseTokenToFlavor(raw);
+    if (mapped) {
+      out.add(mapped);
+      for (const v of flavorTokenVariants(mapped)) out.add(v);
+    }
+    if (raw === "vanilla" || raw === "baunilha") {
+      out.add("baunilha");
+      out.add("vanilla");
+    }
+    if (raw === "choco" || raw === "chocolate") {
+      out.add("chocolate");
+      out.add("choco");
+    }
+  }
+  return [...out];
+}
+
+/**
+ * @param {string} blob
+ * @param {string} token
+ */
+function blobContainsFlavorToken(blob, token) {
+  const b = normalizeProductSearchText(blob);
+  const compactB = compactProductKey(blob);
+  for (const v of expandFlavorSynonyms([token])) {
+    if (b.includes(v)) return true;
+    const c = compactProductKey(v);
+    if (c.length >= 3 && compactB.includes(c)) return true;
+  }
+  return scoreTypoTokenInBlob(b, token) >= 55;
+}
+
+/**
+ * Match flexível: linha do produto + sabor no acervo, sem exigir «whey growth» no nome do arquivo.
+ * @param {string} blob
+ * @param {string} phrase
+ */
+function scoreFlexibleQualifiedPhrase(blob, phrase) {
+  if (!isQualifiedProductPhrase(phrase)) return 0;
+  const p = normalizeProductSearchText(phrase).replace(/\s+/g, " ").trim();
+  const b = normalizeProductSearchText(blob);
+  if (!discriminatorsSatisfiedInBlob(blob, phrase)) return 0;
+
+  if (p.startsWith("whey ") && !/\bwhey\b/.test(b) && !compactProductKey(blob).includes("whey")) return 0;
+  if (
+    p.startsWith("pro force") &&
+    !/\bpro\s*[-_/]?\s*force\b/.test(b) &&
+    !compactProductKey(blob).includes("proforce")
+  ) {
+    return 0;
+  }
+  if (p.startsWith("creatina ") && !/\bcreatina\b/.test(b)) return 0;
+  if (p.startsWith("naked wafer") && !/\bnaked\b/.test(b) && !/\bwafer\b/.test(b)) return 0;
+
+  return 58 + getPhraseDiscriminatorGroups(phrase).flat().length * 6;
+}
+
+/**
+ * @param {string} haystack
+ * @param {string} token
+ * @param {number} [from]
+ */
+function indexOfTokenInHaystack(haystack, token, from = 0) {
+  const h = normalizeProductSearchText(haystack);
+  const variants = flavorTokenVariants(token);
+  let best = -1;
+  for (const v of variants) {
+    const idx = h.indexOf(v, from);
+    if (idx >= 0 && (best < 0 || idx < best)) best = idx;
+  }
+  return best;
 }
 
 /**
@@ -236,9 +385,10 @@ export function tokensAppearInOrder(haystack, words) {
   let pos = 0;
   const h = normalizeProductSearchText(haystack);
   for (const w of list) {
-    const idx = h.indexOf(w, pos);
+    const idx = indexOfTokenInHaystack(h, w, pos);
     if (idx < 0) return false;
-    pos = idx + w.length;
+    const matched = flavorTokenVariants(w).find((v) => h.indexOf(v, pos) === idx) || w;
+    pos = idx + matched.length;
   }
   return true;
 }
@@ -311,8 +461,13 @@ const PHRASE_DISCRIMINATOR_GROUPS = {
   "whey growth cookies": [["cookies", "cookie"]],
   "whey growth chocolate": [["chocolate"]],
   "whey growth baunilha": [["baunilha"]],
+  "whey cookies": [["cookies", "cookie"]],
+  "whey cookie": [["cookies", "cookie"]],
+  "whey chocolate": [["chocolate"]],
+  "whey baunilha": [["baunilha"]],
   "naked wafer dark chocolate": [["dark"], ["chocolate"]],
   "naked wafer chocolate branco": [["branco"]],
+  "naked wafer avela branco": [["avela"]],
   "naked wafer cinnamon": [["cinnamon", "canela"]],
   "naked wafer avela": [["avela"]],
   "creatina integral": [["integral"]],
@@ -322,6 +477,25 @@ const PHRASE_DISCRIMINATOR_GROUPS = {
 
 /** Produto único no acervo (não é linha com sabores). */
 const STANDALONE_SKU_PHRASES = new Set(["monster"]);
+
+/** Marca no pedido que pode não existir no nome do arquivo (ex.: «whey de chocolate»). */
+const WHEY_OPTIONAL_BRAND_TOKENS = new Set(["growth", "supplements"]);
+
+/** Tokens após «whey de/sabor» que não são sabor (evita «whey growth cookies» → sabor growth). */
+const WHEY_LOOSE_CAPTURE_SKIP = new Set([
+  "growth",
+  "supplements",
+  "protein",
+  "proteina",
+  "max",
+  "titanium",
+  "integral",
+  "medica",
+  "nutri",
+  "nutrition",
+  "lab",
+  "force",
+]);
 
 function phraseRequiresDiscriminators(phrase) {
   const p = normalizeProductSearchText(phrase).replace(/\s+/g, " ").trim();
@@ -357,6 +531,7 @@ export function getPhraseDiscriminatorGroups(phrase) {
       if (!tail) return [];
       if (tail.includes("dark chocolate")) return [["dark"], ["chocolate"]];
       if (tail.includes("chocolate branco")) return [["branco"]];
+      if (tail.includes("avela branco")) return [["avela"]];
       return [tail.split(/\s+/).filter((w) => w.length >= 3)];
     }
   }
@@ -385,15 +560,7 @@ export function isQualifiedProductPhrase(phrase) {
 function discriminatorsSatisfiedInBlob(blob, phrase) {
   const groups = getPhraseDiscriminatorGroups(phrase);
   if (!groups.length) return true;
-  const b = normalizeProductSearchText(blob);
-  const compactB = compactProductKey(blob);
-  return groups.every((group) =>
-    group.some((token) => {
-      if (b.includes(token)) return true;
-      const ct = compactProductKey(token);
-      return ct.length >= 3 && compactB.includes(ct);
-    }),
-  );
+  return groups.every((group) => group.some((token) => blobContainsFlavorToken(blob, token)));
 }
 
 /**
@@ -407,24 +574,36 @@ export function scorePhraseAgainstBlob(blob, phrase) {
   const b = normalizeProductSearchText(blob);
   if (!p || !b) return 0;
 
+  const words = p.split(" ").filter((w) => w.length >= 2);
+  const compactP = compactProductKey(p);
+  const compactB = compactProductKey(b);
   let score = 0;
 
   if (b.includes(p)) score = 120 + p.length;
-  else {
-    const compactP = compactProductKey(p);
-    const compactB = compactProductKey(b);
-    if (compactP.length >= 4 && compactB.includes(compactP)) {
-      score = 105 + compactP.length;
-    } else {
-      const words = p.split(" ").filter((w) => w.length >= 2);
-      if (words.length >= 2 && tokensAppearInOrder(b, words)) {
-        score = 90 + p.length;
-      } else if (words.length === 1) {
-        const single = words[0];
-        if (b.includes(single)) score = 80 + single.length;
-        else if (compactB.includes(compactProductKey(single))) score = 75 + single.length;
-        else score = scoreTypoTokenInBlob(b, single);
-      }
+  else if (compactP.length >= 4 && compactB.includes(compactP)) {
+    score = 105 + compactP.length;
+  } else if (words.length >= 2 && tokensAppearInOrder(b, words)) {
+    score = 90 + p.length;
+  } else if (words.length === 1) {
+    const single = words[0];
+    if (b.includes(single)) score = 80 + single.length;
+    else if (compactB.includes(compactProductKey(single))) score = 75 + single.length;
+    else score = scoreTypoTokenInBlob(b, single);
+  }
+
+  if (
+    score === 0 &&
+    words.length >= 2 &&
+    (p.startsWith("whey ") || words[0] === "whey")
+  ) {
+    const relaxed = words.filter(
+      (w) =>
+        !WHEY_OPTIONAL_BRAND_TOKENS.has(w) ||
+        b.includes(w) ||
+        compactB.includes(compactProductKey(w)),
+    );
+    if (relaxed.length >= 2 && tokensAppearInOrder(b, relaxed)) {
+      score = 88 + relaxed.join(" ").length;
     }
   }
 
@@ -432,11 +611,56 @@ export function scorePhraseAgainstBlob(blob, phrase) {
     return 0;
   }
 
+  if (score < 35 && isQualifiedProductPhrase(p)) {
+    score = Math.max(score, scoreFlexibleQualifiedPhrase(blob, p));
+  }
+
+  if (score === 0 && BARE_PRODUCT_LINE_PHRASES.has(p)) {
+    score = scoreBareProductLineInBlob(blob, p);
+  }
+
   return score;
 }
 
+/**
+ * Linha inteira pedida sem sabor (ex.: «os 3 wheys» → todos os PNGs com whey no nome).
+ * @param {string} blob
+ * @param {string} phrase
+ */
+function scoreBareProductLineInBlob(blob, phrase) {
+  const p = normalizeProductSearchText(phrase).replace(/\s+/g, " ").trim();
+  const b = normalizeProductSearchText(blob);
+  const compactB = compactProductKey(blob);
+  if (p === "whey growth" || p === "whey") {
+    return /\bwhey\b/.test(b) || compactB.includes("whey") ? 78 : 0;
+  }
+  if (p === "pro force") {
+    return /\bpro\s*[-_/]?\s*force\b/.test(b) || compactB.includes("proforce") ? 80 : 0;
+  }
+  if (p === "naked wafer") {
+    return /\bnaked\b/.test(b) && /\bwafer\b/.test(b) ? 76 : 0;
+  }
+  if (p === "creatina") {
+    return /\bcreatina\b/.test(b) || compactB.includes("creatina") ? 76 : 0;
+  }
+  if (p === "monster") {
+    return /\bmonster\b/.test(b) || compactB.includes("monster") ? 76 : 0;
+  }
+  const words = p.split(/\s+/).filter((w) => w.length >= 3);
+  if (words.length && words.every((w) => b.includes(w) || compactB.includes(compactProductKey(w)))) {
+    return 74 + words.join("").length;
+  }
+  return 0;
+}
+
+/** @param {Record<string, unknown>} row */
+function midiaRowId(row) {
+  return String(row?.id_midia ?? row?.id ?? "").trim();
+}
+
 export function buildMidiaSearchBlob(row) {
-  const raw = `${row?.nome_exibicao ?? ""} ${row?.nome_arquivo ?? ""} ${row?.descricao ?? ""} ${row?.alt_text ?? ""}`;
+  const path = String(row?.caminho_storage ?? "").replace(/[/\\]+/g, " ");
+  const raw = `${row?.nome_exibicao ?? ""} ${row?.nome_arquivo ?? ""} ${row?.descricao ?? ""} ${row?.alt_text ?? ""} ${path}`;
   const normalized = normalizeProductSearchText(raw);
   const parts = normalized.split(/[^a-z0-9]+/).filter((t) => t.length >= 2);
   const compact = compactProductKey(raw);
@@ -485,6 +709,7 @@ function splitPedidoClauses(normalized) {
     const last = merged[merged.length - 1];
     const flavorOnly =
       ORPHAN_FLAVOR_ONLY.test(clause) ||
+      /^de\s+(cookies?|baunilha|chocolate|morango|cafe)\b/.test(clause) ||
       (clause.split(/\s+/).length <= 2 &&
         /\b(cookies?|baunilha|chocolate|morango|cafe)\b/.test(clause) &&
         !clauseMentionsProForce(clause) &&
@@ -505,7 +730,14 @@ function clauseMentionsProForce(clause) {
 }
 
 function clauseMentionsWhey(clause) {
-  return /\bwhey\b/.test(clause);
+  return /\bwheys?\b/.test(clause);
+}
+
+function addWheyFlavorPhrases(phrases, flavor) {
+  const f = String(flavor || "").trim();
+  if (!f) return;
+  phrases.add(`whey growth ${f}`);
+  phrases.add(`whey ${f}`);
 }
 
 function pruneBareBrandWhenQualified(phrases) {
@@ -565,8 +797,45 @@ function extractProForceScopedPhrases(normalized) {
   return [...phrases];
 }
 
+function wantsAllWheyVariants(normalized) {
+  return (
+    wantsAllBrandVariants(normalized) ||
+    /\b(os|as|uns|umas)\s+wheys?\b/.test(normalized) ||
+    /\b(\d+|tres|três|quatro|4|5)\s+wheys?\b/.test(normalized) ||
+    /\bfotos?\s+(dos|das|de)?\s*wheys?\b/.test(normalized) ||
+    /\bwheys?\s+da\s+(loja|linha|marca)\b/.test(normalized)
+  );
+}
+
+function extractLooseProductPhrases(normalized) {
+  const phrases = new Set();
+
+  if (/\bwheys?\b/.test(normalized)) {
+    let m;
+    const wheyLoose = /\bwheys?\s+(?:de|do|da|sabor)?\s*([a-z]{3,})\b/gi;
+    while ((m = wheyLoose.exec(normalized)) !== null) {
+      const raw = normalizeProductSearchText(m[1]);
+      if (WHEY_LOOSE_CAPTURE_SKIP.has(raw)) continue;
+      const flavor = mapLooseTokenToFlavor(raw);
+      if (flavor && flavor !== "growth") addWheyFlavorPhrases(phrases, flavor);
+    }
+  }
+
+  let m;
+  const pfLoose = /\bpro\s*[-_/]?\s*force\s+(?:de|do|sabor)?\s*([a-z]{3,})\b/gi;
+  while ((m = pfLoose.exec(normalized)) !== null) {
+    const flavor = mapLooseTokenToFlavor(m[1]);
+    if (flavor === "morango") phrases.add("pro force morango");
+    else if (flavor === "chocolate") phrases.add("pro force chocolate");
+    else if (flavor === "cookies") phrases.add("pro force cookies");
+    else if (flavor === "cafe") phrases.add("pro force cafe");
+  }
+
+  return [...phrases];
+}
+
 function extractWheyScopedPhrases(normalized) {
-  if (!/\bwhey\b/.test(normalized)) return [];
+  if (!/\bwheys?\b/.test(normalized)) return [];
 
   const phrases = new Set();
   const wheyClauses = splitPedidoClauses(normalized).filter(clauseMentionsWhey);
@@ -574,65 +843,83 @@ function extractWheyScopedPhrases(normalized) {
 
   const flavors = [];
   for (const clause of scope) {
-    if (/\bcookies?\b/.test(clause) && !flavors.includes("cookies")) flavors.push("cookies");
-    if (/\bchocolate\b/.test(clause) && !flavors.includes("chocolate")) flavors.push("chocolate");
-    if (/\bbaunilha\b/.test(clause) && !flavors.includes("baunilha")) flavors.push("baunilha");
+    for (const f of extractFlavorsFromText(clause)) {
+      if (!flavors.includes(f)) flavors.push(f);
+    }
+  }
+  if (!flavors.length) {
+    for (const f of extractFlavorsFromText(normalized)) {
+      if (!flavors.includes(f)) flavors.push(f);
+    }
   }
 
   if (flavors.length) {
-    for (const f of flavors) phrases.add(`whey growth ${f}`);
+    for (const f of flavors) addWheyFlavorPhrases(phrases, f);
     return [...phrases];
   }
 
   const sharedCookie =
     /\bcookies?\b/.test(normalized) &&
-    /\bwhey\b/.test(normalized) &&
+    /\bwheys?\b/.test(normalized) &&
     scope.some((c) => clauseMentionsWhey(c) && !/\bcookies?\b/.test(c));
   if (sharedCookie) {
-    phrases.add("whey growth cookies");
+    addWheyFlavorPhrases(phrases, "cookies");
     return [...phrases];
   }
 
   const sharedChocolate =
     /\bchocolate\b/.test(normalized) &&
-    /\bwhey\b/.test(normalized) &&
+    /\bwheys?\b/.test(normalized) &&
     scope.some((c) => clauseMentionsWhey(c) && !/\bchocolate\b/.test(c)) &&
     !/\btudo\b/.test(normalized);
   if (sharedChocolate) {
-    phrases.add("whey growth chocolate");
+    addWheyFlavorPhrases(phrases, "chocolate");
     return [...phrases];
   }
 
-  if (scope.some((c) => /\bwhey\s+growth\b|\bgrowth\s+whey\b/.test(c)) || /\bwhey\b/.test(normalized)) {
+  if (wantsAllWheyVariants(normalized)) {
+    phrases.add("whey growth");
+    return [...phrases];
+  }
+
+  if (scope.some((c) => /\bwhey\s+growth\b|\bgrowth\s+whey\b/.test(c)) || /\bwheys?\b/.test(normalized)) {
     phrases.add("whey growth");
   }
   return [...phrases];
 }
 
+function nakedWaferFlavorFromClause(clause) {
+  const c = String(clause || "").trim();
+  if (!c) return null;
+  if (/\bdark\s+chocolate\b/.test(c)) return "naked wafer dark chocolate";
+  if (/\bchocolate\s+branco\b/.test(c)) return "naked wafer chocolate branco";
+  if (/\bcinnamon\b|\bcanela\b/.test(c)) return "naked wafer cinnamon";
+  if (/\bavela\s+branco\b/.test(c)) return "naked wafer avela branco";
+  if (/\bavela\b/.test(c)) return "naked wafer avela";
+  return null;
+}
+
 function extractNakedWaferScopedPhrases(normalized) {
-  const barraClauses = splitPedidoClauses(normalized).filter(
-    (c) => /\b(barra|barrinha|barras)\b/.test(c) || /\bnaked\b/.test(c),
-  );
   const hasNaked =
     /\bnaked\s+wafer\b/.test(normalized) ||
+    /\bnaked\s+waffer\b/.test(normalized) ||
     (/\b(barra|barrinha|barras)\b/.test(normalized) && /\bnaked\b/.test(normalized)) ||
-    barraClauses.length > 0;
+    (/\bnaked\b/.test(normalized) && /\b(wafer|waffer|barrinha|barra)\b/.test(normalized));
 
   if (!hasNaked) return [];
 
   const phrases = new Set();
-  const scope = barraClauses.length ? barraClauses : [normalized];
-
-  const pickFlavor = (clause) => {
-    if (/\bdark\s+chocolate\b/.test(clause)) return "naked wafer dark chocolate";
-    if (/\bchocolate\s+branco\b/.test(clause)) return "naked wafer chocolate branco";
-    if (/\bcinnamon\b|\bcanela\b/.test(clause)) return "naked wafer cinnamon";
-    if (/\bavela\b/.test(clause)) return "naked wafer avela";
-    return null;
-  };
-
-  for (const clause of scope) {
-    const flavor = pickFlavor(clause);
+  for (const clause of splitPedidoClauses(normalized)) {
+    let scoped = clause;
+    if (!/\bnaked\b/.test(scoped) && !/\b(wafer|waffer|barra|barrinha)\b/.test(scoped)) {
+      if (
+        ORPHAN_FLAVOR_ONLY.test(scoped) ||
+        /\b(chocolate|avela|canela|cinnamon|branco|dark)\b/.test(scoped)
+      ) {
+        scoped = `naked wafer ${scoped}`;
+      }
+    }
+    const flavor = nakedWaferFlavorFromClause(scoped);
     if (flavor) phrases.add(flavor);
   }
 
@@ -667,13 +954,13 @@ function extractCrossProductFlavorPhrases(normalized) {
   const hasPf = /\bpro\s*[-_/]?\s*force\b/.test(normalized) || /\bproforce\b/.test(normalized);
 
   if (cookieIntent && broad) {
-    if (/\bwhey\b/.test(normalized)) phrases.add("whey growth cookies");
+    if (/\bwheys?\b/.test(normalized)) addWheyFlavorPhrases(phrases, "cookies");
     if (hasPf) phrases.add("pro force cookies");
   }
 
   if (chocolateIntent && (/\btudo\b/.test(normalized) || tudoFlavor === "chocolate")) {
     phrases.add("pro force chocolate");
-    phrases.add("whey growth chocolate");
+    addWheyFlavorPhrases(phrases, "chocolate");
     phrases.add("naked wafer dark chocolate");
   }
 
@@ -723,6 +1010,7 @@ function extractSpecificProductPhrases(hint) {
   for (const p of extractNakedWaferScopedPhrases(normalized)) phrases.add(p);
   for (const p of extractCrossProductFlavorPhrases(normalized)) phrases.add(p);
   for (const p of extractBrandScopedPhrases(normalized)) phrases.add(p);
+  for (const p of extractLooseProductPhrases(normalized)) phrases.add(p);
 
   for (const base of PRODUCT_BASE_WORDS) {
     if (base === "whey" || base === "proteina") continue;
@@ -834,7 +1122,10 @@ export function bestPhraseMatchForRow(row, phrases) {
   let bestPhrase = "";
   let bestScore = 0;
   for (const phrase of phrases) {
-    const score = scorePhraseAgainstBlob(blob, phrase);
+    let score = scorePhraseAgainstBlob(blob, phrase);
+    if (score < 35 && isQualifiedProductPhrase(phrase)) {
+      score = Math.max(score, scoreFlexibleQualifiedPhrase(blob, phrase));
+    }
     const p = normalizeProductSearchText(phrase);
     const tieBreak = isQualifiedProductPhrase(p) ? 1000 + p.length : p.length;
     const rank = score * 10000 + tieBreak;
@@ -868,8 +1159,15 @@ export function rowMatchesProductSpec(row, spec, minScore = 35) {
 
   const qualified = spec.specificPhrases.filter((p) => isQualifiedProductPhrase(p));
   const { phrase: bestPhrase, score } = bestPhraseMatchForRow(row, spec.specificPhrases);
+  const blob = buildMidiaSearchBlob(row);
+  let effectiveScore = score;
+  if (effectiveScore < minScore && qualified.length) {
+    for (const ph of qualified) {
+      effectiveScore = Math.max(effectiveScore, scoreFlexibleQualifiedPhrase(blob, ph));
+    }
+  }
 
-  if (score < minScore) return false;
+  if (effectiveScore < minScore) return false;
 
   if (qualified.length > 0) {
     if (isQualifiedProductPhrase(bestPhrase)) {
@@ -941,11 +1239,80 @@ export function narrowImageRowsByProductMention(imageRows, userHint, minScore = 
 }
 
 /**
+ * @param {string} phrase
+ */
+function productKeyForQualifiedPhrase(phrase) {
+  const p = normalizeProductSearchText(phrase).replace(/\s+/g, " ").trim();
+  const wheyFlavor = p.match(/^whey(?:\s+growth)?\s+(?:de\s+)?(cookies?|chocolate|baunilha)\b/);
+  if (wheyFlavor) {
+    const flavor = wheyFlavor[1].replace(/s$/, "");
+    return `whey:${flavor}`;
+  }
+  return p;
+}
+
+/**
+ * @param {string[]} phrases
+ */
+function dedupeQualifiedPhrases(phrases) {
+  const seen = new Set();
+  const out = [];
+  for (const phrase of phrases) {
+    const key = productKeyForQualifiedPhrase(phrase);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(phrase);
+  }
+  return out;
+}
+
+/**
+ * Rótulo curto para mensagem de erro (sem «growth» se o arquivo for «whey de …»).
+ * @param {string} phrase
+ */
+export function formatProductPhraseForUser(phrase) {
+  const p = normalizeProductSearchText(phrase).replace(/\s+/g, " ").trim();
+  return p.replace(/^whey growth /, "whey ").trim();
+}
+
+/**
+ * Sabores/variantes pedidos que não têm PNG correspondente no acervo.
+ * @param {string} userHint
+ * @param {Array<Record<string, unknown>>} midiaRows
+ * @param {number} [minScore]
+ */
+export function findUnmatchedQualifiedPhrases(userHint, midiaRows, minScore = 35) {
+  const spec = parseProductMentionSpec(userHint);
+  if (spec.mode !== "specific") return [];
+  const qualified = dedupeQualifiedPhrases(
+    spec.specificPhrases.filter((p) => isQualifiedProductPhrase(p)),
+  );
+  if (!qualified.length) return [];
+
+  const imageRows = (Array.isArray(midiaRows) ? midiaRows : []).filter(
+    (row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem",
+  );
+  const missing = [];
+  for (const phrase of qualified) {
+    const miniSpec = {
+      mode: "specific",
+      specificPhrases: [phrase],
+      terms: [phrase],
+      genericTerms: [],
+    };
+    const hit = imageRows.some((row) => rowMatchesProductSpec(row, miniSpec, minScore));
+    if (!hit) missing.push(phrase);
+  }
+  return missing;
+}
+
+/**
  * @param {string[]} mentions
  */
 export function buildMissingProductMediaMessage(mentions) {
-  const labels = (mentions || []).slice(0, 2).map((m) => `«${m}»`).join(", ");
-  const mais = mentions.length > 2 ? ` (+${mentions.length - 2})` : "";
+  const list = (mentions || []).map((m) => formatProductPhraseForUser(m));
+  const labels = list.slice(0, 2).map((m) => `«${m}»`).join(", ");
+  const mais = list.length > 2 ? ` (+${list.length - 2})` : "";
   if (labels) {
     return `Não encontrei ${labels}${mais} em Mídias. Cadastre o PNG do produto e tente de novo.`;
   }
@@ -959,18 +1326,127 @@ export function buildMissingProductMediaMessage(mentions) {
 export function checkProductMediaAvailability(userHint, midiaRows) {
   const mentions = extractProductMentions(userHint);
   if (!mentions.length) {
-    return { strict: false, mentions: [], matchedRows: [], missing: false };
+    return { strict: false, mentions: [], matchedRows: [], missing: false, unmatchedPhrases: [] };
   }
   const imageRows = (Array.isArray(midiaRows) ? midiaRows : []).filter(
     (row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem",
   );
   const { pool, strict } = narrowImageRowsByProductMention(imageRows, userHint);
+  const unmatchedPhrases = findUnmatchedQualifiedPhrases(userHint, midiaRows);
+  const displayMentions = unmatchedPhrases.length
+    ? unmatchedPhrases.map(formatProductPhraseForUser)
+    : mentions;
   return {
     strict,
-    mentions,
+    mentions: displayMentions,
     matchedRows: pool,
-    missing: strict && pool.length === 0,
+    missing: strict && (pool.length === 0 || unmatchedPhrases.length > 0),
+    unmatchedPhrases,
   };
+}
+
+/**
+ * Um PNG por sabor/variante explícito no pedido (ex.: avela branco + chocolate branco).
+ *
+ * @param {Array<Record<string, unknown>>} midiaRows
+ * @param {ReturnType<typeof parseProductMentionSpec>} spec
+ * @param {number} [limit]
+ */
+export function pickMidiasOnePerPhrase(midiaRows, spec, limit = 3) {
+  if (!spec || spec.mode !== "specific") return [];
+  const qualified = dedupeQualifiedPhrases(
+    (spec.specificPhrases || []).filter((p) => isQualifiedProductPhrase(p)),
+  );
+  if (qualified.length < 2) return [];
+
+  const imageRows = (Array.isArray(midiaRows) ? midiaRows : []).filter(
+    (row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem",
+  );
+  const used = new Set();
+  const out = [];
+
+  for (const phrase of qualified) {
+    const miniSpec = {
+      mode: "specific",
+      specificPhrases: [phrase],
+      terms: [phrase],
+      genericTerms: [],
+    };
+    let bestRow = null;
+    let bestScore = 0;
+    for (const row of imageRows) {
+      const id = midiaRowId(row);
+      if (!id || used.has(id)) continue;
+      const score = scoreRowForProductSpec(row, miniSpec);
+      if (score > bestScore) {
+        bestScore = score;
+        bestRow = row;
+      }
+    }
+    if (bestRow && bestScore >= 35) {
+      used.add(midiaRowId(bestRow));
+      out.push(bestRow);
+    }
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} midiaRows
+ * @param {string} userHint
+ * @param {number} [limit]
+ */
+export function resolveMidiaRowsForPedido(midiaRows, userHint = "", limit = 3) {
+  const rows = Array.isArray(midiaRows) ? midiaRows : [];
+  if (!rows.length) return [];
+  const pedidoHint = String(userHint || "").trim();
+  const spec = parseProductMentionSpec(pedidoHint);
+  const imageRows = rows.filter((row) => String(row.tipo_midia ?? "").trim().toLowerCase() === "imagem");
+  if (!imageRows.length) return [];
+
+  const perPhrase = pickMidiasOnePerPhrase(imageRows, spec, limit);
+  if (perPhrase.length >= 2) {
+    const heroId = pickHeroProductMidiaId(perPhrase, pedidoHint);
+    if (heroId) {
+      const heroRow = perPhrase.find((row) => midiaRowId(row) === heroId);
+      if (heroRow) {
+        return [heroRow, ...perPhrase.filter((row) => midiaRowId(row) !== heroId)].slice(0, limit);
+      }
+    }
+    return perPhrase.slice(0, limit);
+  }
+
+  const { pool, strict } = narrowImageRowsByProductMention(imageRows, pedidoHint);
+  const searchPool = strict ? pool : imageRows;
+  if (strict && !searchPool.length) return [];
+
+  const scored = searchPool
+    .map((row) => ({ row, score: scoreRowForProductSpec(row, spec) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  if (!scored.length) {
+    if (strict) return [];
+    const bestId = pickBestProductMidiaId(imageRows, pedidoHint);
+    return bestId ? imageRows.filter((row) => midiaRowId(row) === bestId).slice(0, 1) : [];
+  }
+
+  const candidateIds = scored.map((item) => midiaRowId(item.row)).filter(Boolean);
+  const ranked = rankReferenceMidiaIds(candidateIds, imageRows, pedidoHint);
+  const byId = new Map(imageRows.map((row) => [midiaRowId(row), row]));
+  let ordered = ranked
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .slice(0, limit);
+  const explicitHeroId = pickHeroProductMidiaId(searchPool.length ? searchPool : imageRows, pedidoHint);
+  if (explicitHeroId) {
+    const heroRow = byId.get(explicitHeroId);
+    if (heroRow) {
+      ordered = [heroRow, ...ordered.filter((row) => midiaRowId(row) !== explicitHeroId)].slice(0, limit);
+    }
+  }
+  return ordered;
 }
 
 /**
@@ -997,6 +1473,17 @@ export function reconcileProposalMidias(proposal, midiaRows, userHint) {
     if (!row) return false;
     return rowMatchesProductSpec(row, spec, 35);
   });
+
+  const pickedRows = resolveMidiaRowsForPedido(rows, userHint, 3);
+  if (pickedRows.length) {
+    p.midias_referenced = pickedRows.map((row) => ({
+      id_midia: String(row.id_midia ?? "").trim(),
+      nome_exibicao: String(row.nome_exibicao ?? row.nome_arquivo ?? "Mídia").trim() || "Mídia",
+      nome_arquivo: String(row.nome_arquivo ?? "").trim() || undefined,
+      why: "PNG do acervo vinculado ao pedido.",
+    }));
+    return p;
+  }
 
   if (kept.length) {
     p.midias_referenced = kept.slice(0, 3);

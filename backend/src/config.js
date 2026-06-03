@@ -27,7 +27,7 @@ const envSchema = z.object({
   /** API OpenAI-compatível (ex.: Ollama `http://127.0.0.1:11434/v1`). */
   LLAMA_BASE_URL: z.preprocess(empty, z.string().url().optional()),
   LLAMA_MODEL: z.preprocess(empty, z.string().min(1).optional()),
-  /** Modelo só para `post-context-proposal` (ex. `llama3.2:1b` se o 3b for lento). */
+  /** Modelo só para `post-context-proposal` (padrão: mesmo que LLAMA_MODEL / qwen2.5:3b). */
   LLAMA_PROPOSAL_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   /**
    * `false` (padrão): resumo de confirmação montado só com dados do painel (rápido, ~1–3s).
@@ -53,6 +53,11 @@ const envSchema = z.object({
   CHAT_WORKER_REQUEST_TIMEOUT_MS: z.preprocess(
     (v) => (v === "" || v === undefined ? 360_000 : Number(v)),
     z.number().int().min(30_000).max(900_000),
+  ),
+  /** Perguntas fora do escopo (conversa_aberta) — prompt curto; padrão 90s. */
+  CHAT_NATURAL_REQUEST_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 90_000 : Number(v)),
+    z.number().int().min(15_000).max(300_000),
   ),
   /** Modelo multimodal para análise de imagem (ex. `llava:7b` no Ollama). */
   LLAMA_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
@@ -109,6 +114,29 @@ const envSchema = z.object({
   IMAGE_PIPELINE: z.preprocess(
     (v) => (String(v ?? "raw").trim().toLowerCase() === "standard" ? "standard" : "raw"),
     z.enum(["raw", "standard"]),
+  ),
+  /**
+   * `gpt_integrated` (padrão): PNGs do acervo em `input_images` / `images.edit` — como API oficial.
+   * `collage`: fundo GPT + colagem Sharp.
+   * `collage_refine`: collage Sharp + segunda passada GPT na imagem composta.
+   */
+  IMAGE_PRODUCT_MODE: z.preprocess((v) => {
+    const s = String(v ?? "gpt_integrated").trim().toLowerCase();
+    if (s === "collage" || s === "collage_refine") return s;
+    return "gpt_integrated";
+  }, z.enum(["gpt_integrated", "collage", "collage_refine"])),
+  /**
+   * Revisão visual (Ollama/Llava) antes de entregar `/ia/image-preview` ao painel.
+   * Vazio = ligado se `LLAMA_VISION_MODEL` estiver definido; `false` desliga.
+   */
+  IMAGE_PREVIEW_QUALITY_REVIEW: z.preprocess((v) => {
+    if (v === "" || v === undefined) return undefined;
+    return parseEnvBool(v, false);
+  }, z.boolean().optional()),
+  /** Nota mínima (0–100) para aprovar na revisão. Padrão 68. */
+  IMAGE_PREVIEW_QUALITY_MIN_SCORE: z.preprocess(
+    (v) => (v === "" || v === undefined ? 68 : Number(v)),
+    z.number().int().min(0).max(100),
   ),
   OPENAI_API_KEY: z.preprocess(empty, z.string().min(1).optional()),
   OPENAI_ALLOW_BILLING: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),

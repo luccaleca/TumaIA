@@ -43,6 +43,15 @@ export function formatAuthError(json) {
   const err = json.error;
   if (typeof err === "string") return err;
   if (err && typeof err === "object") {
+    const fieldErrors = err.fieldErrors;
+    if (fieldErrors && typeof fieldErrors === "object") {
+      const msgs = [];
+      for (const v of Object.values(fieldErrors)) {
+        if (Array.isArray(v) && typeof v[0] === "string") msgs.push(v[0]);
+      }
+      if (msgs.length) return msgs.join(" ");
+    }
+    if (typeof err.formErrors?.[0] === "string") return err.formErrors[0];
     try {
       return JSON.stringify(err);
     } catch {
@@ -141,6 +150,9 @@ function messageForFetchTimeout(timeoutMs, requestLabel) {
   }
   if (label === "image-preview") {
     return "A geração da imagem demorou mais que o limite (cerca de 5 minutos). Aguarde e tente de novo.";
+  }
+  if (label === "image-plan") {
+    return "A verificação do plano de geração demorou demais. Tente de novo em instantes.";
   }
   if (label === "identidade") {
     return "A análise demorou demais. Aguarde um instante e tente de novo.";

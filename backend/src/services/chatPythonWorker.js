@@ -226,6 +226,8 @@ export function runChatPythonWorker(payload, opts = {}) {
       question: payload.question,
       history: payload.history ?? [],
       ...(payload.id_empresa ? { id_empresa: payload.id_empresa } : {}),
+      ...(payload.acervo_context ? { acervo_context: payload.acervo_context } : {}),
+      ...(payload.chat_mode ? { chat_mode: payload.chat_mode } : {}),
     })}\n`;
     const ok = child.stdin.write(line, "utf8", (err) => {
       if (err) {

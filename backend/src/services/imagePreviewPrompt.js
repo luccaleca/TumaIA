@@ -20,20 +20,82 @@ import {
 /** Limite legado FLUX. */
 export const FLUX_IMAGE_PROMPT_MAX = 2000;
 
+import { buildOfficialGptImage2Prompt } from "./gptImage2OfficialRequest.js";
+
 /**
- * Instruções para pipeline raw com composição posterior de PNG do acervo.
+ * Prompt integrado — delega ao formato oficial `images.edit` (um bloco + reference pictures).
+ */
+export function buildIntegratedProductImagePrompt(
+  history,
+  postContextProposal,
+  identidadeDados = null,
+  opts = {},
+) {
+  const proposal =
+    postContextProposal && typeof postContextProposal === "object" ? postContextProposal : null;
+  const imageIntent =
+    opts?.imageIntent && typeof opts.imageIntent === "object"
+      ? opts.imageIntent
+      : buildConfirmedImageIntent({ history, postContextProposal: proposal, contextoRows: [] });
+  const pedido = imageIntent?.pedido || resolvePedidoCliente(proposal, history, 32_000);
+  const frase =
+    imageIntent?.fraseNaImagem ||
+    resolveFraseNaImagem(proposal, history, []) ||
+    extractFraseFromUserText(pedido);
+  const heroProductName =
+    imageIntent?.heroProduct && typeof imageIntent.heroProduct.nome_exibicao === "string"
+      ? imageIntent.heroProduct.nome_exibicao.trim()
+      : "";
+
+  return buildOfficialGptImage2Prompt({
+    nomeFantasia: identidadeDados?.nome_fantasia || null,
+    productNames: opts?.productNames,
+    pedido,
+    fraseNaImagem: frase,
+    contextoNome: imageIntent?.matchedContexto?.nome || null,
+    aspectRatio: opts?.aspectRatio || "1:1",
+    logoInReferences: opts?.logoInReferences === true,
+    heroProductName,
+  });
+}
+
+/**
+ * Instruções para pipeline raw com composição posterior de PNG do acervo (legado Sharp).
  *
  * @param {{ productCount?: number, heroProductName?: string }} [opts]
  */
+
+/**
+ * Segunda passada: harmonizar prévia já composta (Sharp) sem mover produtos.
+ *
+ * @param {import("./imageIntent.js").ConfirmedImageIntent} imageIntent
+ */
+export function buildRefineComposedImagePrompt(imageIntent) {
+  const pedido = String(imageIntent?.pedido || "").trim();
+  const frase = String(imageIntent?.fraseNaImagem || "").trim();
+  return [
+    "Esta imagem é uma prévia de post com produtos reais do acervo já posicionados.",
+    "Ajuste APENAS iluminação, sombras, contraste e integração com o cenário — harmonia fotográfica.",
+    "Mantenha EXATAMENTE posição, tamanho, rótulos e cores das embalagens; não redimensione nem mova produtos.",
+    "Preserve todo texto promocional legível; não adicione blocos de texto novos em cima dos produtos.",
+    "Não desenhe logo da marca.",
+    pedido ? `Briefing: ${pedido}` : "",
+    frase ? `Frase que deve permanecer legível: «${frase}».` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 32_000);
+}
+
 export function buildComposeBackgroundDirectives(opts = {}) {
   const n = Math.max(1, Math.min(3, Number(opts.productCount) || 1));
   const hero = String(opts.heroProductName ?? "").trim();
   const zoneHint =
     n === 1
-      ? "terço inferior central (~35–45% da largura, da base até ~55% da altura)"
+      ? "terço inferior central (~30–38% da largura, da base até ~50% da altura)"
       : n === 2
-        ? "dois vãos no terço inferior (esquerda ~22% da largura; centro-direita ~30% para o hero)"
-        : "três vãos no terço inferior (laterais ~20% cada; centro ~30% para o hero)";
+        ? "dois vãos no terço inferior (esquerda ~20% da largura; centro-direita ~26% para o hero)"
+        : "três vãos no terço inferior (laterais ~18% cada; centro ~26% para o hero)";
   const heroLine = hero
     ? `O maior vão é para «${hero}»; os demais são de apoio.`
     : "O maior vão é para o produto principal; os demais são de apoio.";
@@ -44,6 +106,7 @@ export function buildComposeBackgroundDirectives(opts = {}) {
     "A superfície/pedestal deve ser contínua (mesmo material/textura do cenário), visível e vazia — os PNG reais do acervo serão colados depois.",
     "PROIBIDO: desenhar pote, lata, sachê, caixa, rótulo, mockup de suplemento, frasco genérico, jar vazio, retângulo branco central, área em branco tipo placeholder, produto inventado ou layout de embalagem fictícia.",
     "PERMITIDO: texto promocional (preço, CTA, frase), luz, fumaça, partículas, fundo gradiente/texturizado, elementos de cenário que NÃO ocupem as zonas reservadas.",
+    "TIPOGRAFIA: títulos, preços, listas e bullets SOMENTE no terço superior (acima de ~42% da altura) ou faixa superior lateral — NUNCA no terço inferior nem atrás da faixa onde os PNG dos produtos serão colados.",
   ].join(" ");
 }
 
@@ -58,11 +121,21 @@ export const FLUX_IMAGE_PROMPT_COMPACT_TARGET = 520;
  * @param {{
  *   strictProductReference?: boolean,
  *   composeProductAssets?: boolean,
+ *   integratedProductGeneration?: boolean,
+ *   productNames?: string[],
  *   productCount?: number,
  *   logoAsHero?: boolean,
  * }} [opts]
  */
 export function buildRawImagePrompt(history, postContextProposal, identidadeDados = null, opts = {}) {
+  if (opts?.integratedProductGeneration) {
+    return buildIntegratedProductImagePrompt(history, postContextProposal, identidadeDados, {
+      productNames: opts.productNames,
+      imageIntent: opts.imageIntent,
+      aspectRatio: opts.aspectRatio,
+      logoInReferences: opts.logoInReferences,
+    });
+  }
   const proposal =
     postContextProposal && typeof postContextProposal === "object" ? postContextProposal : null;
   const imageIntent =
@@ -155,7 +228,7 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
     base = `${base}\n\nContexto/campanha prioritário desta arte: ${imageIntent.matchedContexto.nome}.`;
   }
   if (identidadeDados?.id_midia_logo && !opts?.logoAsHero) {
-    base = `${base}\n\nReserve o canto inferior direito limpo para a logo real da marca (será aplicada depois em ~25–30% da altura do quadro — legível, nunca minúscula). Não desenhe wordmark, lettering nem logo inventada na arte.`;
+    base = `${base}\n\nA logo real será aplicada depois como MARCA D'ÁGUA discreta num canto livre (~7–9% da altura, semitransparente): identifica a empresa, mas o foco é a campanha e os produtos. Não desenhe logo, wordmark nem lettering na arte gerada — deixe canto inferior livre de textos grandes.`;
   }
 
   const brand = identidadeDados ? formatBrandIdentityForRawPrompt(identidadeDados) : "";
@@ -195,7 +268,7 @@ export async function loadMidiasEmpresaResumo(db, idEmpresa, limit = 72) {
   const { data, error } = await db
     .from("midia")
     .select(
-      "id_midia, nome_exibicao, nome_arquivo, descricao, alt_text, tipo_midia, formato_arquivo, data_criacao",
+      "id_midia, nome_exibicao, nome_arquivo, descricao, alt_text, tipo_midia, formato_arquivo, caminho_storage, data_criacao",
     )
     .eq("id_empresa", idEmpresa)
     .eq("ativo", true)
@@ -272,7 +345,7 @@ function buildCompactImagePrompt({
     );
   } else if (logoConfigured) {
     chunks.push(
-      logoAsHero ? "Brand logo as focal point." : "Legible brand logo bottom-right corner (~25% frame height).",
+      logoAsHero ? "Brand logo as focal point." : "Do not draw logo — added later as brand watermark (subtle, corner).",
     );
   }
 
@@ -310,7 +383,7 @@ function buildFullImagePrompt({
   const logoCornerHint = identidadeDados?.id_midia_logo
     ? referenceKind === "logo"
       ? "\n\nBrand logo is the HERO element (client requested); still avoid illegible stretching."
-      : "\n\nBrand logo: legible mark in a corner (bottom-right preferred, ~22–28% of frame height). Never centered, never full-bleed, unless the Client request explicitly says logo as hero."
+      : "\n\nDo NOT draw the brand logo in the image — it is added later as a subtle watermark (corner, ~7–9% height, not the focal point). Keep bottom corners clear of large text blocks."
     : "";
 
   const parts = [intro];
@@ -340,6 +413,10 @@ export function buildFluxImagePrompt({
   strictProductReference = false,
   composeProductAssets = false,
   productCount = 0,
+  productNames = [],
+  integratedProductGeneration = false,
+  logoInReferences = false,
+  aspectRatio = "1:1",
   promptStyle,
   pipeline,
 }) {
@@ -355,7 +432,11 @@ export function buildFluxImagePrompt({
     return buildRawImagePrompt(history, imageIntent.postContextProposal, identidadeDados, {
       strictProductReference,
       composeProductAssets,
+      integratedProductGeneration,
+      productNames,
       productCount,
+      logoInReferences,
+      aspectRatio,
       logoAsHero: referenceKind === "logo",
       imageIntent,
     });

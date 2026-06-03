@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/index.js",
+    "dev": "node --watch-path=./src --watch-preserve-output src/index.js",
+    "dev:stable": "node src/index.js",
     "start": "node src/index.js",
     "test": "node ../testes/run-backend.mjs",
     "test:llama:text": "node ia/tests/check-llama-text.mjs",

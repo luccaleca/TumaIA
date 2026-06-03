@@ -280,17 +280,23 @@ export function synthesizeResumoVisual(proposal, userHint = "") {
   }
 
   const refs = Array.isArray(p.midias_referenced) ? p.midias_referenced : [];
-  const refNames = refs
-    .map((r) => String(r?.nome_exibicao ?? "").trim())
+  const refLabels = refs
+    .map((r) => {
+      const nome = String(r?.nome_exibicao ?? "").trim();
+      const arquivo = String(r?.nome_arquivo ?? "").trim();
+      if (nome && arquivo && arquivo !== nome) return `${nome} (${arquivo})`;
+      return nome || arquivo;
+    })
     .filter(Boolean)
     .slice(0, 4);
-  if (refNames.length) {
-    parts.push(`PNG do acervo na composição: ${refNames.join(", ")}.`);
+  if (refLabels.length) {
+    const countLabel = refLabels.length === 1 ? "1 PNG" : `${refLabels.length} PNGs`;
+    parts.push(`${countLabel} do acervo na composição: ${refLabels.join("; ")}.`);
     const heroName =
       p.hero_product && typeof p.hero_product === "object"
         ? String(p.hero_product.nome_exibicao ?? "").trim()
         : "";
-    if (heroName && !refNames.includes(heroName)) {
+    if (heroName && !refLabels.some((l) => l.includes(heroName))) {
       parts.push(`Produto em destaque: ${heroName}.`);
     } else if (heroName) {
       parts.push(`Produto em destaque no centro: ${heroName}.`);
@@ -376,6 +382,9 @@ export function synthesizeComposeSceneResumo(proposal, userHint = "") {
 
   parts.push(
     "Fundo contínuo (gradiente, textura ou piso real); proibido retângulo branco, silhueta de pote ou produto inventado no centro.",
+  );
+  parts.push(
+    "Texto de campanha (títulos, preço, bullets) só no terço superior — nunca no terço inferior onde entram os PNG dos produtos.",
   );
 
   return parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 480);

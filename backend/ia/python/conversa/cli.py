@@ -20,7 +20,7 @@ def main() -> None:
         resultado = responder_mensagem(vetor_store, pergunta, history=historico_cli)
         historico_cli.append({"role": "user", "content": pergunta})
         historico_cli.append({"role": "assistant", "content": resultado["result"]})
-        historico_cli = historico_cli[-24:]
+        historico_cli = historico_cli[-80:]
 
         print("\nIA:")
         print(resultado["result"])

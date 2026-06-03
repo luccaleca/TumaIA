@@ -18,23 +18,41 @@ import {
   guessImageDownloadFilename,
   isAllowedImageDownloadUrl,
 } from "../services/imageDownloadUrl.js";
-import { handleImagePreview } from "./ia.imagePreview.js";
+import { handleImagePreview, handleImageGenerationPlan } from "./ia.imagePreview.js";
+import { tryChatAcervoResponse } from "../services/chatAcervoResponse.js";
+import {
+  guardChatProductAnswer,
+} from "../services/chatProductGuard.js";
+import { sanitizeChatAnswer } from "../services/chatAnswerSanitizer.js";
+import { analyzeChatTurn } from "../services/chatTurnIntent.js";
+import { loadChatFacts } from "../services/chatFacts.js";
+import { buildChatTrainingPromptBlock } from "../services/chatPromptBundle.js";
+import { buildConversaNaturalPromptHint } from "../services/chatConversaNatural.js";
+import { buildPerfilGeralLlmPromptBlock } from "../services/chatPerfilGeralThemes.js";
+import { tryChatCompositeResponse } from "../services/chatCompositeResponse.js";
+import { formatEmpresaInfoAnswer } from "../services/chatEmpresaResponse.js";
+import { formatContextosListAnswer } from "../services/chatContextosResponse.js";
+import {
+  CHAT_API_HISTORY_MAX,
+  trimChatHistoryForApi,
+} from "../services/chatHistoryLimit.js";
 
 const r = Router();
+
+const historyEntrySchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().trim().min(1).max(6000),
+});
 
 const CONFIRM_IMAGE_UI = [{ id: "confirm_generate_image", label: "Gerar prévia da imagem" }];
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(4000),
   history: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant"]),
-        content: z.string().trim().min(1).max(6000),
-      }),
-    )
-    .max(24)
-    .optional(),
+    .array(historyEntrySchema)
+    .max(CHAT_API_HISTORY_MAX * 3)
+    .optional()
+    .transform((arr) => trimChatHistoryForApi(arr)),
   /** Empresa em sessão: validamos vínculo; a IA injeta o cadastro de ``public.empresa``. */
   id_empresa: z.string().uuid().optional(),
 });
@@ -88,13 +106,153 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
 
   try {
     const db = getSupabaseAdmin();
+    const history = parsed.data.history ?? [];
     const route_image_generation =
       Boolean(parsed.data.id_empresa) &&
       Boolean(db) &&
-      detectImageGenerationIntentFromHistory(parsed.data.history, parsed.data.question);
+      detectImageGenerationIntentFromHistory(history, parsed.data.question);
+
+    let facts = null;
+
+    if (parsed.data.id_empresa && db) {
+      facts = await loadChatFacts(db, parsed.data.id_empresa);
+    }
+
+    const nomeFantasia = facts?.nomeFantasia ?? null;
+    const acervoBundle = facts?.acervo ?? null;
+    const turn = analyzeChatTurn(parsed.data.question, history, { nomeFantasia });
+
+    const postExtras =
+      turn.wantsImageRoute || route_image_generation
+        ? {
+            route_image_generation: true,
+            offer_post_context: true,
+            image_provider: env.IMAGE_PROVIDER || "replicate",
+            image_pipeline: env.IMAGE_PIPELINE || "raw",
+          }
+        : {};
+
+    if (turn.identityAnswer) {
+      res.json({
+        answer: turn.identityAnswer,
+        source_documents: [],
+        chat_route: "identity",
+        chat_topics: turn.topics,
+        ...postExtras,
+      });
+      return;
+    }
+
+    if (turn.outOfScopeAnswer) {
+      res.json({
+        answer: turn.outOfScopeAnswer,
+        source_documents: [],
+        chat_route: "out_of_scope",
+        chat_topics: turn.topics,
+        ...postExtras,
+      });
+      return;
+    }
+
+    if (turn.conversaNaturalAnswer) {
+      res.json({
+        answer: turn.conversaNaturalAnswer,
+        source_documents: [],
+        chat_route: "conversa_natural",
+        chat_topics: turn.topics,
+        ...postExtras,
+      });
+      return;
+    }
+
+    if (parsed.data.id_empresa && db && facts && turn.route === "composite") {
+      const compositeAnswer = await tryChatCompositeResponse({
+        question: parsed.data.question,
+        facts,
+        idEmpresa: parsed.data.id_empresa,
+        db,
+      });
+      if (compositeAnswer) {
+        res.json({
+          answer: compositeAnswer,
+          source_documents: [],
+          chat_route: "composite",
+          chat_topics: turn.topics,
+          ...postExtras,
+        });
+        return;
+      }
+    }
+
+    if (parsed.data.id_empresa && db && facts && turn.route === "empresa") {
+      res.json({
+        answer: formatEmpresaInfoAnswer(facts.empresa),
+        source_documents: [],
+        chat_route: "empresa",
+        chat_topics: turn.topics,
+        ...postExtras,
+      });
+      return;
+    }
+
+    if (parsed.data.id_empresa && db && facts && turn.route === "contextos") {
+      res.json({
+        answer: formatContextosListAnswer(facts.contextos),
+        source_documents: [],
+        chat_route: "contextos",
+        chat_topics: turn.topics,
+        ...postExtras,
+      });
+      return;
+    }
+
+    if (parsed.data.id_empresa && db && turn.route === "acervo" && turn.acervo && acervoBundle) {
+      const acervoAnswer = await tryChatAcervoResponse({
+        question: parsed.data.question,
+        history,
+        idEmpresa: parsed.data.id_empresa,
+        db,
+        midias: acervoBundle.midias,
+        nomeFantasia: acervoBundle.nomeFantasia,
+        classifyIntent: () => turn.acervo,
+      });
+      if (acervoAnswer) {
+        res.json({
+          answer: acervoAnswer,
+          source_documents: [],
+          acervo_query: true,
+          chat_route: "acervo",
+          chat_topics: turn.topics,
+          ...postExtras,
+        });
+        return;
+      }
+    }
+
+    let trainingBlock =
+      facts && turn.includeAcervoInPrompt
+        ? buildChatTrainingPromptBlock({
+            empresa: facts.empresa,
+            contextos: facts.contextos,
+            acervoLabels: acervoBundle?.labels ?? [],
+            nomeFantasia,
+          })
+        : "";
+
+    if (turn.chat_mode === "identidade") {
+      trainingBlock = buildPerfilGeralLlmPromptBlock(nomeFantasia, turn.perfilGeralTheme ?? null);
+    } else if (turn.chat_mode === "conversa_aberta") {
+      const hint = buildConversaNaturalPromptHint(nomeFantasia);
+      trainingBlock = [hint, trainingBlock].filter(Boolean).join("\n\n");
+    }
 
     const t0 = Date.now();
-    const result = await runChatSerialized(parsed.data);
+    const result = await runChatSerialized({
+      ...parsed.data,
+      history,
+      ...(trainingBlock ? { acervo_context: trainingBlock } : {}),
+      ...(turn.chat_mode ? { chat_mode: turn.chat_mode } : {}),
+    });
     const elapsedMs = Date.now() - t0;
     if (elapsedMs > 15_000) {
       console.info(`[ia/chat] resposta em ${Math.round(elapsedMs / 1000)}s`);
@@ -104,12 +262,26 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
       res.status(502).json({ error: result?.error || "Falha na IA" });
       return;
     }
-    const answer = String(result.result || "");
+    let answer = String(result.result || "");
+    if (acervoBundle?.midias?.length && turn.needsProductGuard) {
+      answer = guardChatProductAnswer(answer, acervoBundle.midias, acervoBundle.nomeFantasia, {
+        userQuestion: parsed.data.question,
+      });
+    }
+    answer = sanitizeChatAnswer({
+      answer,
+      question: parsed.data.question,
+      history,
+      nomeFantasia: acervoBundle?.nomeFantasia ?? nomeFantasia,
+    });
     const source_documents = Array.isArray(result.source_documents) ? result.source_documents : [];
 
     res.json({
       answer,
       source_documents,
+      chat_route: turn.route,
+      ...(turn.chat_mode ? { chat_mode: turn.chat_mode } : {}),
+      ...(turn.topics?.length ? { chat_topics: turn.topics } : {}),
       ...(route_image_generation
         ? {
             route_image_generation: true,
@@ -139,7 +311,8 @@ const postContextProposalBodySchema = z.object({
       }),
     )
     .min(1)
-    .max(36),
+    .max(CHAT_API_HISTORY_MAX * 3)
+    .transform((arr) => trimChatHistoryForApi(arr) ?? []),
   id_empresa: z.string().uuid(),
   arte_brief: z.record(z.string(), z.unknown()).optional(),
 });
@@ -275,7 +448,28 @@ r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
     res.status(503).json({ error: "Supabase não configurado no servidor" });
     return;
   }
-  await handleImagePreview(req, res, db, assertEmpresaVinculo);
+  try {
+    await handleImagePreview(req, res, db, assertEmpresaVinculo);
+  } catch (err) {
+    if (res.headersSent) {
+      console.error("[ia/image-preview] erro após resposta:", err);
+      return;
+    }
+    console.error("[ia/image-preview] erro não tratado:", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Erro interno ao gerar a prévia.",
+    });
+  }
+});
+
+/** Plano de geração (sem cobrar): referências, prompt resumido e bloqueios antes de `/image-preview`. */
+r.post("/image-preview/plan", requireUserJwt, requireUsuario, async (req, res) => {
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+  await handleImageGenerationPlan(req, res, db, assertEmpresaVinculo);
 });
 
 export default r;

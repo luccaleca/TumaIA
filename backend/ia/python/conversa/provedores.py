@@ -102,16 +102,26 @@ def max_chat_output_tokens() -> int:
         return 160
 
 
+def max_chat_output_tokens_natural() -> int:
+    """Respostas curtas (fora do escopo) — menos tokens = mais rápido no Ollama."""
+    raw = (os.getenv("TUMACORE_MAX_OUTPUT_TOKENS_NATURAL") or "96").strip()
+    try:
+        return max(40, min(200, int(raw)))
+    except ValueError:
+        return 96
+
+
 _llm_lock = threading.Lock()
 _llm_singleton = None
 _llm_sql_singleton = None
+_llm_natural_singleton = None
 
 
-def _criar_llm(prefer_sql_model: bool = False):
+def _criar_llm(prefer_sql_model: bool = False, *, max_tokens: int | None = None, ollama_model_override: str | None = None):
     """Constrói o cliente LangChain; llm() reutiliza instâncias em memória."""
-    ollama_model = (os.getenv("OLLAMA_CHAT_MODEL") or "").strip()
+    ollama_model = (ollama_model_override or os.getenv("OLLAMA_CHAT_MODEL") or "").strip()
     if ollama_model:
-        if prefer_sql_model:
+        if prefer_sql_model and not ollama_model_override:
             ollama_model = (os.getenv("OLLAMA_SQL_CHAT_MODEL") or ollama_model).strip()
         temp_raw = (os.getenv("OLLAMA_TEMPERATURE") or "0.4").strip().replace(",", ".")
         try:
@@ -119,36 +129,36 @@ def _criar_llm(prefer_sql_model: bool = False):
         except ValueError:
             temperature = 0.4
         api_key = (os.getenv("OLLAMA_API_KEY") or "ollama").strip()
-        max_tokens = max_chat_output_tokens()
+        tokens = max_tokens if max_tokens is not None else max_chat_output_tokens()
         return ChatOpenAI(
             model=ollama_model,
             api_key=api_key,
             base_url=ollama_openai_v1_base(),
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=tokens,
         )
 
     or_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
     if or_key:
-        model = (os.getenv("OPENROUTER_CHAT_MODEL") or "meta-llama/llama-3.3-70b-instruct:free").strip()
-        if prefer_sql_model:
+        model = (ollama_model_override or os.getenv("OPENROUTER_CHAT_MODEL") or "meta-llama/llama-3.3-70b-instruct:free").strip()
+        if prefer_sql_model and not ollama_model_override:
             model = (os.getenv("OPENROUTER_SQL_CHAT_MODEL") or model).strip()
         temp_raw = (os.getenv("OPENROUTER_TEMPERATURE") or "0.4").strip().replace(",", ".")
         try:
             temperature = float(temp_raw)
         except ValueError:
             temperature = 0.4
-        max_tokens = max_chat_output_tokens()
+        tokens = max_tokens if max_tokens is not None else max_chat_output_tokens()
         return ChatOpenAI(
             model=model,
             api_key=or_key,
             base_url=openrouter_base_url(),
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=tokens,
             default_headers=openrouter_headers(),
         )
     raise RuntimeError(
-        "Defina OLLAMA_CHAT_MODEL (Ollama local, ex. llama3.2:3b) ou OPENROUTER_API_KEY em config/.env."
+        "Defina OLLAMA_CHAT_MODEL (Ollama local, ex. qwen2.5:3b) ou OPENROUTER_API_KEY em config/.env."
     )
 
 
@@ -160,6 +170,26 @@ def llm():
         if _llm_singleton is None:
             _llm_singleton = _criar_llm()
     return _llm_singleton
+
+
+def llm_conversa_aberta():
+    """
+    Modelo enxuto para curiosidades / fora do escopo (menos latência).
+    OLLAMA_FAST_CHAT_MODEL (ex.: qwen2.5:1.5b) ou o mesmo OLLAMA_CHAT_MODEL com menos tokens.
+    """
+    global _llm_natural_singleton
+    if _llm_natural_singleton is not None:
+        return _llm_natural_singleton
+    with _llm_lock:
+        if _llm_natural_singleton is None:
+            fast = (os.getenv("OLLAMA_FAST_CHAT_MODEL") or "").strip()
+            or_fast = (os.getenv("OPENROUTER_FAST_CHAT_MODEL") or "").strip()
+            override = fast or or_fast or None
+            _llm_natural_singleton = _criar_llm(
+                max_tokens=max_chat_output_tokens_natural(),
+                ollama_model_override=override,
+            )
+    return _llm_natural_singleton
 
 
 def llm_para_contexto(sql_context: bool = False):

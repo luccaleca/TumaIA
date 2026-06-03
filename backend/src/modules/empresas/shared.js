@@ -388,6 +388,83 @@ export function coletarSubpastas(allPastas, rootId) {
   return descendants;
 }
 
+/**
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {string} table
+ * @param {(q: import("@supabase/supabase-js").PostgrestFilterBuilder<any, any, any>) => import("@supabase/supabase-js").PostgrestFilterBuilder<any, any, any>} applyFilters
+ */
+export async function supabaseCountExact(supabase, table, applyFilters) {
+  let q = supabase.from(table).select("*", { count: "exact", head: true });
+  q = applyFilters(q);
+  const { count, error } = await q;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/**
+ * Contagem direta (filhos e mídias) de uma pasta.
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {string} idEmpresa
+ * @param {string} idPasta
+ */
+export async function contarConteudoPasta(supabase, idEmpresa, idPasta) {
+  const [subpastas, midias] = await Promise.all([
+    supabaseCountExact(supabase, "pasta", (q) =>
+      q.eq("id_empresa", idEmpresa).eq("id_pasta_pai", idPasta).eq("ativo", true),
+    ),
+    supabaseCountExact(supabase, "midia", (q) =>
+      q.eq("id_empresa", idEmpresa).eq("id_pasta", idPasta).eq("ativo", true),
+    ),
+  ]);
+  return { subpastas, midias };
+}
+
+/**
+ * Soft-delete da pasta e de toda a árvore abaixo (mídias + subpastas).
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {string} idEmpresa
+ * @param {string} idPasta
+ * @param {{ protegerIds?: Set<string> }} [opts]
+ */
+export async function removerPastaComConteudo(supabase, idEmpresa, idPasta, opts = {}) {
+  const proteger = opts.protegerIds ?? new Set();
+  const { data: todas, error: eTodas } = await supabase
+    .from("pasta")
+    .select("id_pasta, id_pasta_pai")
+    .eq("id_empresa", idEmpresa)
+    .eq("ativo", true);
+  if (eTodas) throw new Error(eTodas.message);
+
+  const subtree = new Set([idPasta, ...coletarSubpastas(todas || [], idPasta)]);
+  for (const protegido of proteger) subtree.delete(protegido);
+  if (!subtree.size) return { removidas: 0, midias: 0 };
+
+  const ids = [...subtree];
+  const agora = new Date().toISOString();
+
+  const midias = await supabaseCountExact(supabase, "midia", (q) =>
+    q.eq("id_empresa", idEmpresa).in("id_pasta", ids).eq("ativo", true),
+  );
+
+  const { error: eMidias } = await supabase
+    .from("midia")
+    .update({ ativo: false })
+    .eq("id_empresa", idEmpresa)
+    .in("id_pasta", ids)
+    .eq("ativo", true);
+  if (eMidias) throw new Error(eMidias.message);
+
+  const { error: ePastas } = await supabase
+    .from("pasta")
+    .update({ ativo: false, data_atualizacao: agora })
+    .eq("id_empresa", idEmpresa)
+    .in("id_pasta", ids)
+    .eq("ativo", true);
+  if (ePastas) throw new Error(ePastas.message);
+
+  return { pastas: ids.length, midias };
+}
+
 export function safeExt(filename) {
   const ext = path.extname(filename || "").toLowerCase().replace(/^\./, "");
   return ext || "bin";

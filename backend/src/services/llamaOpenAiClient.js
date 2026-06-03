@@ -1,4 +1,5 @@
 import { env } from "../config.js";
+import { DEFAULT_OLLAMA_CHAT_MODEL } from "../ollamaDefaults.js";
 import { parseJsonFromLlmContent } from "./llamaJsonParse.js";
 
 /**
@@ -34,7 +35,7 @@ async function llamaChatCompletionFromMessages(messages, options = {}) {
     timeoutMs = LLAMA_FETCH_TIMEOUT_MS,
     timeoutMessage = "Tempo esgotado aguardando o Llama (Ollama). Verifique se o Ollama está rodando e se o modelo está instalado.",
   } = options;
-  const m = (model || env.LLAMA_MODEL || "llama3.2:3b").trim();
+  const m = (model || env.LLAMA_MODEL || DEFAULT_OLLAMA_CHAT_MODEL).trim();
   const apiKey = (env.LLAMA_API_KEY || "ollama").trim() || "ollama";
   const url = `${baseV1()}/chat/completions`;
 

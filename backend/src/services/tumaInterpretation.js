@@ -38,10 +38,11 @@ const META_OR_HYPOTHETICAL_PATTERNS = [
   /\bna\s+teoria\b/i,
   /\bno\s+futuro\b/i,
   /\bquando\s+eu\s+(quiser|precisar|for)\b/i,
+  /\b(amanh[aã]|depois|mais\s+tarde|semana\s+que\s+vem)\b/i,
 ];
 
 const CONVERSATIONAL_ONLY =
-  /^(oi+|ol[aá]+|opa+|e\s*a[ií]+|bom\s+dia|boa\s+tarde|boa\s+noite|tudo\s+bem|blz+|ok+|teste+)\b|quem\s+(é|e)\s+(você|voce|vc|tu)\b|o\s+que\s+(é|e)\s+(você|voce|vc|tu|isso)\b|como\s+(você|voce|vc)\s+funciona|qual\s+(é|e)\s+seu\s+nome|qual\s+seu\s+nome|me\s+(fala|conta)\s+sobre\s+(você|voce|vc)|o\s+que\s+você\s+faz|o\s+que\s+voce\s+faz|quem\s+é\s+(o\s+)?(tuma|bot|assistente)|^(ajuda|help)\b/i;
+  /^(oi+|ol[aá]+|opa+|e\s*a[ií]+|bom\s+dia|boa\s+tarde|boa\s+noite|tudo\s+bem|blz+|ok[!.,?\s]*$|teste+)\b|quem\s+(é|e)\s+(você|voce|vc|tu)\b|o\s+que\s+(é|e)\s+(você|voce|vc|tu|isso)\b|como\s+(você|voce|vc)\s+funciona|qual\s+(é|e)\s+seu\s+nome|qual\s+seu\s+nome|me\s+(fala|conta)\s+sobre\s+(você|voce|vc)|o\s+que\s+você\s+faz|o\s+que\s+voce\s+faz|quem\s+é\s+(o\s+)?(tuma|bot|assistente)|^(ajuda|help)\b/i;
 
 const ASSISTANT_IMAGE_OFFER =
   /(posso|quer\s+que\s+eu|vamos)\s+(montar|gerar|criar|fazer).{0,40}(arte|imagem|post|pr[eé]via|visual)|gerar\s+(a\s+)?pr[eé]via|confirma(r)?\s+(a\s+)?(arte|imagem|post)|resumo\s+do\s+pedido\s+para\s+a\s+arte/i;

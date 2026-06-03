@@ -6,7 +6,7 @@ function baseV1() {
   return raw.endsWith("/v1") ? raw : `${raw}/v1`;
 }
 
-const model = (process.env.LLAMA_MODEL || "llama3.2:3b").trim();
+const model = (process.env.LLAMA_MODEL || "qwen2.5:3b").trim();
 const apiKey = (process.env.LLAMA_API_KEY || "ollama").trim() || "ollama";
 const url = `${baseV1()}/chat/completions`;
 

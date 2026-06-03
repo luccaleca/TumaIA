@@ -2,7 +2,10 @@ import { z } from "zod";
 import { env } from "../config.js";
 import { executeFlux11Pro, flux11ProInputSchema } from "../services/flux11ProService.js";
 import { executeFluxSchnell, fluxSchnellInputSchema } from "../services/fluxSchnellService.js";
-import { executeGptImage2, friendlyOpenAiImageError } from "../services/gptImage2Service.js";
+import {
+  executeGptImage2WithReferences,
+  friendlyOpenAiImageError,
+} from "../services/gptImage2Service.js";
 import {
   executeReplicateGptImage2,
   friendlyReplicateGptImage2Error,
@@ -16,39 +19,52 @@ import {
 import {
   buildFluxImagePrompt,
   buildImagePreviewContextMeta,
+  buildRefineComposedImagePrompt,
   loadContextosEmpresaAtivos,
   loadEmpresaResumoParaImagem,
   loadMidiasEmpresaResumo,
 } from "../services/imagePreviewPrompt.js";
+import {
+  getImageProductMode,
+  usesGptIntegratedProducts,
+  usesGptRefineAfterCollage,
+  usesSharpProductCollage,
+} from "../services/imageProductDelivery.js";
+import { resolveGptImage2InputImages } from "../services/imagePreviewReferences.js";
+import { buildImageGenerationPlan } from "../services/imageGenerationPlan.js";
+import {
+  buildQualityRejectionUserMessage,
+  isImagePreviewQualityReviewEnabled,
+  reviewImagePreviewBeforeDelivery,
+} from "../services/imagePreviewQualityReview.js";
+import { resolveFraseNaImagem } from "../services/imageHeadline.js";
 import { resolveActivePedidoHint } from "../services/imageHeadline.js";
-import { filterReferenceMidiaIdsToPedido } from "../services/productMentionMatch.js";
 import { buildConfirmedImageIntent } from "../services/imageIntent.js";
-import { collectReferenceMidiaIds } from "../services/referenceMidiaFromProposal.js";
-import { pickHeroProductMidiaId, rankReferenceMidiaIds } from "../services/referenceMidiaRanking.js";
 import { wantsLogoAsHero } from "../services/logoReferencePolicy.js";
 import { friendlyImageGenerationError } from "../services/replicateImagePromptPrep.js";
-import {
-  REFERENCE_MIDIA_MAX,
-  resolveFetchableImageUrlForMidia,
-  resolveReferenceMidiasForReplicate,
-} from "../services/referenceMidiaUrls.js";
+import { resolveReferenceMidiasForReplicate } from "../services/referenceMidiaUrls.js";
 import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
 import { FLUX_IMAGE_PROMPT_MAX } from "../services/imagePreviewPrompt.js";
 import { aspectRatioFromArteBrief } from "../services/rawImageArteBrief.js";
 import { composeGeneratedSceneWithProducts } from "../services/productSceneComposer.js";
+import {
+  CHAT_API_HISTORY_MAX,
+  trimChatHistoryForApi,
+} from "../services/chatHistoryLimit.js";
 
 const aspectRatioSchema = z.enum(["1:1", "16:9", "9:16", "3:2", "2:3"]).optional();
 
+const imagePreviewHistoryEntrySchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().trim().min(1).max(8000),
+});
+
 export const imagePreviewSchema = z.object({
   history: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant"]),
-        content: z.string().trim().min(1).max(8000),
-      }),
-    )
+    .array(imagePreviewHistoryEntrySchema)
     .min(1)
-    .max(36),
+    .max(CHAT_API_HISTORY_MAX * 3)
+    .transform((arr) => trimChatHistoryForApi(arr) ?? []),
   id_empresa: z.string().uuid(),
   aspect_ratio: aspectRatioSchema,
   post_context_proposal: z.record(z.string(), z.unknown()).optional(),
@@ -73,155 +89,13 @@ function normalizeImageOutputUrls(output) {
 }
 
 /**
- * @param {import("@supabase/supabase-js").SupabaseClient} db
- * @param {string} idEmpresa
- * @param {string[]} refIds
- */
-async function resolveInputImageUrlsForGpt(db, idEmpresa, refIds) {
-  if (!refIds.length) return [];
-  const { data, error } = await db
-    .from("midia")
-    .select("id_midia, tipo_midia, formato_arquivo, extensao, nome_arquivo, caminho_storage, url_arquivo")
-    .eq("id_empresa", idEmpresa)
-    .eq("ativo", true)
-    .in("id_midia", refIds);
-  if (error) throw new Error(error.message);
-  const rows = Array.isArray(data) ? data : [];
-  const urls = [];
-  for (const id of refIds) {
-    const row = rows.find((r) => String(r.id_midia) === id);
-    if (!row) continue;
-    const url = await resolveFetchableImageUrlForMidia(db, row);
-    if (url) urls.push(url);
-    if (urls.length >= 4) break;
-  }
-  return urls;
-}
-
-/**
- * @param {import("@supabase/supabase-js").SupabaseClient} db
- * @param {string} idEmpresa
- * @param {z.infer<typeof imagePreviewSchema>} parsed
- * @param {Array<Record<string, unknown>>} contextoRows
- */
-async function resolveGptImage2InputImages(db, idEmpresa, parsed, contextoRows, imageIntent = null) {
-  const fromBody = (parsed.reference_midia_ids || []).map((x) => String(x).trim()).filter(Boolean);
-  const fromProposal = collectReferenceMidiaIds(
-    imageIntent?.postContextProposal || parsed.post_context_proposal,
-    parsed.post_supplement_links,
-  );
-  let refIds = [...new Set([...fromBody, ...fromProposal])].slice(0, REFERENCE_MIDIA_MAX);
-  const userHint =
-    (imageIntent && typeof imageIntent.pedido === "string" && imageIntent.pedido.trim()) ||
-    resolveActivePedidoHint(parsed.history, {
-      proposal: imageIntent?.postContextProposal || parsed.post_context_proposal,
-    });
-  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
-  const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
-  const logoAsHero = wantsLogoAsHero(userHint);
-  if (logoId && !refIds.includes(logoId)) {
-    refIds = [...refIds, logoId].slice(0, REFERENCE_MIDIA_MAX);
-  }
-  if (!refIds.length) {
-    return {
-      inputImages: undefined,
-      referenceMeta: null,
-      referenceKind: null,
-      strictProductReference: false,
-      composeProductAssets: false,
-      productRefIds: [],
-      heroProductId: null,
-      productCount: 0,
-    };
-  }
-
-  const { data: midiaRows } = await db
-    .from("midia")
-    .select("id_midia, nome_exibicao, nome_arquivo, descricao, alt_text, tipo_midia, formato_arquivo, extensao")
-    .eq("id_empresa", idEmpresa)
-    .eq("ativo", true)
-    .in("id_midia", refIds);
-  if (Array.isArray(midiaRows) && midiaRows.length) {
-    refIds = filterReferenceMidiaIdsToPedido(refIds, midiaRows, userHint);
-    const excludeRefIds = identidadeDados?.id_midia_referencia_analise
-      ? [String(identidadeDados.id_midia_referencia_analise)]
-      : [];
-    refIds = rankReferenceMidiaIds(refIds, midiaRows, userHint, excludeRefIds, logoId);
-  }
-  const orderedRows = refIds
-    .map((id) => (Array.isArray(midiaRows) ? midiaRows.find((r) => String(r.id_midia) === id) : null))
-    .filter(Boolean);
-  const isLogoRow = (row) => logoId && String(row?.id_midia ?? "").trim() === logoId;
-  const productRows = orderedRows.filter((row) => !isLogoRow(row));
-  const logoRows = orderedRows.filter((row) => isLogoRow(row));
-  const composeProductAssets = productRows.length > 0;
-  const inputImageIds = logoAsHero
-    ? refIds
-    : composeProductAssets
-      ? []
-      : refIds.filter((id) => id !== logoId);
-  const inputImages = await resolveInputImageUrlsForGpt(db, idEmpresa, inputImageIds);
-  const primaryRow =
-    (inputImageIds.length
-      ? orderedRows.find((row) => inputImageIds.includes(String(row.id_midia ?? "").trim()))
-      : orderedRows[0]) || null;
-  const referenceKind = logoAsHero && primaryRow && isLogoRow(primaryRow) ? "logo" : "product";
-  const strictProductReference = productRows.length > 0;
-  const productRefIds = productRows.map((row) => String(row.id_midia)).filter(Boolean);
-  const proposalHeroId =
-    imageIntent?.heroProduct && typeof imageIntent.heroProduct.id_midia === "string"
-      ? imageIntent.heroProduct.id_midia.trim()
-      : "";
-  const heroProductId =
-    (proposalHeroId && productRows.some((row) => String(row.id_midia ?? "").trim() === proposalHeroId)
-      ? proposalHeroId
-      : "") || pickHeroProductMidiaId(productRows, userHint);
-
-  if (!inputImages.length) {
-    return {
-      inputImages: undefined,
-      referenceMeta: {
-        mode: "replicate/gpt-image-2",
-        reference_input_images: refIds,
-        compose_product_assets: composeProductAssets,
-        composed_product_ids: productRefIds,
-        composed_hero_product_id: heroProductId,
-        composed_logo_id: logoAsHero ? null : logoId || null,
-      },
-      referenceKind,
-      strictProductReference,
-      composeProductAssets,
-      productRefIds,
-      heroProductId,
-      productCount: productRefIds.length,
-    };
-  }
-  return {
-    inputImages,
-    referenceMeta: {
-      mode: "replicate/gpt-image-2",
-      reference_input_images: refIds,
-      compose_product_assets: composeProductAssets,
-      composed_product_ids: productRefIds,
-      composed_hero_product_id: heroProductId,
-      composed_logo_id: logoAsHero ? null : logoId || null,
-    },
-    referenceKind,
-    strictProductReference,
-    composeProductAssets,
-    productRefIds,
-    heroProductId,
-    productCount: productRefIds.length,
-  };
-}
-
-/**
  * @param {import("express").Request} req
  * @param {import("express").Response} res
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {(req: import("express").Request, idEmpresa: string) => Promise<{ ok: boolean, status?: number, error?: string }>} assertEmpresaVinculo
  */
 export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
+  const startedAt = Date.now();
   const parsed = imagePreviewSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten() });
@@ -262,10 +136,12 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
 
   const provider = env.IMAGE_PROVIDER || "replicate";
   const pipeline = env.IMAGE_PIPELINE || "raw";
+  const productMode = getImageProductMode();
   const idEmpresa = parsed.data.id_empresa;
 
   let empresaRow;
   let contextoRows;
+  let midiaRowsCatalog;
   try {
     [empresaRow, contextoRows, midiaRowsCatalog] = await Promise.all([
       loadEmpresaResumoParaImagem(db, idEmpresa),
@@ -313,6 +189,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
   let referenceMeta = null;
   let composedProductIds = [];
   let heroProductId = null;
+  let previewProductNames = [];
 
   if (provider === "openai") {
     const apiKey = (env.OPENAI_API_KEY || "").trim();
@@ -320,8 +197,51 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
       res.status(503).json({ error: "OPENAI_API_KEY não configurada." });
       return;
     }
-    out = await executeGptImage2(apiKey, {
-      prompt,
+    let promptForProvider = prompt;
+    let inputImages;
+    if (pipeline === "raw") {
+      try {
+        const refs = await resolveGptImage2InputImages(
+          db,
+          idEmpresa,
+          parsed.data,
+          contextoRows,
+          imageIntent,
+          productMode,
+        );
+        composedProductIds = refs.productRefIds || [];
+        heroProductId = refs.heroProductId || null;
+        previewProductNames = refs.productNames || [];
+        inputImages = refs.inputImages;
+        referenceMeta = refs.referenceMeta || { mode: "openai/gpt-image-2", pipeline, product_mode: productMode };
+        const integrated =
+          usesGptIntegratedProducts(productMode) && (composedProductIds.length || inputImages?.length);
+        promptForProvider = buildFluxImagePrompt({
+          history: parsed.data.history,
+          contextoRows,
+          postContextProposal: imageIntent.postContextProposal,
+          focusContextoId: parsed.data.focus_contexto_id,
+          hasReferenceImage: Boolean(inputImages?.length),
+          referenceKind: refs.referenceKind,
+          strictProductReference: refs.strictProductReference && !integrated,
+          composeProductAssets: refs.composeProductAssets,
+          integratedProductGeneration: integrated,
+          productNames: refs.productNames,
+          productCount: refs.productCount,
+          logoInReferences: refs.logoInReferences,
+          aspectRatio: aspect,
+          pipeline,
+        });
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Referência de mídia inválida",
+        });
+        return;
+      }
+    }
+    out = await executeGptImage2WithReferences(apiKey, {
+      prompt: promptForProvider,
+      input_images: inputImages,
       aspect_ratio: aspect,
       quality: env.OPENAI_IMAGE_QUALITY,
     });
@@ -332,7 +252,14 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
       });
       return;
     }
-    referenceMeta = { mode: "openai/gpt-image-2", pipeline };
+    if (!referenceMeta) {
+      referenceMeta = {
+        mode: "openai/gpt-image-2",
+        pipeline,
+        product_mode: productMode,
+        api: out.api || "images/generations",
+      };
+    }
   } else if (provider === "replicate") {
     const token = (env.REPLICATE_API_TOKEN || "").trim();
     if (!token) {
@@ -345,12 +272,22 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     let inputImages;
     let promptForProvider = prompt;
     try {
-      const refs = await resolveGptImage2InputImages(db, idEmpresa, parsed.data, contextoRows, imageIntent);
+      const refs = await resolveGptImage2InputImages(
+        db,
+        idEmpresa,
+        parsed.data,
+        contextoRows,
+        imageIntent,
+        productMode,
+      );
       inputImages = refs.inputImages;
       composedProductIds = refs.productRefIds || [];
       heroProductId = refs.heroProductId || null;
+      previewProductNames = refs.productNames || [];
       if (refs.referenceMeta) referenceMeta = refs.referenceMeta;
-      if (inputImages?.length || refs.composeProductAssets) {
+      const integrated =
+        usesGptIntegratedProducts(productMode) && (composedProductIds.length || inputImages?.length);
+      if (inputImages?.length || refs.composeProductAssets || integrated) {
         promptForProvider = buildFluxImagePrompt({
           history: parsed.data.history,
           contextoRows,
@@ -358,9 +295,13 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
           focusContextoId: parsed.data.focus_contexto_id,
           hasReferenceImage: Boolean(inputImages?.length),
           referenceKind: refs.referenceKind,
-          strictProductReference: refs.strictProductReference,
+          strictProductReference: refs.strictProductReference && !integrated,
           composeProductAssets: refs.composeProductAssets,
+          integratedProductGeneration: integrated,
+          productNames: refs.productNames,
           productCount: refs.productCount,
+          logoInReferences: refs.logoInReferences,
+          aspectRatio: aspect,
           pipeline,
         });
       }
@@ -371,6 +312,9 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
       return;
     }
 
+    console.info(
+      `[ia/image-preview] replicate refs=${inputImages?.length ?? 0} produtos=${composedProductIds.length} hero=${heroProductId || "—"}`,
+    );
     out = await executeReplicateGptImage2(
       token,
       replicateGptImage2InputSchema.parse({
@@ -382,6 +326,10 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
       }),
     );
     if (!out.ok) {
+      console.warn(
+        `[ia/image-preview] replicate falhou em ${Date.now() - startedAt}ms:`,
+        out.error || out.status,
+      );
       res.status(out.status || 500).json({
         error: friendlyReplicateGptImage2Error(out.error),
         raw: out.raw,
@@ -504,35 +452,64 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
   }
 
   let image_urls = normalizeImageOutputUrls(out.output);
-  if (provider === "replicate" && pipeline === "raw" && image_urls.length) {
+  const gptRawProvider = provider === "replicate" || provider === "openai";
+  if (pipeline === "raw" && gptRawProvider && image_urls.length) {
     try {
-      const hasComposedAssets = Boolean(composedProductIds.length || (logoId && !logoAsHero));
-      image_urls = await Promise.all(
-        image_urls.map((url, idx) =>
-          composeGeneratedSceneWithProducts(db, idEmpresa, url, composedProductIds, idx, {
-            heroProductId,
-            logoId: logoId && !logoAsHero ? logoId : null,
-          }),
-        ),
-      );
-      if (hasComposedAssets) {
-        referenceMeta =
-          referenceMeta && typeof referenceMeta === "object"
-            ? {
-                ...referenceMeta,
-                composed_preview: true,
-                composed_logo: Boolean(logoId && !logoAsHero),
-              }
-            : {
-                mode: "replicate/gpt-image-2",
-                pipeline,
-                composed_preview: true,
-                composed_logo: Boolean(logoId && !logoAsHero),
-              };
+      if (usesSharpProductCollage(productMode) && composedProductIds.length) {
+        const hasComposedAssets = Boolean(composedProductIds.length || (logoId && !logoAsHero));
+        image_urls = await Promise.all(
+          image_urls.map((url, idx) =>
+            composeGeneratedSceneWithProducts(db, idEmpresa, url, composedProductIds, idx, {
+              heroProductId,
+              logoId: logoId && !logoAsHero ? logoId : null,
+            }),
+          ),
+        );
+        if (hasComposedAssets && referenceMeta && typeof referenceMeta === "object") {
+          referenceMeta = {
+            ...referenceMeta,
+            composed_preview: true,
+            composed_logo: Boolean(logoId && !logoAsHero),
+            product_mode: productMode,
+          };
+        }
+      }
+
+      if (usesGptRefineAfterCollage(productMode) && image_urls.length) {
+        const refinePrompt = buildRefineComposedImagePrompt(imageIntent);
+        let refineOut = null;
+        if (provider === "openai") {
+          const apiKey = (env.OPENAI_API_KEY || "").trim();
+          refineOut = await executeGptImage2WithReferences(apiKey, {
+            prompt: refinePrompt,
+            input_images: image_urls.slice(0, 1),
+            aspect_ratio: aspect,
+            quality: env.OPENAI_IMAGE_QUALITY,
+          });
+        } else if (provider === "replicate") {
+          const token = (env.REPLICATE_API_TOKEN || "").trim();
+          refineOut = await executeReplicateGptImage2(
+            token,
+            replicateGptImage2InputSchema.parse({
+              prompt: refinePrompt,
+              aspect_ratio: aspect,
+              quality: env.REPLICATE_GPT_IMAGE_QUALITY,
+              output_format: "png",
+              input_images: image_urls.slice(0, 1),
+            }),
+          );
+        }
+        if (refineOut?.ok) {
+          const refined = normalizeImageOutputUrls(refineOut.output);
+          if (refined.length) image_urls = refined;
+          if (referenceMeta && typeof referenceMeta === "object") {
+            referenceMeta = { ...referenceMeta, gpt_refined: true, product_mode: productMode };
+          }
+        }
       }
     } catch (err) {
       console.warn(
-        "[ia/image-preview] falha ao compor produtos reais:",
+        "[ia/image-preview] falha na pós-composição:",
         err instanceof Error ? err.message : err,
       );
       if (referenceMeta && typeof referenceMeta === "object") {
@@ -549,12 +526,99 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     parsed.data.focus_contexto_id,
   );
 
+  let qualityReview = null;
+  if (image_urls.length && isImagePreviewQualityReviewEnabled()) {
+    const heroRow =
+      heroProductId && Array.isArray(midiaRowsCatalog)
+        ? midiaRowsCatalog.find((r) => String(r.id_midia ?? "").trim() === heroProductId)
+        : null;
+    const heroName = heroRow
+      ? String(heroRow.nome_exibicao ?? heroRow.nome_arquivo ?? "").trim()
+      : imageIntent?.heroProduct?.nome_exibicao || null;
+    try {
+      qualityReview = await reviewImagePreviewBeforeDelivery(image_urls[0], {
+        productNames: previewProductNames,
+        heroProductName: heroName,
+        fraseNaImagem: resolveFraseNaImagem(imageIntent.postContextProposal, parsed.data.history),
+        productCount: composedProductIds?.length || 0,
+        composeProductAssets: Boolean(referenceMeta?.compose_product_assets),
+      });
+    } catch (err) {
+      console.warn(
+        "[ia/image-preview] revisão de qualidade indisponível — entregando prévia mesmo assim:",
+        err instanceof Error ? err.message : err,
+      );
+      qualityReview = {
+        approved: true,
+        skipped: true,
+        reviewer: "ollama_vision_unavailable",
+        summary: err instanceof Error ? err.message : String(err),
+      };
+    }
+
+    if (!qualityReview.approved) {
+      console.info(
+        `[ia/image-preview] revisão reprovou em ${Date.now() - startedAt}ms issues=${(qualityReview.issues || []).join(",")}`,
+      );
+      res.status(422).json({
+        error: buildQualityRejectionUserMessage(qualityReview.issues, qualityReview.summary),
+        quality_review: qualityReview,
+        image_urls: [],
+        rejected_preview: true,
+      });
+      return;
+    }
+  }
+
+  console.info(
+    `[ia/image-preview] ok em ${Date.now() - startedAt}ms urls=${image_urls.length} review=${qualityReview?.approved ?? "n/a"}`,
+  );
   res.json({
     prediction_id: out.prediction_id ?? null,
     status: out.status ?? "succeeded",
     model: out.model,
     image_urls,
     contexto_geracao,
-    ...(referenceMeta ? { image_generation: referenceMeta } : {}),
+    ...(referenceMeta
+      ? {
+          image_generation: {
+            ...referenceMeta,
+            ...(qualityReview ? { quality_review: qualityReview } : {}),
+          },
+        }
+      : qualityReview
+        ? { image_generation: { quality_review: qualityReview } }
+        : {}),
   });
+}
+
+/**
+ * Plano de geração (sem API paga) — resumo antes de confirmar no painel.
+ *
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("@supabase/supabase-js").SupabaseClient} db
+ * @param {(req: import("express").Request, idEmpresa: string) => Promise<{ ok: boolean, status?: number, error?: string }>} assertEmpresaVinculo
+ */
+export async function handleImageGenerationPlan(req, res, db, assertEmpresaVinculo) {
+  const parsed = imagePreviewSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+
+  try {
+    const generation_plan = await buildImageGenerationPlan(db, parsed.data);
+    res.json({ generation_plan });
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Erro ao montar plano de geração",
+    });
+  }
 }

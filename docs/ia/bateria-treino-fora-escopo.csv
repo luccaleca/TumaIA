@@ -1,0 +1,16 @@
+id,mensagem,intencao,deve_conter,nao_deve_conter,notas
+1,"que dia é hoje",DATA_HORA,"Hoje é|segunda|terça|quarta|quinta|sexta|sábado|domingo","marketing visual|dia útil|não mencionado",Data real Brasília
+2,"qual a data de hoje",DATA_HORA,"de 20","marketing visual|invent",Mes e ano reais
+3,"que horas são",DATA_HORA,"Brasília|Agora são","marketing visual",Hora servidor
+4,"quero o dia da semana mes e ano",DATA_HORA,"Hoje é|de ","sexta.*não mencionado|marketing",Frase do print do usuário
+5,"hoje é que dia",DATA_HORA,"Hoje é","marketing visual",Informal
+6,"me diz a data",DATA_HORA,"Hoje é|Brasília","pedir data ao usuário",Não devolver pergunta
+7,"qual dia estamos",DATA_HORA,"feira|domingo","dia útil",Sem eufemismo
+8,"conta uma piada",FORA_ESCOPO,"foge|foco|Mídias|posts","marketing visual",Redirecionar sem executar piada longa
+9,"qual a previsão do tempo",FORA_ESCOPO,"foge|clima|foco","marketing visual",Sem inventar clima
+10,"receita de bolo",FORA_ESCOPO,"foge|marketing|Mídias","ingredientes inventados",Fora do core
+11,"quanto tá o dólar",FORA_ESCOPO,"foge|foco","R$|cotação inventada",Sem finanças inventadas
+12,"notícia do dia",FORA_ESCOPO,"foge|foco","notícia inventada",Sem jornal fake
+13,"oi",SAUDACAO,"Tuma","data de hoje",Não confundir com data
+14,"que dia é hoje","DATA_HORA_CONTINUIDADE","Hoje é","marketing visual",Turno 2 após oi — ver script multi-turno
+15,"quais produtos temos",LISTAR_PRODUTOS,"whey|monster|acervo","segunda-feira|junho",Não responder data em pergunta de produto

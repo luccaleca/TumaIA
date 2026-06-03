@@ -9,6 +9,9 @@ from dotenv import dotenv_values, load_dotenv
 # Ajuste com TUMACORE_MIN_RELEVANCE no .env (ex.: 0.42).
 MIN_RELEVANCIA_PADRAO = 0.42
 
+# Alinhado a backend/src/ollamaDefaults.js (~4 GB VRAM).
+DEFAULT_OLLAMA_CHAT_MODEL = "qwen2.5:3b"
+
 # Quantos trechos no máximo mandar ao modelo quando há contexto (padrão 4).
 # Reduza com TUMACORE_K_CONTEXTO=2 no .env para menos latência em troca de menos RAG.
 
@@ -69,11 +72,15 @@ def garantir_ambiente_llm(root_dir: Path) -> None:
         return (os.getenv(chave) or "").strip()
 
     or_key = _prioridade("OPENROUTER_API_KEY")
-    ollama_chat = (_prioridade("OLLAMA_CHAT_MODEL") or _prioridade("LLAMA_MODEL")).strip()
+    ollama_chat = (
+        _prioridade("OLLAMA_CHAT_MODEL")
+        or _prioridade("LLAMA_MODEL")
+        or DEFAULT_OLLAMA_CHAT_MODEL
+    ).strip()
 
     if not or_key and not ollama_chat:
         raise RuntimeError(
-            "Defina OLLAMA_CHAT_MODEL ou LLAMA_MODEL (Ollama local, ex. llama3.2:3b) "
+            f"Defina OLLAMA_CHAT_MODEL ou LLAMA_MODEL (Ollama local, ex. {DEFAULT_OLLAMA_CHAT_MODEL}) "
             "ou OPENROUTER_API_KEY em backend/.env."
         )
     # Mesmo modelo que o Node usa para JSON: o worker Python lê OLLAMA_CHAT_MODEL.
