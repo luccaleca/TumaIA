@@ -1,197 +1,384 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
-import { isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
-import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresaUltimaFromMinhasPayload } from "../../../lib/empresaAtiva";
+import {
+  empresaRowFromMinhas,
+  idEmpresaUltimaFromMinhasPayload,
+  resolveEmpresaAtivaId,
+  setEmpresaAtiva,
+} from "../../../lib/empresaAtiva";
 
-const TIPOS = [
-  { value: "promocao", label: "Promoção" },
-  { value: "lancamento", label: "Lançamento" },
-  { value: "data_comemorativa", label: "Data comemorativa" },
-  { value: "personalizado", label: "Personalizado" },
-];
+function cargoPodeGerenciar(papel) {
+  return papel === "administrador" || papel === "editor";
+}
 
-const PROMOCAO_FIELD_ROWS = [
-  ["nome", "Nome"],
-  ["beneficio", "Benefício"],
-  ["tipo", "Tipo"],
-  ["detalhe", "Detalhe"],
-  ["precoOferta", "Preço / oferta"],
-  ["validade", "Validade"],
-  ["onde", "Onde"],
-  ["publico", "Público"],
-  ["cta", "CTA"],
-  ["restricoes", "Restrições"],
-];
-
-const LANCAMENTO_FIELD_ROWS = [
-  ["nome", "Nome"],
-  ["problema", "Problema que resolve"],
-  ["novidades", "O que há de novo"],
-  ["diferencial", "Diferencial"],
-  ["publico", "Público"],
-  ["disponibilidade", "Disponibilidade"],
-  ["dataMomento", "Data / momento"],
-  ["tom", "Tom"],
-  ["cta", "CTA"],
-  ["restricoes", "Restrições"],
-];
-
-const DATA_COMEMORATIVA_FIELD_ROWS = [
-  ["nome", "Nome / tema"],
-  ["ocasiao", "Ocasião"],
-  ["periodo", "Data / período"],
-  ["mensagem", "Mensagem central"],
-  ["tom", "Tom"],
-  ["publico", "Público"],
-  ["conexaoMarca", "Conexão com a marca"],
-  ["cta", "CTA"],
-  ["restricoes", "Restrições"],
-];
-
-/** Inputs/select do formulário (alinhado ao painel: superfície, borda, foco accent). */
-const CTX_CTRL_CLASS =
-  "w-full rounded-xl border border-border bg-surface-elevated px-3 py-2.5 text-sm text-foreground shadow-sm outline-none transition-[border-color,box-shadow] focus:border-accent/55 focus:ring-2 focus:ring-accent/15 dark:focus:ring-accent/25";
-
-function LabelWithHint({ id, label, hint }) {
-  const hintId = useId();
-  const help = String(hint || "").trim();
+function ModeloToggle({ ativo, disabled, onChange, label }) {
   return (
-    <div className="mb-1.5 flex flex-wrap items-center gap-2">
-      <label htmlFor={id} className="text-sm font-medium text-foreground">
-        {label}
-      </label>
-      {help ? (
-      <div className="group/hint relative inline-flex shrink-0 align-middle">
-        <button
-          type="button"
-          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-surface text-xs font-bold text-muted-foreground shadow-sm outline-none transition-[color,background-color,border-color,box-shadow] hover:border-accent/45 hover:bg-accent-muted hover:text-accent dark:hover:text-emerald-200 focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
-          aria-describedby={hintId}
-          aria-label={`Ajuda: ${label}`}
-        >
-          ?
-        </button>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={ativo}
+      aria-label={label}
+      disabled={disabled}
+      onClick={(ev) => {
+        ev.stopPropagation();
+        if (!disabled) onChange(!ativo);
+      }}
+      className={[
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors",
+        disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+        ativo ? "border-accent bg-accent" : "border-border bg-muted",
+      ].join(" ")}
+    >
+      <span
+        className={[
+          "inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform",
+          ativo ? "translate-x-[18px]" : "translate-x-0.5",
+        ].join(" ")}
+      />
+    </button>
+  );
+}
+
+function modeloExemploFallback(slug) {
+  const map = {
+    promocao: "promocao",
+    lancamento: "lancamento",
+    produto: "produto",
+    lifestyle: "produto",
+    mensagens: "mensagens",
+  };
+  const file = map[String(slug || "").trim()] || "promocao";
+  return `/imagens/modelos/${file}.svg`;
+}
+
+/** Força reload quando o PNG de exemplo é trocado mantendo o mesmo nome. */
+const EXEMPLO_IMG_VERSION = {
+  promocao: 2,
+  lancamento: 2,
+  produto: 2,
+  mensagens: 2,
+};
+
+function exemploImagemSrc(url, slug) {
+  const base = String(url || "").trim();
+  if (!base) return base;
+  const version = EXEMPLO_IMG_VERSION[String(slug || "").trim()];
+  if (!version) return base;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}v=${version}`;
+}
+
+function ModeloCard({ modelo, podeGerenciar, toggling, onOpen, onToggle }) {
+  const imgFallback = modeloExemploFallback(modelo.slug);
+  const [imgSrc, setImgSrc] = useState(() => exemploImagemSrc(modelo.exemplo_imagem_url, modelo.slug));
+
+  useEffect(() => {
+    setImgSrc(exemploImagemSrc(modelo.exemplo_imagem_url, modelo.slug));
+  }, [modelo.exemplo_imagem_url, modelo.slug]);
+
+  return (
+    <article
+      className="group flex cursor-pointer flex-col overflow-hidden rounded-lg border border-border bg-background shadow-sm transition-[border-color,box-shadow] hover:border-accent/40 hover:shadow-md"
+      onClick={() => onOpen(modelo)}
+    >
+      <div className="relative aspect-[2/1] w-full overflow-hidden bg-muted">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={imgSrc}
+          alt={`Exemplo visual — ${modelo.nome}`}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+          onError={() => setImgSrc(imgFallback)}
+        />
+        {modelo.ativo ? (
+          <span className="absolute left-2 top-2 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white shadow">
+            Ativo
+          </span>
+        ) : null}
+      </div>
+      <div className="flex flex-1 flex-col gap-2 p-2.5">
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold text-foreground">{modelo.nome}</h3>
+          <p className="mt-0.5 line-clamp-3 text-xs leading-snug text-muted-foreground">{modelo.tagline}</p>
+        </div>
         <div
-          id={hintId}
-          role="tooltip"
-          className="pointer-events-none invisible absolute left-0 top-full z-[70] mt-2 w-[min(22rem,calc(100vw-2.5rem))] overflow-hidden rounded-xl border border-border bg-surface text-left opacity-0 shadow-lg ring-1 ring-black/5 transition-[opacity,visibility] duration-200 dark:bg-surface dark:ring-white/10 group-hover/hint:visible group-hover/hint:opacity-100 group-hover/hint:pointer-events-auto group-focus-within/hint:visible group-focus-within/hint:opacity-100 group-focus-within/hint:pointer-events-auto"
+          className="mt-auto flex items-center justify-end gap-2 border-t border-border pt-2"
+          onClick={(ev) => ev.stopPropagation()}
         >
-          <div className="h-1 bg-gradient-to-r from-accent/70 via-accent to-accent/80" aria-hidden />
-          <p className="px-3.5 py-3 text-sm leading-relaxed text-foreground">{help}</p>
+          <ModeloToggle
+            ativo={modelo.ativo}
+            disabled={!podeGerenciar || toggling}
+            label={`${modelo.ativo ? "Desativar" : "Ativar"} modelo ${modelo.nome}`}
+            onChange={(next) => onToggle(modelo, next)}
+          />
         </div>
       </div>
+    </article>
+  );
+}
+
+function IconClose() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+function ModeloExemploImagem({ src, alt, fallback, slug, className = "" }) {
+  const [imgSrc, setImgSrc] = useState(() => exemploImagemSrc(src, slug));
+  const [lightbox, setLightbox] = useState(false);
+
+  useEffect(() => {
+    setImgSrc(exemploImagemSrc(src, slug));
+  }, [src, slug]);
+
+  useEffect(() => {
+    if (!lightbox) return;
+    function onKeyDown(ev) {
+      if (ev.key === "Escape") setLightbox(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [lightbox]);
+
+  return (
+    <>
+      <div className={["space-y-2", className].filter(Boolean).join(" ")}>
+        <button
+          type="button"
+          onClick={() => setLightbox(true)}
+          className="group/exemplo relative mx-auto block w-full max-w-xs cursor-zoom-in rounded-lg border border-border bg-muted p-2 text-left transition-[border-color,box-shadow] hover:border-accent/45 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30"
+          aria-label={`Ampliar exemplo: ${alt}`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imgSrc}
+            alt={alt}
+            className="mx-auto block h-auto max-h-[min(52vh,26rem)] w-full object-contain"
+            onError={() => setImgSrc(fallback)}
+          />
+          <span className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center opacity-0 transition-opacity group-hover/exemplo:opacity-100 group-focus-visible/exemplo:opacity-100">
+            <span className="rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-medium text-white">
+              Clique para ampliar
+            </span>
+          </span>
+        </button>
+      </div>
+
+      {lightbox ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Exemplo ampliado">
+          <button
+            type="button"
+            aria-label="Fechar visualização"
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setLightbox(false)}
+          />
+          <div className="relative z-10 flex max-h-full max-w-full flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={() => setLightbox(false)}
+              aria-label="Fechar"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-black/50 text-white hover:bg-black/70"
+            >
+              <IconClose />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imgSrc}
+              alt={alt}
+              className="max-h-[min(90vh,48rem)] max-w-full object-contain"
+              onError={() => setImgSrc(fallback)}
+            />
+          </div>
+        </div>
       ) : null}
+    </>
+  );
+}
+
+function ModeloListaBullets({ titulo, itens }) {
+  if (!Array.isArray(itens) || !itens.length) return null;
+  return (
+    <div>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h3>
+      <ul className="space-y-1.5">
+        {itens.map((item) => (
+          <li
+            key={item}
+            className="flex gap-2 rounded-lg border border-border bg-background px-2.5 py-2 text-xs leading-snug text-foreground"
+          >
+            <span className="mt-0.5 shrink-0 text-accent" aria-hidden>
+              •
+            </span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-function emptyForm() {
-  return {
-    tipo: "",
-    nome: "",
-    descricao: "",
-    promocao: {
-      nome: "",
-      beneficio: "",
-      tipo: "",
-      detalhe: "",
-      precoOferta: "",
-      validade: "",
-      onde: "",
-      publico: "",
-      cta: "",
-      restricoes: "",
-    },
-    lancamento: {
-      nome: "",
-      problema: "",
-      novidades: "",
-      diferencial: "",
-      publico: "",
-      disponibilidade: "",
-      dataMomento: "",
-      tom: "",
-      cta: "",
-      restricoes: "",
-    },
-    dataComemorativa: {
-      nome: "",
-      ocasiao: "",
-      periodo: "",
-      mensagem: "",
-      tom: "",
-      publico: "",
-      conexaoMarca: "",
-      cta: "",
-      restricoes: "",
-    },
-    personalizado: {
-      titulo: "",
-      campos: [{ nome: "", valor: "" }],
-    },
-  };
+function ModeloDetalheSheet({ open, modelo, onClose, podeGerenciar, toggling, onToggle }) {
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(ev) {
+      if (ev.key === "Escape") onClose?.();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open, onClose]);
+
+  if (!open || !modelo) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="modelo-detalhe-titulo">
+      <button
+        type="button"
+        aria-label="Fechar detalhes do modelo"
+        className="absolute inset-0 bg-black/35 backdrop-blur-[2px] transition-opacity dark:bg-black/50"
+        onClick={onClose}
+      />
+      <section
+        className="relative flex max-h-[min(92vh,44rem)] w-full flex-col overflow-hidden rounded-t-2xl border border-border bg-surface shadow-2xl sm:max-w-lg sm:rounded-2xl"
+        onClick={(ev) => ev.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="min-w-0 pr-2">
+            <h2 id="modelo-detalhe-titulo" className="text-base font-semibold text-foreground">
+              {modelo.nome}
+            </h2>
+            <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{modelo.tagline}</p>
+            {modelo.descricao ? (
+              <p className="mt-2 text-xs leading-relaxed text-foreground">{modelo.descricao}</p>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <IconClose />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          <div className="mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Exemplo de layout
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Veja onde entram sua logo, mídia e texto — o post final usa os dados do seu chat.
+            </p>
+          </div>
+
+          <ModeloExemploImagem
+            src={modelo.exemplo_imagem_url}
+            slug={modelo.slug}
+            alt={`Exemplo de layout — ${modelo.nome}`}
+            fallback={modeloExemploFallback(modelo.slug)}
+            className="mb-4"
+          />
+
+          <p className="mb-4 rounded-lg border border-amber-200/70 bg-amber-50/90 px-3 py-2.5 text-xs leading-relaxed text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-100">
+            A imagem de exemplo mostra o <strong>layout</strong> do modelo (onde entram logo, mídia e
+            mensagem). No seu post de verdade, tudo isso vem da sua identidade, do acervo e do pedido no
+            chat.
+          </p>
+
+          <div className="space-y-4">
+            <ModeloListaBullets titulo="Quando usar" itens={modelo.quando_usar} />
+            <ModeloListaBullets titulo="O que torna este modelo único" itens={modelo.diferencial} />
+
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Ênfase visual
+              </h3>
+              <ul className="space-y-1.5">
+                {(modelo.enfase || []).map((item) => (
+                  <li
+                    key={item}
+                    className="flex gap-2 rounded-lg border border-border bg-background px-2.5 py-2 text-xs leading-snug text-foreground"
+                  >
+                    <span className="mt-0.5 text-accent" aria-hidden>
+                      •
+                    </span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Estrutura da arte
+              </h3>
+              <ul className="space-y-1.5">
+                {(modelo.estrutura || []).map((zona) => (
+                  <li
+                    key={`${zona.zona}-${zona.conteudo}`}
+                    className="rounded-lg border border-border bg-background px-2.5 py-2 text-xs"
+                  >
+                    <span className="font-medium text-foreground">{zona.zona}</span>
+                    <span className="text-muted-foreground"> — {zona.conteudo}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-surface-elevated/80 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-medium text-foreground">
+              {modelo.ativo ? "Ativo no chat" : "Inativo"}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {modelo.ativo ? "Disponível ao gerar posts" : "Ative para usar no chat"}
+            </p>
+          </div>
+          <ModeloToggle
+            ativo={modelo.ativo}
+            disabled={!podeGerenciar || toggling}
+            label={`${modelo.ativo ? "Desativar" : "Ativar"} ${modelo.nome}`}
+            onChange={(next) => onToggle(modelo, next)}
+          />
+        </div>
+      </section>
+    </div>
+  );
 }
 
-function normalizeFromApi(row) {
-  const dados = row?.dados_json && typeof row.dados_json === "object" ? row.dados_json : {};
-  const tipoRaw = String(dados?.tipo || row?.schema_json?.tipo || "personalizado")
-    .trim()
-    .toLowerCase();
-  const tipo = TIPOS.some((t) => t.value === tipoRaw) ? tipoRaw : "personalizado";
-  return {
-    id: row?.id_contexto_empresa,
-    nome: row?.nome || "",
-    descricao: row?.descricao || "",
-    tipo,
-    dados,
-    row,
-  };
-}
-
-function summarizeContexto(item) {
-  if (item.tipo === "promocao") {
-    const p = item.dados?.promocao || {};
-    return [p.nome, p.beneficio].filter(Boolean).join(" · ");
-  }
-  if (item.tipo === "lancamento") {
-    const l = item.dados?.lancamento || {};
-    return [l.nome, l.diferencial].filter(Boolean).join(" · ");
-  }
-  if (item.tipo === "data_comemorativa") {
-    const d = item.dados?.dataComemorativa || {};
-    return [d.nome, d.ocasiao, d.periodo].filter(Boolean).join(" · ");
-  }
-  const p = item.dados?.personalizado || {};
-  if (p.titulo) return p.titulo;
-  const primeiro = Array.isArray(p.campos) ? p.campos[0] : null;
-  if (primeiro) return [primeiro.nome, primeiro.valor].filter(Boolean).join(": ");
-  return "";
-}
-
-export default function ContextosPage() {
+export default function ModelosPostPage() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [contextos, setContextos] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [empresaId, setEmpresaId] = useState(null);
   const [msg, setMsg] = useState("");
   const [msgKind, setMsgKind] = useState("ok");
-  const [form, setForm] = useState(emptyForm);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [canManageContextos, setCanManageContextos] = useState(false);
-  const contextosCreatedSectionRef = useRef(null);
+  const [empresaId, setEmpresaId] = useState(null);
+  const [podeGerenciar, setPodeGerenciar] = useState(false);
+  const [modelos, setModelos] = useState([]);
+  const [detalhe, setDetalhe] = useState(null);
+  const [togglingSlug, setTogglingSlug] = useState("");
 
-  const selected = useMemo(
-    () => contextos.find((item) => item.id === selectedId) || null,
-    [contextos, selectedId],
-  );
-
-  async function loadContextosData() {
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setMsg("");
     const minhas = await authApiFetchWithToken("/empresas/minhas");
-    if (!minhas.ok || minhas.networkError) {
-      setMsg(minhas.networkError?.message || formatAuthError(minhas.json) || "Falha ao carregar empresa.");
+    if (!minhas.ok) {
+      setMsg(minhas.networkError?.message || formatAuthError(minhas.json) || "Falha ao carregar empresas.");
       setMsgKind("err");
       setLoading(false);
       return;
@@ -200,615 +387,167 @@ export default function ContextosPage() {
     const idEmp = resolveEmpresaAtivaId(list, {
       idEmpresaUltimaPerfil: idEmpresaUltimaFromMinhasPayload(minhas.json),
     });
-    const rowAtiva = idEmp ? empresaRowFromMinhas(list, idEmp) : null;
-    if (rowAtiva?.empresa) setEmpresaAtiva(rowAtiva.empresa);
-    const papel = String(rowAtiva?.papel || "").toLowerCase();
-    setCanManageContextos(papel === "administrador" || papel === "editor");
+    const row = empresaRowFromMinhas(list, idEmp);
+    if (row?.empresa) setEmpresaAtiva(row.empresa);
     setEmpresaId(idEmp);
+    const papel = String(row?.papel || "").toLowerCase();
+    setPodeGerenciar(cargoPodeGerenciar(papel));
+
     if (!idEmp) {
-      setContextos([]);
-      setSelectedId(null);
+      setModelos([]);
       setLoading(false);
       return;
     }
 
-    const result = await authApiFetchWithToken(`/empresas/${idEmp}/contextos`);
-    if (!result.ok || result.networkError) {
-      setMsg(result.networkError?.message || formatAuthError(result.json) || "Falha ao carregar contextos.");
+    const result = await authApiFetchWithToken(`/empresas/${encodeURIComponent(idEmp)}/modelos-post`);
+    if (!result.ok) {
+      setMsg(result.networkError?.message || formatAuthError(result.json) || "Falha ao carregar modelos.");
       setMsgKind("err");
+      setModelos([]);
       setLoading(false);
       return;
     }
-
-    const items = Array.isArray(result.json?.contextos)
-      ? result.json.contextos
-          .filter((row) => !isIdentidadeMarcaContextoRow(row))
-          .map(normalizeFromApi)
-      : [];
-    setContextos(items);
+    const items = Array.isArray(result.json?.modelos) ? result.json.modelos : [];
+    setModelos(items);
     setLoading(false);
-  }
-
-  useEffect(() => {
-    const tid = setTimeout(() => {
-      void loadContextosData();
-    }, 0);
-    return () => clearTimeout(tid);
   }, []);
 
   useEffect(() => {
-    function handleOutsideClick(ev) {
-      if (!selectedId) return;
-      const container = contextosCreatedSectionRef.current;
-      if (!container) return;
-      const target = ev.target;
-      if (!(target instanceof Element)) return;
-      if (container.contains(target)) return;
-      setSelectedId(null);
-    }
-    document.addEventListener("click", handleOutsideClick);
-    return () => document.removeEventListener("click", handleOutsideClick);
-  }, [selectedId]);
+    void loadData();
+  }, [loadData]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || loading || !contextos.length) return;
-    const wanted = new URL(window.location.href).searchParams.get("contexto")?.trim();
-    if (!wanted) return;
-    if (!contextos.some((c) => c.id === wanted)) return;
-    setSelectedId(wanted);
-    requestAnimationFrame(() => {
-      document.getElementById(`ctx-row-${wanted}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-  }, [loading, contextos]);
+    if (loading || !modelos.length) return;
+    const wantedSlug = String(searchParams.get("modelo") || "").trim();
+    const wantedId = String(searchParams.get("contexto") || "").trim();
+    let found = null;
+    if (wantedSlug) {
+      found = modelos.find((m) => m.slug === wantedSlug);
+    } else if (wantedId) {
+      found = modelos.find(
+        (m) => String(m.id_empresa_modelo_post || m.id_contexto_empresa || "") === wantedId,
+      );
+    }
+    if (found) setDetalhe(found);
+  }, [loading, modelos, searchParams]);
 
-  function selectedDetailLines(item) {
-    if (!item) return [];
-    if (item.tipo === "promocao") {
-      const p = item.dados?.promocao || {};
-      return [
-        ["Nome", p.nome],
-        ["Benefício", p.beneficio],
-        ["Tipo", p.tipo],
-        ["Detalhe", p.detalhe],
-        ["Preço / oferta", p.precoOferta],
-        ["Validade", p.validade],
-        ["Onde", p.onde],
-        ["Público", p.publico],
-        ["CTA", p.cta],
-        ["Restrições", p.restricoes],
-      ];
-    }
-    if (item.tipo === "lancamento") {
-      const l = item.dados?.lancamento || {};
-      return [
-        ["Nome", l.nome],
-        ["Problema que resolve", l.problema],
-        ["O que há de novo", l.novidades],
-        ["Diferencial", l.diferencial],
-        ["Público", l.publico],
-        ["Disponibilidade", l.disponibilidade],
-        ["Data / momento", l.dataMomento],
-        ["Tom", l.tom],
-        ["CTA", l.cta],
-        ["Restrições", l.restricoes],
-      ];
-    }
-    if (item.tipo === "data_comemorativa") {
-      const d = item.dados?.dataComemorativa || {};
-      return [
-        ["Nome / tema", d.nome],
-        ["Ocasião", d.ocasiao],
-        ["Data / período", d.periodo],
-        ["Mensagem central", d.mensagem],
-        ["Tom", d.tom],
-        ["Público", d.publico],
-        ["Conexão com a marca", d.conexaoMarca],
-        ["CTA", d.cta],
-        ["Restrições", d.restricoes],
-      ];
-    }
-    const p = item.dados?.personalizado || {};
-    const campos = Array.isArray(p.campos) ? p.campos : [];
-    const lines = [["Nome", p.titulo || "—"]];
-    if (!campos.length) {
-      lines.push(["Campos", "—"]);
-      return lines;
-    }
-    campos.forEach((c, idx) => {
-      lines.push([String(c?.nome || "").trim() || `Campo ${idx + 1}`, String(c?.valor || "").trim() || "—"]);
-    });
-    return lines;
-  }
-
-  function startCreate() {
-    if (!canManageContextos) return;
-    setEditingId(null);
-    setForm(emptyForm());
-    setEditorOpen(true);
-  }
-
-  function cancelEditor() {
-    setEditingId(null);
-    setForm(emptyForm());
-    setEditorOpen(false);
-  }
-
-  function startEdit(item) {
-    if (!canManageContextos) return;
-    const next = emptyForm();
-    if (item.tipo === "promocao") next.promocao = { ...next.promocao, ...(item.dados?.promocao || {}) };
-    if (item.tipo === "lancamento") next.lancamento = { ...next.lancamento, ...(item.dados?.lancamento || {}) };
-    if (item.tipo === "data_comemorativa") {
-      next.dataComemorativa = { ...next.dataComemorativa, ...(item.dados?.dataComemorativa || {}) };
-    }
-    if (item.tipo === "personalizado") {
-      const pers = item.dados?.personalizado || {};
-      next.personalizado = {
-        titulo: pers.titulo || "",
-        campos:
-          Array.isArray(pers.campos) && pers.campos.length
-            ? pers.campos.map((c) => ({ nome: c?.nome || "", valor: c?.valor || "" }))
-            : [{ nome: "", valor: "" }],
-      };
-    }
-    setEditingId(item.id);
-    setForm({ ...next, tipo: item.tipo, nome: item.nome || "", descricao: item.descricao || "" });
-    setEditorOpen(true);
-  }
-
-  function buildDadosPayload() {
-    if (form.tipo === "promocao") return { tipo: form.tipo, promocao: form.promocao };
-    if (form.tipo === "lancamento") return { tipo: form.tipo, lancamento: form.lancamento };
-    if (form.tipo === "data_comemorativa") {
-      return { tipo: form.tipo, dataComemorativa: form.dataComemorativa };
-    }
-    const campos = (form.personalizado.campos || [])
-      .map((c) => ({ nome: String(c.nome || "").trim(), valor: String(c.valor || "").trim() }))
-      .filter((c) => c.nome || c.valor);
-    return { tipo: form.tipo, personalizado: { titulo: form.personalizado.titulo.trim(), campos } };
-  }
-
-  async function saveContexto(event) {
-    event.preventDefault();
-    if (!empresaId) {
-      setMsg("Cadastre uma empresa antes de criar contextos.");
-      setMsgKind("err");
-      return;
-    }
-    if (!canManageContextos) {
-      setMsg("Seu cargo não permite criar ou editar contextos.");
-      setMsgKind("err");
-      return;
-    }
-    if (!form.tipo) {
-      setMsg("Escolha o tipo do contexto antes de salvar.");
-      setMsgKind("err");
-      return;
-    }
-    const payload = {
-      tipo: form.tipo,
-      nome: form.nome.trim() || null,
-      descricao: form.descricao.trim() || "",
-      dados: buildDadosPayload(),
-    };
-    setSaving(true);
-    setMsg(editingId ? "Salvando contexto..." : "Criando contexto...");
-    setMsgKind("ok");
-    const path = editingId
-      ? `/empresas/${empresaId}/contextos/${editingId}`
-      : `/empresas/${empresaId}/contextos`;
-    const method = editingId ? "PATCH" : "POST";
-    const result = await authApiFetchWithToken(path, {
-      method,
-      body: JSON.stringify(payload),
-    });
-    setSaving(false);
-    if (!result.ok || result.networkError) {
-      setMsg(result.networkError?.message || formatAuthError(result.json) || "Falha ao salvar contexto.");
-      setMsgKind("err");
-      return;
-    }
-    setMsg(editingId ? "Contexto atualizado." : "Contexto criado.");
-    setMsgKind("ok");
-    setEditingId(null);
-    setForm(emptyForm());
-    setEditorOpen(false);
-    setLoading(true);
-    await loadContextosData();
-  }
-
-  function updateTipoFields(tipoKey, field, value) {
-    setForm((s) => ({ ...s, [tipoKey]: { ...s[tipoKey], [field]: value } }));
-  }
-
-  function addPersonalizadoCampo() {
-    setForm((s) => ({
-      ...s,
-      personalizado: {
-        ...s.personalizado,
-        campos: [...(s.personalizado.campos || []), { nome: "", valor: "" }],
+  async function handleToggle(modelo, ativo) {
+    if (!empresaId || !podeGerenciar) return;
+    setTogglingSlug(modelo.slug);
+    setMsg("");
+    const result = await authApiFetchWithToken(
+      `/empresas/${encodeURIComponent(empresaId)}/modelos-post/${encodeURIComponent(modelo.slug)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ativo }),
       },
-    }));
-  }
-
-  function updatePersonalizadoCampo(index, field, value) {
-    setForm((s) => ({
-      ...s,
-      personalizado: {
-        ...s.personalizado,
-        campos: (s.personalizado.campos || []).map((c, i) => (i === index ? { ...c, [field]: value } : c)),
-      },
-    }));
-  }
-
-  function removePersonalizadoCampo(index) {
-    setForm((s) => {
-      const campos = (s.personalizado.campos || []).filter((_, i) => i !== index);
-      return {
-        ...s,
-        personalizado: {
-          ...s.personalizado,
-          campos: campos.length ? campos : [{ nome: "", valor: "" }],
-        },
-      };
-    });
-  }
-
-  async function removeContexto(id) {
-    if (!empresaId) return;
-    if (!canManageContextos) {
-      setMsg("Seu cargo não permite remover contextos.");
+    );
+    setTogglingSlug("");
+    if (!result.ok) {
+      setMsg(result.networkError?.message || formatAuthError(result.json) || "Não foi possível atualizar o modelo.");
       setMsgKind("err");
       return;
     }
-    const result = await authApiFetchWithToken(`/empresas/${empresaId}/contextos/${id}`, {
-      method: "DELETE",
-    });
-    if (!result.ok || result.networkError) {
-      setMsg(result.networkError?.message || formatAuthError(result.json) || "Falha ao remover contexto.");
-      setMsgKind("err");
-      return;
-    }
-    if (selectedId === id) setSelectedId(null);
-    if (editingId === id) {
-      setEditingId(null);
-      setForm(emptyForm());
-    }
-    setMsg("Contexto removido.");
+    const patch = result.json?.modelo;
+    setModelos((prev) =>
+      prev.map((m) =>
+        m.slug === modelo.slug
+          ? {
+              ...m,
+              ativo: Boolean(patch?.ativo ?? ativo),
+              id_empresa_modelo_post:
+                patch?.id_empresa_modelo_post ?? (ativo ? m.id_empresa_modelo_post : null),
+              id_contexto_empresa:
+                patch?.id_contexto_empresa ?? (ativo ? m.id_contexto_empresa : null),
+            }
+          : m,
+      ),
+    );
+    setDetalhe((prev) =>
+      prev && prev.slug === modelo.slug
+        ? {
+            ...prev,
+            ativo: Boolean(patch?.ativo ?? ativo),
+            id_empresa_modelo_post:
+              patch?.id_empresa_modelo_post ?? (ativo ? prev.id_empresa_modelo_post : null),
+            id_contexto_empresa:
+              patch?.id_contexto_empresa ?? (ativo ? prev.id_contexto_empresa : null),
+          }
+        : prev,
+    );
+    setMsg(ativo ? `${modelo.nome} ativado — disponível no chat.` : `${modelo.nome} desativado.`);
     setMsgKind("ok");
-    setLoading(true);
-    await loadContextosData();
   }
+
+  const ativosCount = useMemo(() => modelos.filter((m) => m.ativo).length, [modelos]);
 
   return (
-    <main className="space-y-4">
-      <section className="rounded-xl border border-border bg-background p-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-foreground">Contextos</h1>
-          <button
-            type="button"
-            onClick={startCreate}
-            disabled={!canManageContextos}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground disabled:opacity-60"
-          >
-            Novo contexto
-          </button>
-        </div>
-        {!canManageContextos && empresaId ? (
-          <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Seu cargo permite apenas visualizar contextos.
-          </p>
-        ) : null}
-
-        {!empresaId && !loading ? (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            Você precisa cadastrar uma empresa antes de usar contextos.
-          </p>
-        ) : null}
-
-        {editorOpen ? (
-        <form className="mt-4 grid grid-cols-1 gap-4" onSubmit={saveContexto}>
-          <div className="max-w-md">
-            <div>
-              <LabelWithHint id="ctx-form-tipo" label="Tipo de contexto" />
-              <select
-                id="ctx-form-tipo"
-                value={form.tipo}
-                onChange={(e) => setForm((s) => ({ ...s, tipo: e.target.value }))}
-                className={`${CTX_CTRL_CLASS} cursor-pointer`}
-              >
-                <option value="">Escolha o tipo…</option>
-                {TIPOS.map((tipo) => (
-                  <option key={tipo.value} value={tipo.value}>
-                    {tipo.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {form.tipo ? (
-            <>
-              <div>
-                <LabelWithHint id="ctx-form-nome" label="Nome (opcional)" />
-                <input
-                  id="ctx-form-nome"
-                  value={form.nome}
-                  onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
-                  className={CTX_CTRL_CLASS}
-                />
-              </div>
-
-              <div>
-                <LabelWithHint id="ctx-form-descricao" label="Descrição (opcional)" />
-                <input
-                  id="ctx-form-descricao"
-                  value={form.descricao}
-                  onChange={(e) => setForm((s) => ({ ...s, descricao: e.target.value }))}
-                  className={CTX_CTRL_CLASS}
-                />
-              </div>
-            </>
-          ) : null}
-
-          {form.tipo === "promocao" ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {PROMOCAO_FIELD_ROWS.map(([field, label]) => {
-                const fid = `ctx-promo-${field}`;
-                return (
-                  <div key={field}>
-                    <LabelWithHint id={fid} label={label} />
-                    <input
-                      id={fid}
-                      value={form.promocao[field]}
-                      onChange={(e) => updateTipoFields("promocao", field, e.target.value)}
-                      className={CTX_CTRL_CLASS}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {form.tipo === "lancamento" ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {LANCAMENTO_FIELD_ROWS.map(([field, label]) => {
-                const fid = `ctx-lanc-${field}`;
-                return (
-                  <div key={field}>
-                    <LabelWithHint id={fid} label={label} />
-                    <input
-                      id={fid}
-                      value={form.lancamento[field]}
-                      onChange={(e) => updateTipoFields("lancamento", field, e.target.value)}
-                      className={CTX_CTRL_CLASS}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {form.tipo === "data_comemorativa" ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {DATA_COMEMORATIVA_FIELD_ROWS.map(([field, label]) => {
-                const fid = `ctx-data-${field}`;
-                return (
-                  <div key={field}>
-                    <LabelWithHint id={fid} label={label} />
-                    <input
-                      id={fid}
-                      value={form.dataComemorativa[field]}
-                      onChange={(e) => updateTipoFields("dataComemorativa", field, e.target.value)}
-                      className={CTX_CTRL_CLASS}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {form.tipo === "personalizado" ? (
-            <div className="space-y-3">
-              <div>
-                <LabelWithHint id="ctx-personal-titulo" label="Nome deste contexto" />
-                <input
-                  id="ctx-personal-titulo"
-                  value={form.personalizado.titulo}
-                  onChange={(e) =>
-                    setForm((s) => ({
-                      ...s,
-                      personalizado: { ...s.personalizado, titulo: e.target.value },
-                    }))
-                  }
-                  className={CTX_CTRL_CLASS}
-                />
-              </div>
-              {(form.personalizado.campos || []).map((campo, idx) => (
-                <div key={`campo-${idx}`} className="rounded-xl border border-border bg-surface-elevated/50 p-3 dark:bg-surface-elevated/30">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div>
-                      <LabelWithHint id={`ctx-personal-${idx}-nome`} label="Nome do campo" />
-                      <input
-                        id={`ctx-personal-${idx}-nome`}
-                        value={campo.nome}
-                        onChange={(e) => updatePersonalizadoCampo(idx, "nome", e.target.value)}
-                        className={CTX_CTRL_CLASS}
-                      />
-                    </div>
-                    <div>
-                      <LabelWithHint id={`ctx-personal-${idx}-valor`} label="Valor" />
-                      <input
-                        id={`ctx-personal-${idx}-valor`}
-                        value={campo.valor}
-                        onChange={(e) => updatePersonalizadoCampo(idx, "valor", e.target.value)}
-                        className={CTX_CTRL_CLASS}
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removePersonalizadoCampo(idx)}
-                    className="mt-2 rounded border border-border px-2 py-1 text-xs text-foreground"
-                  >
-                    Remover campo
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={addPersonalizadoCampo}
-                className="rounded border border-border px-3 py-1.5 text-sm text-foreground"
-              >
-                + Adicionar campo
-              </button>
-            </div>
-          ) : null}
-
-          {form.tipo ? (
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={saving || !empresaId || !canManageContextos}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
-              >
-                {saving ? "Salvando..." : editingId ? "Salvar edição" : "Criar contexto"}
-              </button>
-              <button
-                type="button"
-                onClick={cancelEditor}
-                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-              >
-                Cancelar
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={cancelEditor}
-              className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
-            >
-              Cancelar
-            </button>
-          )}
-        </form>
-        ) : null}
-      </section>
-
-      <section ref={contextosCreatedSectionRef} className="rounded-xl border border-border bg-background p-6">
-        <h2 className="text-lg font-semibold text-foreground">Contextos criados</h2>
-        {loading ? <p className="mt-3 text-sm text-muted-foreground">Carregando...</p> : null}
-        {!loading && contextos.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">Nenhum contexto criado ainda.</p>
-        ) : null}
-
-        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
-          <ul className="space-y-2">
-            {contextos.map((item) => (
-              <li
-                key={item.id}
-                id={item.id ? `ctx-row-${item.id}` : undefined}
-                className="rounded-lg border border-border bg-background p-3 transition-colors hover:bg-muted"
-              >
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(item.id)}
-                  className="w-full text-left"
-                >
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.tipo}</p>
-                  <p className="font-medium text-foreground">{item.nome || "Contexto sem nome"}</p>
-                  {summarizeContexto(item) ? (
-                    <p className="mt-1 text-xs text-muted-foreground">{summarizeContexto(item)}</p>
-                  ) : null}
-                </button>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => startEdit(item)}
-                    disabled={!canManageContextos}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm text-foreground hover:bg-muted"
-                    title="Editar contexto"
-                    aria-label="Editar contexto"
-                  >
-                    ⚙
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removeContexto(item.id)}
-                    disabled={!canManageContextos}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm font-medium text-muted-foreground hover:border-red-400 hover:bg-red-50 hover:text-red-800 dark:hover:border-red-500/50 dark:hover:bg-red-950/40 dark:hover:text-red-300"
-                    title="Remover contexto"
-                    aria-label="Remover contexto"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <div className="rounded-lg border border-border p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-foreground">Detalhes</p>
-              {selected ? (
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(null)}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded border border-border text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                  title="Minimizar detalhes"
-                  aria-label="Minimizar detalhes"
-                >
-                  −
-                </button>
-              ) : null}
-            </div>
-            {selected ? (
-              <div className="mt-2 space-y-2 text-sm">
-                <p>
-                  <span className="font-medium text-foreground">Tipo:</span>{" "}
-                  <span className="text-foreground">{selected.tipo}</span>
-                </p>
-                <p>
-                  <span className="font-medium text-foreground">Nome:</span>{" "}
-                  <span className="text-foreground">{selected.nome || "—"}</span>
-                </p>
-                <p>
-                  <span className="font-medium text-foreground">Descrição:</span>{" "}
-                  <span className="text-foreground">{selected.descricao || "—"}</span>
-                </p>
-                <div>
-                  <p className="font-medium text-foreground">Campos:</p>
-                  <div className="mt-2 space-y-2">
-                    {selectedDetailLines(selected).map(([label, value]) => (
-                      <div
-                        key={`${label}-${String(value)}`}
-                        className="rounded-lg border border-border bg-background px-3 py-2"
-                      >
-                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-                        <p className="mt-1 text-sm text-foreground">{String(value || "").trim() || "—"}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-muted-foreground">Selecione um contexto para visualizar.</p>
-            )}
-          </div>
-        </div>
-      </section>
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+      <header className="space-y-2">
+        <h1 className="text-xl font-semibold text-foreground">Modelos de post</h1>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          Playbooks visuais curados pelo TumaIA. Ative os modelos que fazem sentido para sua loja —
+          no chat, produto, preço e identidade entram automaticamente no pedido.
+        </p>
+      </header>
 
       {msg ? (
         <p
-          className={`rounded-lg px-3 py-2 text-sm ${
+          className={[
+            "rounded-xl border px-4 py-3 text-sm",
             msgKind === "err"
-              ? "border border-red-200 bg-red-50 text-red-900"
-              : "border border-accent/30 bg-accent-muted text-foreground"
-          }`}
+              ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100",
+          ].join(" ")}
         >
           {msg}
         </p>
       ) : null}
-    </main>
+
+      {!loading && !empresaId ? (
+        <div className="rounded-xl border border-border bg-background p-6 text-sm text-muted-foreground">
+          Cadastre uma empresa no painel antes de ativar modelos de post.
+        </div>
+      ) : null}
+
+      {!podeGerenciar && empresaId ? (
+        <p className="text-sm text-muted-foreground">Seu cargo permite apenas visualizar os modelos.</p>
+      ) : null}
+
+      {!loading && empresaId ? (
+        <p className="text-sm text-muted-foreground">
+          {ativosCount === 0
+            ? "Nenhum modelo ativo — ative pelo menos um para aparecer no chat."
+            : `${ativosCount} modelo${ativosCount === 1 ? "" : "s"} ativo${ativosCount === 1 ? "" : "s"} no chat.`}
+        </p>
+      ) : null}
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Carregando modelos…</p>
+      ) : (
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:max-w-4xl">
+          {modelos.map((modelo) => (
+            <ModeloCard
+              key={modelo.slug}
+              modelo={modelo}
+              podeGerenciar={podeGerenciar}
+              toggling={togglingSlug === modelo.slug}
+              onOpen={setDetalhe}
+              onToggle={handleToggle}
+            />
+          ))}
+        </section>
+      )}
+
+      <ModeloDetalheSheet
+        open={Boolean(detalhe)}
+        modelo={detalhe}
+        onClose={() => setDetalhe(null)}
+        podeGerenciar={podeGerenciar}
+        toggling={Boolean(detalhe && togglingSlug === detalhe.slug)}
+        onToggle={handleToggle}
+      />
+    </div>
   );
 }

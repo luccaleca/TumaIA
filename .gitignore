@@ -48,3 +48,7 @@ Thumbs.db
 .vscode/
 .cursor/
 *.swp
+
+# WPPConnect (clone local — tools/wppconnect/setup.mjs)
+tools/wppconnect/server/
+tools/wppconnect/tumaia.meta.json

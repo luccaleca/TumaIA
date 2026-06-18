@@ -137,6 +137,26 @@ CREATE TABLE public.contexto_empresa (
 ALTER TABLE public.contexto_empresa OWNER TO postgres;
 
 --
+-- Name: empresa_modelo_post; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.empresa_modelo_post (
+    id_empresa_modelo_post uuid DEFAULT gen_random_uuid() NOT NULL,
+    id_empresa uuid NOT NULL,
+    playbook_slug character varying(80) NOT NULL,
+    ativo boolean DEFAULT false NOT NULL,
+    atualizado_por_usuario_id uuid,
+    data_criacao timestamp with time zone DEFAULT now() NOT NULL,
+    data_atualizacao timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT empresa_modelo_post_pkey PRIMARY KEY (id_empresa_modelo_post),
+    CONSTRAINT empresa_modelo_post_empresa_slug_unique UNIQUE (id_empresa, playbook_slug),
+    CONSTRAINT empresa_modelo_post_playbook_slug_check CHECK (((playbook_slug)::text = ANY (ARRAY[('promocao'::character varying)::text, ('lancamento'::character varying)::text, ('produto'::character varying)::text, ('mensagens'::character varying)::text])))
+);
+
+
+ALTER TABLE public.empresa_modelo_post OWNER TO postgres;
+
+--
 -- Name: empresa_convite; Type: TABLE; Schema: public; Owner: postgres
 --
 

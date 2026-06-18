@@ -26,7 +26,7 @@ export default function ConfiguracaoPage() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">Configuração</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Preferências do painel e integrações — em construção.
+          Preferências do painel.
         </p>
       </div>
 
@@ -56,13 +56,6 @@ export default function ConfiguracaoPage() {
         <section className="rounded-lg border border-border bg-background px-4 py-3">
           <h2 className="text-sm font-medium text-foreground">Notificações</h2>
           <p className="mt-1 text-sm text-muted-foreground">Alertas de publicação e e-mail em breve.</p>
-        </section>
-
-        <section className="rounded-lg border border-border bg-background px-4 py-3">
-          <h2 className="text-sm font-medium text-foreground">Integrações</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Instagram, WhatsApp e geração de imagens ficarão configuráveis aqui conforme formos liberando.
-          </p>
         </section>
       </div>
     </main>

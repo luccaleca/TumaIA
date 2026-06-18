@@ -14,15 +14,32 @@ const NEGOCIO_RE =
   /\b(post|arte|instagram|banner|stories|carrossel|m[ií]dia|mídias|acervo|produto|cadastr|monta|gera|cria\s+(?:um\s+)?post|contexto|black\s+friday|whey|monster|creatina|powerade|lista.*produto|quais\s+produtos)\b/i;
 
 /**
+ * Pergunta curta fora do fluxo de post/acervo — ex.: «batata», «receita de arroz».
  * @param {string} question
  */
-export function isConversaNaturalQuestion(question) {
+export function isShortCasualCuriosity(question) {
   const q = String(question || "").trim();
-  if (!q || q.length < 4) return false;
+  if (!q || q.length > 48) return false;
   if (isDateTimeQuestion(q)) return false;
   if (isPerfilGeralQuestion(q)) return false;
   if (NEGOCIO_RE.test(q)) return false;
   if (/^\s*(oi|ol[aá]|valeu|obrigad|tchau)\s*[!.?]*\s*$/i.test(q)) return false;
+  if (q.length <= 24) return true;
+  return CONVERSA_NATURAL_RE.test(q);
+}
+
+/**
+ * @param {string} question
+ */
+export function isConversaNaturalQuestion(question) {
+  const q = String(question || "").trim();
+  if (!q || q.length < 3) return false;
+  if (isDateTimeQuestion(q)) return false;
+  if (isPerfilGeralQuestion(q)) return false;
+  if (NEGOCIO_RE.test(q)) return false;
+  if (/^\s*(oi|ol[aá]|valeu|obrigad|tchau)\s*[!.?]*\s*$/i.test(q)) return false;
+  if (isShortCasualCuriosity(q)) return true;
+  if (q.length < 4) return false;
   return CONVERSA_NATURAL_RE.test(q);
 }
 
@@ -51,6 +68,14 @@ export function tryChatConversaNaturalResponse(question, nomeFantasia = null) {
 
   const emp = String(nomeFantasia || "").trim() || null;
   const ql = q.toLowerCase();
+
+  if (/^\s*batatas?\s*[!.?]*\s*$/i.test(ql)) {
+    return (
+      "Batata é bem versátil: cozinhe em água com sal uns 15–20 min até furar com o garfo, " +
+      "asse cubos com azeite no forno (~200 °C, 25–35 min) ou faça purê e fritas." +
+      ponte(emp)
+    );
+  }
 
   if (/\b(batata|batatas)\b/.test(ql) && /\b(cozinhar|receita|fazer|preparar|assar|cozinha)\b/.test(ql)) {
     return (

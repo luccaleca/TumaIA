@@ -15,6 +15,7 @@ import {
 } from "../modules/empresas/identidadeMarca.js";
 import {
   buildResumoVisual,
+  collectMandatoryImageFacts,
   deriveFraseNaImagemFromHistory,
   extractFraseFromUserText,
   isPanelNoiseMessage,
@@ -36,6 +37,11 @@ import {
   resolveMidiaRowsForPedido,
   scoreRowProductMention,
 } from "./productMentionMatch.js";
+import {
+  extractPedidoCampanhaLabels,
+  inferPreferredPlaybookSlug,
+} from "./cadastroMeaningful.js";
+import { playbookSlugFromContextoRow } from "../modules/empresas/postModelosCatalog.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
 import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
 import { TUMA_IA_REGRAS_RESUMO_IMAGEM } from "./tumaIaRegrasResumo.js";
@@ -147,9 +153,6 @@ function tokenizeSearchText(value) {
     "seria",
     "mais",
     "muito",
-    "promo",
-    "promocao",
-    "promocional",
     "dia",
     "dos",
     "das",
@@ -266,22 +269,77 @@ function scoreTokenOverlap(blob, tokens) {
   return score;
 }
 
+function resolveContextoPlaybookSlug(row) {
+  if (!row || typeof row !== "object") return null;
+  const fromPlaybook = playbookSlugFromContextoRow(row);
+  if (fromPlaybook) return fromPlaybook;
+  const schema = row.schema_json && typeof row.schema_json === "object" ? row.schema_json : {};
+  const slug = String(schema.playbook_slug ?? schema.tipo ?? "").trim();
+  return slug || null;
+}
+
+function findCampanhaRowBySlug(campanhaRows, slug) {
+  const target = String(slug ?? "").trim();
+  if (!target || !Array.isArray(campanhaRows)) return null;
+  return campanhaRows.find((row) => resolveContextoPlaybookSlug(row) === target) ?? null;
+}
+
+/**
+ * Ajusta matched_contexto quando o pedido indica promoção/lançamento etc.
+ * Não sobrescreve escolha explícita via focus_contexto_id (rodar antes de applyFocus).
+ *
+ * @param {Record<string, unknown>} proposal
+ * @param {Array<Record<string, unknown>>} contextoRows
+ * @param {string} [userHint]
+ */
+export function reconcileMatchedContextoFromPedido(proposal, contextoRows, userHint = "") {
+  if (!proposal || typeof proposal !== "object") return proposal;
+  const hint = String(userHint ?? proposal.intent_summary ?? "").trim();
+  const preferredSlug = inferPreferredPlaybookSlug(hint);
+  if (!preferredSlug) return proposal;
+
+  const { campanhaRows } = partitionContextosIdentidade(contextoRows);
+  const targetRow = findCampanhaRowBySlug(campanhaRows, preferredSlug);
+  if (!targetRow) return proposal;
+
+  const currentId = String(proposal.matched_contexto?.id_contexto_empresa ?? "").trim();
+  const currentRow = currentId
+    ? campanhaRows.find((r) => String(r.id_contexto_empresa ?? "").trim() === currentId)
+    : null;
+  const currentSlug = currentRow ? resolveContextoPlaybookSlug(currentRow) : null;
+  if (currentSlug === preferredSlug) return proposal;
+
+  return {
+    ...proposal,
+    matched_contexto: matchedContextoFromRow(targetRow, `pedido_${preferredSlug}`),
+  };
+}
+
 function pickBestCampaignContext(contextoRows, userHint = "") {
   const { campanhaRows } = partitionContextosIdentidade(contextoRows);
   if (!campanhaRows.length) return null;
+
+  const preferredSlug = inferPreferredPlaybookSlug(userHint);
+  if (preferredSlug) {
+    const byIntent = findCampanhaRowBySlug(campanhaRows, preferredSlug);
+    if (byIntent) return byIntent;
+  }
+
   const tokens = tokenizeSearchText(userHint);
-  if (!tokens.length) return campanhaRows[0] ?? null;
+  if (!tokens.length) return null;
+
   let best = null;
   let bestScore = -1;
   for (const row of campanhaRows) {
-    const blob = `${row?.nome ?? ""} ${row?.descricao ?? ""}`;
+    const slug = resolveContextoPlaybookSlug(row) || "";
+    const blob = `${row?.nome ?? ""} ${row?.descricao ?? ""} ${slug}`;
     const score = scoreTokenOverlap(blob, tokens);
     if (score > bestScore) {
       best = row;
       bestScore = score;
     }
   }
-  return bestScore > 0 ? best : campanhaRows[0] ?? null;
+  return bestScore > 0 ? best : null;
 }
 
 function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
@@ -505,6 +563,34 @@ export function sanitizePostSupplementLinks(raw, contextoRows, midiaRows) {
   return out;
 }
 
+function matchedContextoFromRow(row, reason = "escolhido_no_chat") {
+  if (!row) return null;
+  const schema = row.schema_json && typeof row.schema_json === "object" ? row.schema_json : {};
+  const id = String(row.id_contexto_empresa ?? row.id_empresa_modelo_post ?? "").trim();
+  if (!id) return null;
+  return {
+    id_contexto_empresa: id,
+    nome: String(row.nome ?? "").trim() || "Modelo",
+    tipo_schema: String(schema.tipo ?? "").trim(),
+    reason,
+  };
+}
+
+function applyFocusContextoToProposal(proposal, contextoRows, focusContextoId) {
+  const id = String(focusContextoId ?? "").trim();
+  if (!id || !proposal || typeof proposal !== "object") return proposal;
+  const row = (contextoRows || []).find(
+    (r) =>
+      String(r.id_contexto_empresa ?? "").trim() === id ||
+      String(r.id_empresa_modelo_post ?? "").trim() === id,
+  );
+  if (!row) return proposal;
+  return {
+    ...proposal,
+    matched_contexto: matchedContextoFromRow(row),
+  };
+}
+
 /**
  * Garante links compactos e coerentes com o que a proposta realmente vai usar:
  * contexto escolhido + mídias referenciadas + links extras do modelo.
@@ -661,6 +747,8 @@ function normalizeMidiasReferencedRows(proposal, midiaRows) {
           String(item.nome_exibicao ?? row.nome_exibicao ?? row.nome_arquivo ?? "Mídia").trim() ||
           "Mídia",
         nome_arquivo: String(row.nome_arquivo ?? "").trim() || undefined,
+        descricao: String(row.descricao ?? "").trim() || undefined,
+        alt_text: String(row.alt_text ?? "").trim() || undefined,
         why:
           typeof item.why === "string" && item.why.trim()
             ? item.why.trim().slice(0, 240)
@@ -672,7 +760,7 @@ function normalizeMidiasReferencedRows(proposal, midiaRows) {
   return p;
 }
 
-function finalizePostContextProposal(proposal, midiaRows, history, userHint) {
+function finalizePostContextProposal(proposal, midiaRows, history, userHint, cadastroCtx = null) {
   const hint = resolveActivePedidoHint(history, {
     proposal,
     question: userHint,
@@ -691,8 +779,24 @@ function finalizePostContextProposal(proposal, midiaRows, history, userHint) {
     p = normalizeMidiasReferencedRows(p, midiaRows);
     p.hero_product = normalizeHeroProductSelection(p.hero_product, p.midias_referenced);
   }
-  const forResumo = { ...p, resumo_visual: "" };
-  p.resumo_visual = buildResumoVisual(forResumo, history, hint);
+  const mandatoryFacts = collectMandatoryImageFacts(history, p);
+  if (Object.keys(mandatoryFacts).length) {
+    if (!p.facts_for_image || typeof p.facts_for_image !== "object") {
+      p.facts_for_image = {};
+    }
+    Object.assign(p.facts_for_image, mandatoryFacts);
+  }
+
+  const cadastro = cadastroCtx && typeof cadastroCtx === "object" ? cadastroCtx : {};
+  const pedidoText = hint || String(p.intent_summary ?? "").trim();
+  if (Array.isArray(cadastro.contextoRows) && cadastro.contextoRows.length) {
+    p = reconcileMatchedContextoFromPedido(p, cadastro.contextoRows, pedidoText);
+  }
+  p.pedido_campanha = extractPedidoCampanhaLabels(pedidoText);
+  p.resumo_visual = buildResumoVisual(p, history, hint, {
+    empresaRow: cadastro.empresaRow || null,
+    identidadeDados: cadastro.identidadeDados || null,
+  });
   p.montagem_resumo = buildMontagemResumo(p);
   return p;
 }
@@ -764,8 +868,9 @@ function formatEmpresaForLlm(emp) {
  * @param {Array<Record<string, unknown>>} contextoRows
  * @param {Array<Record<string, unknown>>} midiaRows
  */
-function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
+function buildFallbackProposalFromPanel(history, contextoRows, midiaRows, empresaRow = null) {
   const hint = resolveActivePedidoHint(history);
+  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   const ctx = pickBestCampaignContext(contextoRows, hint);
   const midias = pickReferencedMidias(midiaRows, hint, 3);
   const frase = deriveFraseNaImagemFromHistory(history, contextoRows);
@@ -814,7 +919,11 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows) {
     hero_product: buildHeroProductSelection(midias, hint, true),
   };
   const gate = applyProductMediaGate(proposal, midiaRows, hint, history);
-  proposal = finalizePostContextProposal(gate.proposal, midiaRows, history, hint);
+  proposal = finalizePostContextProposal(gate.proposal, midiaRows, history, hint, {
+    empresaRow,
+    identidadeDados,
+    contextoRows,
+  });
   const resolvedLinks = resolvePostSupplementLinks(links, proposal, contextoRows, midiaRows);
 
   if (gate.blocked) {
@@ -926,15 +1035,24 @@ function buildRawPostContextProposal(history, brandColors = [], existingBrief = 
  * }} opts
  */
 export async function generatePostContextProposal(opts) {
-  const { history, idEmpresa, db, arteBriefDraft = null, attachmentMidiaIds = [] } = opts;
+  const {
+    history,
+    idEmpresa,
+    db,
+    arteBriefDraft = null,
+    attachmentMidiaIds = [],
+    focusContextoId = null,
+  } = opts;
   const attachmentIds = Array.isArray(attachmentMidiaIds)
     ? attachmentMidiaIds.map((x) => String(x || "").trim()).filter(Boolean)
     : [];
+  const focusId = String(focusContextoId ?? "").trim() || null;
 
   if ((env.IMAGE_PIPELINE || "raw") === "raw") {
-    const [contextoRows, midiaRows] = await Promise.all([
+    const [contextoRows, midiaRows, empresaRow] = await Promise.all([
       loadContextosEmpresaAtivos(db, idEmpresa),
       loadMidiasEmpresaResumo(db, idEmpresa, 72),
+      loadEmpresaResumoParaImagem(db, idEmpresa),
     ]);
     const { identidadeDados } = partitionContextosIdentidade(contextoRows);
     const brandColors = identidadeDados ? allBrandColorsFromIdentidade(identidadeDados) : [];
@@ -942,6 +1060,7 @@ export async function generatePostContextProposal(opts) {
       history,
       contextoRows,
       midiaRows,
+      empresaRow,
     );
     const rawBrief = buildRawPostContextProposal(
       history,
@@ -973,7 +1092,14 @@ export async function generatePostContextProposal(opts) {
     const rawHint = resolveActivePedidoHint(history, { proposal: mergedProposal });
     mergedProposal = mergeChatAttachmentMidiasIntoProposal(mergedProposal, attachmentIds, midiaRows);
     const rawGate = applyProductMediaGate(mergedProposal, midiaRows, rawHint, history);
-    mergedProposal = finalizePostContextProposal(rawGate.proposal, midiaRows, history, rawHint);
+    mergedProposal = finalizePostContextProposal(rawGate.proposal, midiaRows, history, rawHint, {
+      empresaRow,
+      identidadeDados,
+      contextoRows,
+    });
+    if (focusId) {
+      mergedProposal = applyFocusContextoToProposal(mergedProposal, contextoRows, focusId);
+    }
     const links = resolvePostSupplementLinks(raw.links, mergedProposal, contextoRows, midiaRows);
     if (rawGate.blocked) {
       return {
@@ -1015,7 +1141,7 @@ Sua tarefa: (1) ler o histórico; (2) relacionar com os CONTEXTOS cadastrados no
    NÃO liste contexto, produtos, frase ou detalhes longos na confirmation_message; isso vai nos links e no post_context_proposal.
    PROIBIDO citar testes, painel técnico, Llama, Ollama, Replicate ou erros internos.
 (5) preencher post_context_proposal com resumo estruturado para a próxima etapa (geração de imagem), incluindo:
-   - "resumo_visual": descrição completa do que a arte deve mostrar (tema, promoção, preços, público, produtos citados, tom). Use o pedido do cliente — NÃO resuma tudo a uma palavra genérica.
+   - "resumo_visual": descrição da COMPOSIÇÃO (elementos, layout, clima). INTERPRETE o cadastro desta empresa: segmento, identidade da marca, descrição e alt_text das mídias — funciona para qualquer segmento (pet shop, papelaria, café, etc.). Não use regras genéricas fixas nem copie o pedido literal do chat.
    - "frase_na_imagem": SOMENTE se o cliente pediu frase/texto explícito na arte (ex.: "frase: …"). Caso contrário deixe vazio. Não preencha só "Promoção".
 (5b) briefing_status: "ready" se já dá para gerar a imagem (tema + frase ou sem texto explícito); "collecting" só se faltar algo CRÍTICO (máx. 2 lacunas). missing_slots: lista vazia se ready, senão ids entre produto, beneficio, periodo, frase_imagem. Em collecting, confirmation_message pergunta de forma natural (não lista robótica de formulário).
 (6) preencher "links": palavras clicáveis no painel — cada item com kind "contexto" ou "midia", "id" UUID que EXISTA na lista acima, e "label" CURTÍSSIMO (1 a 3 palavras, sem extensão de arquivo). Inclua o matched_contexto e TODAS as midias_referenced também em links. Se não houver encaixe no banco, use "links": [].
@@ -1035,7 +1161,7 @@ Responda APENAS um JSON válido com exatamente estas chaves de primeiro nível:
     "intent_summary": "string",
     "montagem_resumo": "string curta explicando como a IA vai montar a arte",
     "matched_contexto": { "id_contexto_empresa": "uuid ou null", "nome": "string", "tipo_schema": "string", "reason": "string" } | null,
-    "resumo_visual": "string — o que vai na arte (pedido completo)",
+    "resumo_visual": "string — composição visual (elementos, layout, clima; não regras)",
     "frase_na_imagem": "string opcional — só se o cliente pediu texto explícito na arte",
     "facts_for_image": { "chave": "valor" },
     "midias_referenced": [ { "id_midia": "uuid opcional", "nome_exibicao": "string", "why": "string" } ],
@@ -1057,25 +1183,25 @@ Regras:
   - PROIBIDO trocar o produto pedido por outro do acervo (ex.: cliente pediu "monster" → não use "pro force", creatina, whey, etc.).
   - Só inclua mídia cujo nome_exibicao ou nome_arquivo contenha o produto/marca citado pelo cliente.
 - frase_na_imagem: OBRIGATÓRIO quando o pedido tiver marco, promoção ou data — é o texto que aparece na imagem.
-- facts_for_image: pares curtos opcionais (ex.: ocasiao, tom); repita frase_na_imagem em facts_for_image.frase_na_imagem se quiser.
+- facts_for_image: preços e ocasião EXPLÍCITOS do cliente são OBRIGATÓRIOS (ex.: precos_promocao: "1 por R$ 99,99 | 2 por R$ 149,99", ocasiao: "Dia dos Namorados"). Se o cliente informou valor, inclua no resumo_visual como elemento visual (ex.: preço ao lado do produto) — nunca omita na arte.
 - Tom profissional e cordial. Sem markdown na confirmation_message.
 - PROIBIDO responder com parágrafos de post pronto, legenda ou texto fora do JSON. A confirmation_message é só a pergunta de confirmação (1–2 frases, máx. 280 caracteres).`;
 
   const bloco = `
-=== Pedido do cliente (histórico — use para intent_summary e frase_na_imagem) ===
-${formatHistoryForPrompt(history)}
+=== Cadastro empresa (segmento — interpretar o tipo de negócio) ===
+${formatEmpresaForLlm(empresaRow)}
 
-=== Identidade da marca (cores, estilo, tom — fonte da verdade visual) ===
+=== Identidade da marca (cores, estilo, público, tom — fonte da verdade visual) ===
 ${formatIdentidadeForLlm(contextoRows)}
+
+=== Pedido do cliente (histórico — intent_summary e frase_na_imagem) ===
+${formatHistoryForPrompt(history)}
 
 === Campanhas ativas (opcional — só para matched_contexto e links) ===
 ${formatCampanhaResumoForLlm(contextoRows)}
 
-=== Mídias ativas (acervo — midias_referenced) ===
+=== Mídias ativas (acervo — use descricao e alt_text para compor a cena) ===
 ${formatMidiasForLlm(midiaRows)}
-
-=== Cadastro empresa (nome/segmento — apoio) ===
-${formatEmpresaForLlm(empresaRow)}
 `;
 
   const promptUser = `${instrucao}\n\n${bloco}`;
@@ -1086,7 +1212,7 @@ ${formatEmpresaForLlm(empresaRow)}
   let usedPanelFallback = false;
   let fallbackMeta = null;
 
-  const panelParsed = buildFallbackProposalFromPanel(history, contextoRows, midiaRows);
+  const panelParsed = buildFallbackProposalFromPanel(history, contextoRows, midiaRows, empresaRow);
 
   if (!env.POST_CONTEXT_USE_LLAMA) {
     parsed = panelParsed;
@@ -1205,7 +1331,15 @@ ${formatEmpresaForLlm(empresaRow)}
     post_context_proposal.hero_product,
     post_context_proposal.midias_referenced,
   );
-  post_context_proposal = finalizePostContextProposal(post_context_proposal, midiaRows, history, hint);
+  const { identidadeDados } = partitionContextosIdentidade(contextoRows);
+  post_context_proposal = finalizePostContextProposal(post_context_proposal, midiaRows, history, hint, {
+    empresaRow,
+    identidadeDados,
+    contextoRows,
+  });
+  if (focusId) {
+    post_context_proposal = applyFocusContextoToProposal(post_context_proposal, contextoRows, focusId);
+  }
 
   if (mediaGate.blocked) {
     const blockedLinks = resolvePostSupplementLinks(

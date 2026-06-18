@@ -6,7 +6,7 @@
 
 
 
-import { classifyChatAcervoIntent } from "./chatIntent.js";
+import { classifyChatAcervoIntent, isPostModelosQuestion } from "./chatIntent.js";
 
 import { tryChatIdentityResponse } from "./chatIdentityResponse.js";
 
@@ -104,6 +104,19 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
 
     };
 
+  }
+
+  if (isPostModelosQuestion(q)) {
+    return {
+      route: "contextos",
+      topics: [...new Set([...topics, "CONTEXTOS"])],
+      identityAnswer: null,
+      acervo: null,
+      chat_mode: null,
+      includeAcervoInPrompt: false,
+      needsProductGuard: false,
+      wantsImageRoute,
+    };
   }
 
   const acervoEarly = classifyChatAcervoIntent(q, history);
@@ -284,7 +297,7 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
 
     chat_mode,
 
-    includeAcervoInPrompt: !skipAcervo,
+    includeAcervoInPrompt: conversaAberta || chat_mode === "identidade" ? false : !skipAcervo,
 
     needsProductGuard:
 

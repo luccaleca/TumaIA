@@ -31,15 +31,21 @@ export function formatarDataContaPtBr(iso) {
 }
 
 /**
- * Valida o formulário da página Conta antes do PATCH /auth/me.
- * @param {{ nome: string, email: string, telefone: string, clearTelefone: boolean }} input
+ * @param {{ nome: string, email: string, telefone: string }} input
  */
 export function validarContaForm(input) {
   const nome = typeof input.nome === "string" ? input.nome.trim() : "";
   const email = normalizeEmailClient(input.email);
   const telefone = typeof input.telefone === "string" ? input.telefone.trim() : "";
+  const telDigits = telefone.replace(/\D/g, "");
   if (!nome || !email) {
     return { ok: false, message: "Nome e e-mail são obrigatórios." };
+  }
+  if (telDigits.length < 10) {
+    return {
+      ok: false,
+      message: "Telefone é obrigatório (DDD + número). Use o mesmo do WhatsApp.",
+    };
   }
   if (telefone.length > 20) {
     return { ok: false, message: "Telefone pode ter no máximo 20 caracteres." };
@@ -54,13 +60,12 @@ export function montarBodyPatchConta(input) {
   const v = validarContaForm(input);
   if (!v.ok) return v;
   const { nome, email, telefone } = v;
-  const { clearTelefone } = input;
   return {
     ok: true,
     body: {
       nome,
       email,
-      telefone: clearTelefone ? null : telefone || null,
+      telefone,
     },
   };
 }

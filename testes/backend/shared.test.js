@@ -44,6 +44,14 @@ describe("empresas/shared — cargoApiDeUsuarioEmpresa", () => {
   it("retorna null sem cargo nem papel", () => {
     assert.equal(cargoApiDeUsuarioEmpresa({ cargo: "", papel: null }), null);
   });
+
+  it("usa perfil_acesso do schema usuario_empresa", () => {
+    assert.equal(
+      cargoApiDeUsuarioEmpresa({ cargo: "", perfil_acesso: "administrador" }),
+      "administrador",
+    );
+    assert.equal(cargoApiDeUsuarioEmpresa({ perfil_acesso: "editor" }), "editor");
+  });
 });
 
 describe("empresas/shared — podeGerenciarMidias", () => {

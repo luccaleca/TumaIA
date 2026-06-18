@@ -180,20 +180,35 @@ export function patchMessageFrase(msg, frase) {
 
 export function patchMessageContextoSelection(msg, ctxId, contextosCampanha) {
   if (!msg?.post_supplement || !ctxId) return msg;
-  const row = contextosCampanha.find((c) => String(c.id_contexto_empresa) === String(ctxId));
+  const row = contextosCampanha.find(
+    (c) =>
+      String(c.id_contexto_empresa) === String(ctxId) ||
+      String(c.id_empresa_modelo_post || "") === String(ctxId),
+  );
   if (!row) return msg;
-  const nome = String(row.nome ?? "").trim() || "contexto";
+  const nome = String(row.nome ?? "").trim() || "modelo";
   const tipo =
     row.schema_json && typeof row.schema_json === "object" && row.schema_json.tipo
       ? String(row.schema_json.tipo)
       : "";
+  const modeloSlug =
+    row.schema_json &&
+    typeof row.schema_json === "object" &&
+    typeof row.schema_json.playbook_slug === "string"
+      ? row.schema_json.playbook_slug.trim()
+      : row.dados_json &&
+          typeof row.dados_json === "object" &&
+          typeof row.dados_json.playbook_slug === "string"
+        ? row.dados_json.playbook_slug.trim()
+        : "";
+  const rowId = row.id_contexto_empresa ?? row.id_empresa_modelo_post;
   const proposal = {
     ...(msg.post_supplement.post_context_proposal &&
     typeof msg.post_supplement.post_context_proposal === "object"
       ? msg.post_supplement.post_context_proposal
       : {}),
     matched_contexto: {
-      id_contexto_empresa: row.id_contexto_empresa,
+      id_contexto_empresa: rowId,
       nome,
       tipo_schema: tipo,
       reason: "escolhido_no_painel",
@@ -204,13 +219,15 @@ export function patchMessageContextoSelection(msg, ctxId, contextosCampanha) {
   );
   links.unshift({
     kind: "contexto",
-    id: row.id_contexto_empresa,
+    id: rowId,
     label: nome,
-    href: `/painel/contextos?contexto=${encodeURIComponent(row.id_contexto_empresa)}`,
+    href: modeloSlug
+      ? `/painel/contextos?modelo=${encodeURIComponent(modeloSlug)}`
+      : `/painel/contextos?contexto=${encodeURIComponent(String(rowId))}`,
   });
   return {
     ...msg,
-    selected_contexto_id: row.id_contexto_empresa,
+    selected_contexto_id: rowId,
     post_supplement: {
       ...msg.post_supplement,
       confirmation_message: "Clique nos itens que vou usar na arte.",

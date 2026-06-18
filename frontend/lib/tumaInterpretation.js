@@ -107,12 +107,38 @@ export function mentionsVisualTopic(text) {
   return VISUAL_TOPIC.test(q) || POST_WITH_ACTION.test(q);
 }
 
+/** Pedido de edição sobre prévia já gerada — não abrir fluxo de briefing. */
+const IMAGE_REVISION_REQUEST =
+  /^quero\s+alterar\s+a\s+imagem\s*:\s*.+/is;
+
+/** Atalhos digitados pós-prévia / pós-legenda — não abrir fluxo de briefing. */
+const POST_DELIVERY_TYPED_COMMAND =
+  /^(gerar\s+legenda|publicar\s+no\s+instagram|(?:alterar|mudar)\s+legenda|alterar\s+imagem|quero\s+alterar\s+a\s+legenda\s*:.+)\s*[!.?]*$/i;
+
+/**
+ * @param {string} text
+ */
+export function isImageRevisionRequest(text) {
+  return IMAGE_REVISION_REQUEST.test(String(text || "").trim());
+}
+
+/**
+ * @param {string} text
+ */
+export function isPostDeliveryTypedCommand(text) {
+  const q = String(text || "").trim();
+  if (!q) return false;
+  return isImageRevisionRequest(q) || POST_DELIVERY_TYPED_COMMAND.test(q);
+}
+
 /**
  * Intenção de abrir fluxo de geração de imagem / resumo de arte.
  * @param {string} text
  */
 export function detectImageGenerationIntent(text) {
   const q = String(text || "").trim();
+  if (isPostDeliveryTypedCommand(q)) return false;
+  if (isImageRevisionRequest(q)) return false;
   if (q.length < 6) return false;
   if (isConversationalMessage(q)) return false;
   if (isMetaOrHypotheticalQuestion(q)) return false;

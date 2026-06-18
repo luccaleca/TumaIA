@@ -17,29 +17,38 @@ describe("auth cadastro — normalizeSenhaInput", () => {
 });
 
 describe("auth cadastro — registerBody (POST /auth/register)", () => {
-  it("aceita payload válido mínimo", () => {
+  it("aceita payload válido com telefone", () => {
     const r = registerBody.safeParse({
       nome: "Maria",
       email: "Maria@EXEMPLO.com",
       senha: "senha1234",
+      telefone: "(11) 99988-7766",
     });
     assert.equal(r.success, true);
     assert.equal(r.data.email, "maria@exemplo.com");
     assert.equal(r.data.nome, "Maria");
     assert.equal(r.data.senha, "senha1234");
-    assert.equal(r.data.telefone, undefined);
+    assert.equal(r.data.telefone, "11999887766");
   });
 
-  it("aceita telefone null e telefone preenchido", () => {
+  it("rejeita cadastro sem telefone", () => {
     const a = registerBody.safeParse({
       nome: "João",
       email: "j@exemplo.com",
       senha: "12345678",
+    });
+    assert.equal(a.success, false);
+
+    const b = registerBody.safeParse({
+      nome: "João",
+      email: "j2@exemplo.com",
+      senha: "12345678",
       telefone: null,
     });
-    assert.equal(a.success, true);
-    assert.equal(a.data.telefone, null);
+    assert.equal(b.success, false);
+  });
 
+  it("aceita telefone preenchido", () => {
     const b = registerBody.safeParse({
       nome: "João",
       email: "j2@exemplo.com",

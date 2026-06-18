@@ -1,6 +1,7 @@
 import { createApp } from "./app.js";
 import { env } from "./config.js";
 import { ensureChatWorkerReady, shutdownChatWorker } from "./services/chatPythonWorker.js";
+import { isWppconnectEnabled } from "./services/wppconnectClient.js";
 
 const app = createApp();
 
@@ -35,6 +36,14 @@ const server = app.listen(env.PORT, () => {
   console.info(
     `[chat-worker] timeouts boot=${Math.round(env.CHAT_WORKER_BOOT_TIMEOUT_MS / 1000)}s request=${Math.round(env.CHAT_WORKER_REQUEST_TIMEOUT_MS / 1000)}s`,
   );
+  if (isWppconnectEnabled()) {
+    console.info(
+      `[wppconnect] ativo — webhook em http://localhost:${env.PORT}/wppconnect/webhook (sessão: ${env.WPPCONNECT_SESSION})`,
+    );
+    console.info(
+      "[wppconnect] configure webhook.url no wppconnect-server apontando para essa URL",
+    );
+  }
 });
 
 server.on("error", (err) => {

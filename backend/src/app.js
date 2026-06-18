@@ -6,6 +6,7 @@ import auth from "./routes/auth.js";
 import empresas from "./routes/empresas.js";
 import ia from "./routes/ia.js";
 import chat from "./routes/chat.js";
+import wppconnect from "./routes/wppconnect.js";
 
 export function createApp() {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp() {
   app.use("/ia", ia);
   app.use("/chat", chat);
   app.use("/internal", internal);
+  app.use("/wppconnect", wppconnect);
 
   return app;
 }

@@ -9,6 +9,13 @@ import {
   detectImageGenerationIntent,
   detectImageGenerationIntentFromHistory,
 } from "../../../lib/chatDeliveryUi";
+import { buildWagnerPostImageMockResult, isWagnerPostImageMock } from "../../../lib/devChatShortcuts";
+import {
+  findLatestCaptionMessageId,
+  isCaptionAssistantMessage,
+  parseTypedDeliveryCommand,
+  resolveImageUrlForRevision,
+} from "../../../lib/chatDeliveryCommands";
 import {
   clearChatSession,
   loadChatSession,
@@ -19,6 +26,21 @@ import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresa
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
 import ChatFormatoBar from "./ChatFormatoBar";
 import ChatGeneratedImagePreview from "./ChatGeneratedImagePreview";
+import ChatSlashMenu from "./ChatSlashMenu";
+import ChatSlashInput from "./ChatSlashInput";
+import {
+  countChipsBefore,
+  emptySlashChips,
+  formatSlashInputForSend,
+  insertChipCharAtSlash,
+  listSlashChipMidiaIds,
+  reconcileSlashChipsWithText,
+  removeModeloChipFromState,
+  slashChipsToApiPicks,
+  SLASH_MENU_MAX_MIDIAS,
+  parseSlashTrigger,
+  stripLegacyChatInputMarkers,
+} from "../../../lib/chatSlashMenu";
 import { arteBriefReady, emptyArteBrief, normalizeArteBrief } from "../../../lib/arteFormatPresets";
 import {
   CHAT_PEDIDO_AGUARDE_MSG,
@@ -33,14 +55,25 @@ const IMAGE_PREVIEW_TIMEOUT_MS = 310_000;
 const SYNC_MENSAGENS_TIMEOUT_MS = 90_000;
 /** Painel imediato ~3s; com Llama no .env até ~32s + margem. */
 const POST_CONTEXT_TIMEOUT_MS = 55_000;
+/** Legenda + hashtags (Llama). */
+const POST_CAPTION_TIMEOUT_MS = 55_000;
+const POST_IMAGE_UI = [
+  { id: "revise_image", label: "Alterar imagem" },
+  { id: "generate_caption", label: "Gerar legenda" },
+];
+const POST_CAPTION_UI = [
+  { id: "adjust_caption", label: "Mudar legenda" },
+  { id: "publish_instagram", label: "Publicar no Instagram" },
+];
 /**
  * POST /ia/chat: boot do worker (Chroma, até ~8 min) + pergunta (até ~6 min) + margem.
  * Alinhar com CHAT_WORKER_* no backend/.env e proxyTimeout no next.config.mjs.
  */
 const CHAT_IA_TIMEOUT_MS = 900_000;
-const CONFIRM_IMAGE_USER_LINE = "Confirmar e gerar prévia da imagem.";
+const CONFIRM_IMAGE_USER_LINE = "Confirmar e gerar imagem.";
 const HIDDEN_USER_LINES = new Set([
   CONFIRM_IMAGE_USER_LINE,
+  "Gerar imagem.",
   "Gerar prévia da imagem.",
 ]);
 const WEAK_ARTE_THEME_RE =
@@ -51,14 +84,63 @@ function isWeakArteTheme(value) {
   return !t || t.length < 6 || WEAK_ARTE_THEME_RE.test(t);
 }
 
+function modeloSlugFromContextoRow(row) {
+  if (!row) return "";
+  if (
+    row.schema_json &&
+    typeof row.schema_json === "object" &&
+    typeof row.schema_json.playbook_slug === "string"
+  ) {
+    return row.schema_json.playbook_slug.trim();
+  }
+  if (
+    row.dados_json &&
+    typeof row.dados_json === "object" &&
+    typeof row.dados_json.playbook_slug === "string"
+  ) {
+    return row.dados_json.playbook_slug.trim();
+  }
+  return "";
+}
+
 function friendlyUiActionLabel(action) {
-  if (action?.id === "confirm_generate_image") return "Gerar prévia da imagem";
+  if (action?.id === "confirm_generate_image") return "Gerar imagem";
+  if (action?.id === "generate_caption") return "Gerar legenda";
+  if (action?.id === "revise_image") return "Alterar imagem";
+  if (action?.id === "adjust_caption") return "Mudar legenda";
+  if (action?.id === "publish_instagram") return "Publicar no Instagram";
   const label = String(action?.label ?? "").trim();
-  return label.replace(/\s*\(Replicate\s*\/\s*créditos\)\s*/gi, "").trim() || "Gerar prévia da imagem";
+  return label.replace(/\s*\(Replicate\s*\/\s*créditos\)\s*/gi, "").trim() || "Continuar";
+}
+
+/** Texto enviado no chat ao tocar botão pós-imagem (estilo WhatsApp). */
+function quickReplyUserLineForAction(actionId) {
+  if (actionId === "generate_caption") return "Gerar legenda";
+  if (actionId === "revise_image") return "Alterar imagem";
+  if (actionId === "adjust_caption") return "Mudar legenda";
+  if (actionId === "publish_instagram") return "Publicar no Instagram";
+  return null;
+}
+
+/**
+ * @param {Array<object>} prev
+ * @param {string} fromAssistantMessageId
+ * @param {string} userLine
+ * @param {(m: object) => object} [patchSourceMessage]
+ */
+function appendQuickReplyUserMessage(prev, fromAssistantMessageId, userLine, patchSourceMessage) {
+  const patched = prev.map((m) => {
+    if (m.id !== fromAssistantMessageId) return m;
+    return patchSourceMessage ? patchSourceMessage(m) : { ...m, ui_actions: undefined };
+  });
+  const userMsg = { id: crypto.randomUUID(), role: "user", content: userLine };
+  return { msgs: [...patched, userMsg], userMsg };
 }
 
 function isHiddenUserMessage(message) {
-  return message?.role === "user" && HIDDEN_USER_LINES.has(String(message.content ?? "").trim());
+  if (message?.role === "user" && HIDDEN_USER_LINES.has(String(message.content ?? "").trim())) return true;
+  if (message?.role === "user" && isWagnerPostImageMock(message.content)) return true;
+  return false;
 }
 
 /**
@@ -71,7 +153,8 @@ function shouldGenerateImagePreviewDirectly(text) {
   const t = raw.toLowerCase();
   if (t.length < 8) return false;
   return (
-    (/\bconfirm(ar|o)\b/.test(t) && /\b(pr[eé]via|imagem|arte)\b/.test(t)) ||
+    (/\bconfirm(ar|o)\b/.test(t) && /\b(imagem|arte)\b/.test(t)) ||
+    /\bgera(r)?\s+(a\s+)?imagem\b/.test(t) ||
     /\bgera(r)?\s+(a\s+)?pr[eé]via\b/.test(t) ||
     /\bpr[eé]via\s+(da\s+)?im(agem)?\b/.test(t)
   );
@@ -131,6 +214,52 @@ function historyFromMessages(msgs) {
     .filter((m) => m && !m.hidden && !isHiddenUserMessage(m))
     .map((m) => ({ role: m.role, content: messageConteudoForApi(m) }));
   return full.length > CHAT_HISTORY_API_MAX ? full.slice(-CHAT_HISTORY_API_MAX) : full;
+}
+
+function historyThroughMessage(msgs, messageId) {
+  const idx = msgs.findIndex((m) => m.id === messageId);
+  const slice = idx >= 0 ? msgs.slice(0, idx + 1) : msgs;
+  return historyFromMessages(slice);
+}
+
+function formatCaptionAssistantContent({ legenda, hashtags }) {
+  const body = String(legenda || "").trim();
+  const tags = (Array.isArray(hashtags) ? hashtags : []).filter(Boolean).join(" ");
+  return tags ? `${body}\n\n${tags}` : body;
+}
+
+function findLatestImageUrlInMessages(msgs) {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const urls = msgs[i]?.image_urls;
+    if (Array.isArray(urls) && typeof urls[0] === "string" && urls[0].trim()) {
+      return urls[0].trim();
+    }
+  }
+  return null;
+}
+
+function findLatestImageMessageId(msgs) {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i];
+    if (m?.role === "assistant" && Array.isArray(m.image_urls) && m.image_urls.length) {
+      return m.id;
+    }
+  }
+  return null;
+}
+
+function buildImagePreviewAssistantMessage(out, contextoLinha, contentSuffix = "") {
+  const base =
+    imagePreviewSuccessLine(out.urls, out.model, out.imageGeneration) + contextoLinha + contentSuffix;
+  return {
+    id: crypto.randomUUID(),
+    role: "assistant",
+    content: base,
+    sources: [],
+    image_urls: out.urls.length ? out.urls : undefined,
+    image_midia_ids: out.imageMidiaIds?.length ? out.imageMidiaIds : undefined,
+    ui_actions: out.urls.length ? POST_IMAGE_UI : undefined,
+  };
 }
 
 function findLatestImageProposalObject(msgs) {
@@ -208,10 +337,13 @@ function proposalWithArteDraft(proposal, arteDraft) {
 function buildImagePreviewRequestBody({
   history,
   empresaId,
+  conversaId,
   proposal,
   supplementLinks,
   focusContextoId,
   arteDraft,
+  revisionSourceUrl,
+  revisionInstructions,
 }) {
   const reference_midia_ids = referenceMidiaIdsFromProposal(proposal, supplementLinks);
   const linksForApi = Array.isArray(supplementLinks)
@@ -234,11 +366,18 @@ function buildImagePreviewRequestBody({
   return {
     history,
     id_empresa: empresaId,
+    ...(conversaId && UUID_RE.test(String(conversaId)) ? { id_conversa: String(conversaId) } : {}),
     ...(prop && Object.keys(prop).length ? { post_context_proposal: prop } : {}),
     ...(aspect ? { aspect_ratio: aspect } : {}),
     ...(linksForApi.length ? { post_supplement_links: linksForApi } : {}),
     ...(reference_midia_ids.length ? { reference_midia_ids } : {}),
     ...(focus ? { focus_contexto_id: focus } : {}),
+    ...(revisionSourceUrl && revisionInstructions
+      ? {
+          revision_source_url: revisionSourceUrl,
+          revision_instructions: revisionInstructions,
+        }
+      : {}),
   };
 }
 
@@ -283,6 +422,9 @@ function imagePreviewSuccessLine(urls, model, imageGeneration) {
       : " com itens do acervo";
     return `Prévia da imagem${modelLabel}${assetsLabel}:`;
   }
+  if (imageGeneration?.preview_revision) {
+    return `Prévia atualizada${modelLabel}:`;
+  }
   return `Prévia da imagem${modelLabel}:`;
 }
 
@@ -323,6 +465,10 @@ function fromApiMensagem(m) {
   const image_urls =
     meta && typeof meta === "object" && Array.isArray(meta.image_urls)
       ? meta.image_urls.filter((u) => typeof u === "string" && u.trim())
+      : [];
+  const image_midia_ids =
+    meta && typeof meta === "object" && Array.isArray(meta.image_midia_ids)
+      ? meta.image_midia_ids.filter((id) => typeof id === "string" && UUID_RE.test(id.trim()))
       : [];
   const post_supplementRaw =
     meta && typeof meta === "object" && meta.post_supplement && typeof meta.post_supplement === "object"
@@ -386,6 +532,7 @@ function fromApiMensagem(m) {
     sources,
     ui_actions: ui_actions.length ? ui_actions : undefined,
     image_urls: image_urls.length ? image_urls : undefined,
+    image_midia_ids: image_midia_ids.length ? image_midia_ids : undefined,
     ...(hidden ? { hidden: true } : {}),
     ...(selected_contexto_id && UUID_RE.test(selected_contexto_id)
       ? { selected_contexto_id }
@@ -418,6 +565,7 @@ function toApiMensagens(messages) {
     if (m.sources && m.sources.length) meta.sources = m.sources;
     if (m.ui_actions && m.ui_actions.length) meta.ui_actions = m.ui_actions;
     if (m.image_urls && m.image_urls.length) meta.image_urls = m.image_urls;
+    if (m.image_midia_ids && m.image_midia_ids.length) meta.image_midia_ids = m.image_midia_ids;
     if (m.post_supplement && typeof m.post_supplement === "object") {
       const hasConfirm =
         typeof m.post_supplement.confirmation_message === "string" &&
@@ -499,6 +647,7 @@ export default function PainelChatPage() {
   const [renameSaving, setRenameSaving] = useState(false);
   const [errMsg, setErrMsg] = useState("");
   const bottomRef = useRef(null);
+  const inputRef = useRef(null);
   const errTimer = useRef(null);
   const conversaDropdownRef = useRef(null);
   const [conversaMenuOpen, setConversaMenuOpen] = useState(false);
@@ -509,9 +658,21 @@ export default function PainelChatPage() {
   /** Resposta do Llama após a qual a Replicate está gerando a imagem (pipeline raw). */
   const [imageGeneratingAfterId, setImageGeneratingAfterId] = useState(null);
   const [contextosCampanha, setContextosCampanha] = useState([]);
+  const [slashMenu, setSlashMenu] = useState({
+    open: false,
+    query: "",
+    tokenStart: -1,
+    tokenEnd: -1,
+  });
+  const [slashChips, setSlashChips] = useState(() => emptySlashChips());
+  const slashChipsRef = useRef(slashChips);
+  const inputCursorRef = useRef(0);
+  const pendingInputCursorRef = useRef(null);
   const [arteBriefDraft, setArteBriefDraft] = useState(() => emptyArteBrief());
   const [brandColors, setBrandColors] = useState([]);
   const [arteBriefLoading, setArteBriefLoading] = useState(false);
+  const [captionEditingId, setCaptionEditingId] = useState(null);
+  const [captionEditDraft, setCaptionEditDraft] = useState("");
   const messagesRef = useRef(messages);
   const arteBriefDraftRef = useRef(arteBriefDraft);
   const sessionPersistRef = useRef({ empresaId: null, conversaId: null, input: "", messages: [] });
@@ -521,8 +682,139 @@ export default function PainelChatPage() {
   }, [arteBriefDraft]);
 
   useEffect(() => {
+    slashChipsRef.current = slashChips;
+  }, [slashChips]);
+
+  useEffect(() => {
+    if (pendingInputCursorRef.current == null) return;
+    const cursor = pendingInputCursorRef.current;
+    pendingInputCursorRef.current = null;
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      const c = Math.min(Math.max(0, cursor), String(input ?? "").length);
+      el.setSelectionRange(c);
+      inputCursorRef.current = c;
+    });
+  }, [input, slashChips]);
+
+  useEffect(() => {
     sessionPersistRef.current = { empresaId, conversaId, input, messages };
   }, [empresaId, conversaId, input, messages]);
+
+  const selectedSlashMidiaIds = useMemo(() => listSlashChipMidiaIds(slashChips), [slashChips]);
+
+  const modelosAtivos = useMemo(
+    () =>
+      contextosCampanha
+        .map((row) => {
+          const id = String(row.id_contexto_empresa ?? row.id_empresa_modelo_post ?? "").trim();
+          const nome = String(row.nome ?? "").trim() || "Modelo";
+          const slug = modeloSlugFromContextoRow(row);
+          return id ? { id, nome, slug } : null;
+        })
+        .filter(Boolean),
+    [contextosCampanha],
+  );
+
+  const closeSlashMenu = useCallback(() => {
+    setSlashMenu({ open: false, query: "", tokenStart: -1, tokenEnd: -1 });
+  }, []);
+
+  const syncSlashMenuFromInput = useCallback(
+    (text, cursorPos) => {
+      const trigger = parseSlashTrigger(text, cursorPos);
+      if (trigger) {
+        setSlashMenu({
+          open: true,
+          query: trigger.query,
+          tokenStart: trigger.tokenStart,
+          tokenEnd: trigger.tokenEnd,
+        });
+      } else {
+        setSlashMenu((prev) => (prev.open ? { ...prev, open: false } : prev));
+      }
+    },
+    [],
+  );
+
+  const handleChatInputChange = useCallback(
+    (event) => {
+      const value = stripLegacyChatInputMarkers(event.target.value);
+      const pos = event.target.selectionStart ?? value.length;
+      inputCursorRef.current = pos;
+      const domChips = Array.isArray(event.target.chips) ? event.target.chips : null;
+      setSlashChips((prev) => domChips ?? reconcileSlashChipsWithText(value, prev));
+      setInput(value);
+      syncSlashMenuFromInput(value, pos);
+    },
+    [syncSlashMenuFromInput],
+  );
+
+  const focusInputAt = useCallback((cursor) => {
+    pendingInputCursorRef.current = cursor;
+  }, []);
+
+  const readLiveSlashInput = useCallback(() => {
+    const editor = inputRef.current;
+    const domState = editor?.getEditorState?.();
+    if (domState) {
+      return {
+        text: stripLegacyChatInputMarkers(domState.text),
+        chips: Array.isArray(domState.chips) ? domState.chips : slashChipsRef.current,
+      };
+    }
+    return { text: stripLegacyChatInputMarkers(input), chips: slashChipsRef.current };
+  }, [input]);
+
+  const handlePickSlashModelo = useCallback(
+    (modelo) => {
+      const slug = modelo.slug || String(modelo.nome ?? "modelo").toLowerCase().replace(/\s+/g, "-");
+      const chip = { type: "modelo", id: modelo.id, nome: modelo.nome, slug };
+      const cleaned = removeModeloChipFromState(
+        stripLegacyChatInputMarkers(input),
+        slashChipsRef.current,
+      );
+      const inserted = insertChipCharAtSlash(cleaned.text, slashMenu);
+      const chipAt = countChipsBefore(
+        cleaned.text,
+        Math.min(slashMenu.tokenStart, cleaned.text.length),
+      );
+      const nextChips = [...cleaned.chips];
+      nextChips.splice(chipAt, 0, chip);
+      setInput(inserted.text);
+      setSlashChips(nextChips);
+      focusInputAt(inserted.cursor);
+      closeSlashMenu();
+    },
+    [input, slashMenu, closeSlashMenu, focusInputAt],
+  );
+
+  const handlePickSlashMidia = useCallback(
+    (midia) => {
+      const label = String(midia.label ?? "midia")
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^\w.-]/g, "")
+        .slice(0, 40);
+      const current = slashChipsRef.current;
+      if (current.some((c) => c.type === "midia" && c.id === midia.id)) return;
+      if (current.filter((c) => c.type === "midia").length >= SLASH_MENU_MAX_MIDIAS) return;
+
+      const chip = { type: "midia", id: midia.id, label: label || "midia" };
+      const base = stripLegacyChatInputMarkers(input);
+      const inserted = insertChipCharAtSlash(base, slashMenu);
+      const chipAt = countChipsBefore(base, Math.min(slashMenu.tokenStart, base.length));
+      const nextChips = [...slashChipsRef.current];
+      nextChips.splice(chipAt, 0, chip);
+      setInput(inserted.text);
+      setSlashChips(nextChips);
+      focusInputAt(inserted.cursor);
+      closeSlashMenu();
+    },
+    [input, slashMenu, closeSlashMenu, focusInputAt],
+  );
 
   const flushChatSession = useCallback(() => {
     const snap = sessionPersistRef.current;
@@ -562,7 +854,7 @@ export default function PainelChatPage() {
   const busyStatusLabel = actionBusy
     ? actionBusy === "image:auto"
       ? "Gerando imagem"
-      : "Gerando prévia da imagem"
+      : "Gerando imagem"
     : postContextLoadingId
       ? "Preparando resumo para a imagem"
       : imageGeneratingAfterId
@@ -835,7 +1127,15 @@ export default function PainelChatPage() {
   );
 
   const invokeImagePreview = useCallback(
-    async function invokeImagePreviewFn({ msgs, proposal, supplementLinks, focusContextoId }) {
+    async function invokeImagePreviewFn({
+      msgs,
+      proposal,
+      supplementLinks,
+      focusContextoId,
+      conversaId: conversaIdOverride,
+      revisionSourceUrl,
+      revisionInstructions,
+    }) {
       if (!empresaId) return { ok: false, error: "Empresa não selecionada." };
       const historyFull = historyFromMessages(msgs);
       if (!historyFull.length) return { ok: false, error: "Histórico vazio para gerar a imagem." };
@@ -843,16 +1143,25 @@ export default function PainelChatPage() {
         proposal && typeof proposal === "object" && Object.keys(proposal).length > 0
           ? proposal
           : findLatestImageProposalObject(msgs) || {};
+      const idConversa =
+        conversaIdOverride && UUID_RE.test(String(conversaIdOverride))
+          ? String(conversaIdOverride)
+          : conversaId && UUID_RE.test(String(conversaId))
+            ? String(conversaId)
+            : null;
       const result = await authApiFetchWithToken("/ia/image-preview", {
         method: "POST",
         body: JSON.stringify(
           buildImagePreviewRequestBody({
             history: historyFull,
             empresaId,
+            conversaId: idConversa,
             proposal: prop,
             supplementLinks: supplementLinks || [],
             focusContextoId,
             arteDraft: arteBriefDraftRef.current,
+            revisionSourceUrl,
+            revisionInstructions,
           }),
         ),
         timeoutMs: IMAGE_PREVIEW_TIMEOUT_MS,
@@ -871,16 +1180,20 @@ export default function PainelChatPage() {
           (qualitySummary && result.json?.rejected_preview ? qualitySummary : null) ||
           formatAuthError(result.json) ||
           (result.status === 422
-            ? "A prévia foi barrada na revisão automática. Ajuste o pedido ou tente de novo."
+            ? "A imagem foi barrada na revisão automática. Ajuste o pedido ou tente de novo."
             : null) ||
           "Não foi possível gerar a imagem agora.";
         const errText = typeof msg === "string" ? msg : "Erro desconhecido.";
         return { ok: false, error: String(errText), status: result.status };
       }
       const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
+      const imageMidiaIds = Array.isArray(result.json?.image_midia_ids)
+        ? result.json.image_midia_ids.filter((id) => typeof id === "string" && UUID_RE.test(id.trim()))
+        : [];
       return {
         ok: true,
         urls,
+        imageMidiaIds,
         model: result.json?.model,
         contexto: result.json?.contexto_geracao,
         imageGeneration:
@@ -889,21 +1202,36 @@ export default function PainelChatPage() {
             : null,
       };
     },
-    [empresaId],
+    [empresaId, conversaId],
   );
 
   const attachPostContextSupplement = useCallback(
-    async function attachPostContextSupplementFn(chatId, assistantMessageId, historyForProposal) {
+    async function attachPostContextSupplementFn(
+      chatId,
+      assistantMessageId,
+      historyForProposal,
+      slashPicksAtSend = null,
+    ) {
       if (!empresaId || !chatId) return;
+      const picks = slashPicksAtSend || slashChipsToApiPicks(slashChipsRef.current);
+      const userLast =
+        [...historyForProposal].reverse().find((h) => h.role === "user")?.content || "";
+      const detailedRequest = String(userLast).trim().length >= 24;
+      const slashModeloId = picks.modelo?.id ? String(picks.modelo.id).trim() : null;
       setPostContextLoadingId(assistantMessageId);
       try {
+        const proposalBody = {
+          history: historyForProposal,
+          id_empresa: empresaId,
+          arte_brief: arteBriefDraftRef.current,
+        };
+        if (slashModeloId) proposalBody.focus_contexto_id = slashModeloId;
+        if (picks.midias?.length) {
+          proposalBody.reference_midia_ids = picks.midias.map((m) => m.id).filter(Boolean);
+        }
         const prop = await authApiFetchWithToken("/ia/post-context-proposal", {
           method: "POST",
-          body: JSON.stringify({
-            history: historyForProposal,
-            id_empresa: empresaId,
-            arte_brief: arteBriefDraftRef.current,
-          }),
+          body: JSON.stringify(proposalBody),
           timeoutMs: POST_CONTEXT_TIMEOUT_MS,
           timeoutLabel: "post-context",
         });
@@ -971,7 +1299,7 @@ export default function PainelChatPage() {
             )
           : [];
         if (!collecting && !ui_actions.length && post_supplement) {
-          ui_actions = [{ id: "confirm_generate_image", label: "Gerar prévia da imagem" }];
+          ui_actions = [{ id: "confirm_generate_image", label: "Gerar imagem" }];
         }
         const proposalObj =
           post_supplement?.post_context_proposal && typeof post_supplement.post_context_proposal === "object"
@@ -983,14 +1311,17 @@ export default function PainelChatPage() {
           typeof proposalObj.matched_contexto.id_contexto_empresa === "string"
             ? proposalObj.matched_contexto.id_contexto_empresa.trim()
             : null;
-        if (
+        if (slashModeloId) {
+          selectedId = slashModeloId;
+        } else if (
           selectedId &&
           contextosCampanha.length &&
           !contextosCampanha.some((c) => String(c.id_contexto_empresa) === selectedId)
         ) {
-          selectedId = String(contextosCampanha[0]?.id_contexto_empresa ?? "") || null;
-        }
-        if (!selectedId && contextosCampanha.length) {
+          selectedId = detailedRequest
+            ? null
+            : String(contextosCampanha[0]?.id_contexto_empresa ?? "") || null;
+        } else if (!selectedId && !detailedRequest && contextosCampanha.length) {
           selectedId = String(contextosCampanha[0]?.id_contexto_empresa ?? "") || null;
         }
 
@@ -1062,10 +1393,295 @@ export default function PainelChatPage() {
     [contextosCampanha, conversaId, syncMensagens],
   );
 
+  const runGenerateCaptionForImage = useCallback(
+    async function runGenerateCaptionForImageFn(imageMessageId, msgs, { fromButton = false } = {}) {
+      const idChat = conversaId;
+      if (!idChat || !empresaId) return false;
+
+      setActionBusy(`${imageMessageId}:generate_caption`);
+      let msgsWithUser = msgs;
+      if (fromButton) {
+        const userLine = quickReplyUserLineForAction("generate_caption");
+        if (!userLine) {
+          setActionBusy(null);
+          return false;
+        }
+        msgsWithUser = appendQuickReplyUserMessage(msgs, imageMessageId, userLine, (m) => ({
+          ...m,
+          ui_actions: undefined,
+        })).msgs;
+        setMessages(msgsWithUser);
+        const okSync = await syncMensagens(idChat, msgsWithUser);
+        if (!okSync) {
+          setActionBusy(null);
+          return false;
+        }
+      } else {
+        msgsWithUser = msgs.map((m) =>
+          m.id === imageMessageId ? { ...m, ui_actions: undefined } : m,
+        );
+        setMessages(msgsWithUser);
+      }
+
+      try {
+        const history = historyFromMessages(msgsWithUser);
+        const proposal = findLatestImageProposalObject(msgsWithUser) || {};
+        const result = await authApiFetchWithToken("/ia/post-caption", {
+          method: "POST",
+          body: JSON.stringify({
+            history,
+            id_empresa: empresaId,
+            post_context_proposal: proposal,
+          }),
+          timeoutMs: POST_CAPTION_TIMEOUT_MS,
+          timeoutLabel: "post-caption",
+        });
+        if (!result.ok || result.networkError) {
+          const msg =
+            result.networkError?.message ||
+            (typeof result.json?.error === "string" ? result.json.error : null) ||
+            formatAuthError(result.json) ||
+            "Não foi possível gerar a legenda agora.";
+          const errBubble = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: String(msg),
+            sources: [],
+          };
+          const comErro = [...msgsWithUser, errBubble];
+          setMessages(comErro);
+          await syncMensagens(idChat, comErro);
+          return false;
+        }
+        const legenda = result.json?.legenda;
+        const hashtags = result.json?.hashtags;
+        const captionMsg = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: formatCaptionAssistantContent({ legenda, hashtags }),
+          sources: [],
+          ui_actions: POST_CAPTION_UI,
+        };
+        const finalMsgs = [...msgsWithUser, captionMsg];
+        setMessages(finalMsgs);
+        await syncMensagens(idChat, finalMsgs);
+        return true;
+      } catch (err) {
+        const errBubble = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: err instanceof Error ? err.message : "Erro inesperado ao gerar legenda.",
+          sources: [],
+        };
+        const comErro = [...msgsWithUser, errBubble];
+        setMessages(comErro);
+        await syncMensagens(idChat, comErro);
+        return false;
+      } finally {
+        setActionBusy(null);
+      }
+    },
+    [conversaId, empresaId, syncMensagens],
+  );
+
+  const runRegenerateCaption = useCallback(
+    async function runRegenerateCaptionFn(msgs) {
+      const idChat = conversaId;
+      if (!idChat || !empresaId) return false;
+      const priorMsgs = msgs.slice(0, -1);
+      const captionId = findLatestCaptionMessageId(priorMsgs);
+      const busyId = captionId || "caption";
+      setActionBusy(`${busyId}:generate_caption`);
+      const msgsPrepared = captionId
+        ? msgs.map((m) => (m.id === captionId ? { ...m, ui_actions: undefined } : m))
+        : msgs;
+      setMessages(msgsPrepared);
+
+      try {
+        const history = historyFromMessages(msgsPrepared);
+        const proposal = findLatestImageProposalObject(msgsPrepared) || {};
+        const result = await authApiFetchWithToken("/ia/post-caption", {
+          method: "POST",
+          body: JSON.stringify({
+            history,
+            id_empresa: empresaId,
+            post_context_proposal: proposal,
+          }),
+          timeoutMs: POST_CAPTION_TIMEOUT_MS,
+          timeoutLabel: "post-caption",
+        });
+        if (!result.ok || result.networkError) {
+          const msg =
+            result.networkError?.message ||
+            (typeof result.json?.error === "string" ? result.json.error : null) ||
+            formatAuthError(result.json) ||
+            "Não foi possível atualizar a legenda agora.";
+          const errBubble = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: String(msg),
+            sources: [],
+          };
+          const comErro = [...msgsPrepared, errBubble];
+          setMessages(comErro);
+          await syncMensagens(idChat, comErro);
+          return false;
+        }
+        const legenda = result.json?.legenda;
+        const hashtags = result.json?.hashtags;
+        const captionMsg = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: formatCaptionAssistantContent({ legenda, hashtags }),
+          sources: [],
+          ui_actions: POST_CAPTION_UI,
+        };
+        const finalMsgs = [...msgsPrepared, captionMsg];
+        setMessages(finalMsgs);
+        await syncMensagens(idChat, finalMsgs);
+        return true;
+      } catch (err) {
+        const errBubble = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: err instanceof Error ? err.message : "Erro inesperado ao atualizar legenda.",
+          sources: [],
+        };
+        const comErro = [...msgsPrepared, errBubble];
+        setMessages(comErro);
+        await syncMensagens(idChat, comErro);
+        return false;
+      } finally {
+        setActionBusy(null);
+      }
+    },
+    [conversaId, empresaId, syncMensagens],
+  );
+
+  const runPublishInstagramForCaption = useCallback(
+    async function runPublishInstagramForCaptionFn(captionMessageId, msgs, { fromButton = false } = {}) {
+      const idChat = conversaId;
+      if (!idChat || !empresaId) return false;
+
+      const captionMsg = msgs.find((m) => m.id === captionMessageId);
+      const captionText = typeof captionMsg?.content === "string" ? captionMsg.content.trim() : "";
+      let msgsWithUser = msgs;
+      if (fromButton) {
+        const userLine = quickReplyUserLineForAction("publish_instagram");
+        if (!userLine) return false;
+        msgsWithUser = appendQuickReplyUserMessage(msgs, captionMessageId, userLine).msgs;
+      } else {
+        msgsWithUser = msgs.map((m) =>
+          m.id === captionMessageId ? { ...m, ui_actions: undefined } : m,
+        );
+      }
+      setMessages(msgsWithUser);
+
+      let copied = false;
+      if (captionText && typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(captionText);
+          copied = true;
+        } catch {
+          /* ignore */
+        }
+      }
+      const hasImage = Boolean(findLatestImageUrlInMessages(msgsWithUser));
+      const assistMsg = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: copied
+          ? hasImage
+            ? "Legenda copiada! Abra o Instagram, selecione a imagem gerada e cole o texto para publicar."
+            : "Legenda copiada! Abra o Instagram e cole o texto para publicar."
+          : hasImage
+            ? "Abra o Instagram, use a imagem gerada e cole a legenda acima para publicar."
+            : "Abra o Instagram e cole a legenda acima para publicar.",
+        sources: [],
+      };
+      const finalMsgs = [...msgsWithUser, assistMsg];
+      setMessages(finalMsgs);
+      await syncMensagens(idChat, finalMsgs);
+      if (typeof window !== "undefined") {
+        window.open("https://www.instagram.com/", "_blank", "noopener,noreferrer");
+      }
+      return true;
+    },
+    [conversaId, empresaId, syncMensagens],
+  );
+
+  const cancelCaptionEdit = useCallback(() => {
+    setCaptionEditingId(null);
+    setCaptionEditDraft("");
+  }, []);
+
+  const saveCaptionEdit = useCallback(
+    async function saveCaptionEditFn(messageId) {
+      const idChat = conversaId;
+      const text = String(captionEditDraft ?? "").trim();
+      if (!idChat || !messageId) return;
+      if (!text) {
+        showErr("A legenda não pode ficar vazia.");
+        return;
+      }
+      const next = messagesRef.current.map((m) =>
+        m.id === messageId ? { ...m, content: text } : m,
+      );
+      setMessages(next);
+      setCaptionEditingId(null);
+      setCaptionEditDraft("");
+      await syncMensagens(idChat, next);
+    },
+    [conversaId, captionEditDraft, syncMensagens],
+  );
+
+  const startCaptionEdit = useCallback((messageId, content) => {
+    setCaptionEditingId(messageId);
+    setCaptionEditDraft(String(content ?? ""));
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`caption-edit-${messageId}`);
+      el?.focus();
+    });
+  }, []);
+
   const runDeliveryAction = useCallback(
     async function runDeliveryActionFn(fromAssistantMessageId, actionId) {
       const idChat = conversaId;
       if (!idChat || !empresaId || sending || actionBusy) return;
+
+      if (actionId === "adjust_caption") {
+        const captionMsg = messagesRef.current.find((m) => m.id === fromAssistantMessageId);
+        if (!captionMsg || !isCaptionAssistantMessage(captionMsg)) return;
+        startCaptionEdit(fromAssistantMessageId, captionMsg.content);
+        return;
+      }
+
+      if (actionId === "revise_image") {
+        const userLine = quickReplyUserLineForAction(actionId);
+        if (!userLine) return;
+        const prev = messagesRef.current;
+        const { msgs: msgsWithUser } = appendQuickReplyUserMessage(prev, fromAssistantMessageId, userLine);
+        setMessages(msgsWithUser);
+        await syncMensagens(idChat, msgsWithUser);
+        setInput("Quero alterar a imagem: ");
+        requestAnimationFrame(() => inputRef.current?.focus());
+        return;
+      }
+
+      if (actionId === "publish_instagram") {
+        await runPublishInstagramForCaption(fromAssistantMessageId, messagesRef.current, {
+          fromButton: true,
+        });
+        return;
+      }
+
+      if (actionId === "generate_caption") {
+        await runGenerateCaptionForImage(fromAssistantMessageId, messagesRef.current, {
+          fromButton: true,
+        });
+        return;
+      }
+
       if (actionId !== "confirm_generate_image") return;
       if (!arteBriefReady(arteBriefDraftRef.current)) {
         showErr("Preencha o tema no resumo da arte (no topo do chat) antes de gerar.");
@@ -1074,7 +1690,7 @@ export default function PainelChatPage() {
 
       if (
         typeof window !== "undefined" &&
-        !window.confirm("Gerar a prévia da imagem? Pode consumir créditos do seu plano.")
+        !window.confirm("Gerar a imagem? Pode consumir créditos do seu plano.")
       ) {
         return;
       }
@@ -1120,7 +1736,7 @@ export default function PainelChatPage() {
           const errBubble = {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: out.error || "Não foi possível gerar a prévia agora.",
+            content: out.error || "Não foi possível gerar a imagem agora.",
             sources: [],
           };
           const comErro = [...msgsWithUser, errBubble];
@@ -1129,13 +1745,7 @@ export default function PainelChatPage() {
           return;
         }
         const contextoLinha = buildImageContextNote(out.contexto);
-        const assistantFollowUp = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: imagePreviewSuccessLine(out.urls, out.model, out.imageGeneration) + contextoLinha,
-          sources: [],
-          image_urls: out.urls.length ? out.urls : undefined,
-        };
+        const assistantFollowUp = buildImagePreviewAssistantMessage(out, contextoLinha);
         const finalMsgs = [...msgsWithUser, assistantFollowUp];
         setMessages(finalMsgs);
         await syncMensagens(idChat, finalMsgs);
@@ -1143,7 +1753,7 @@ export default function PainelChatPage() {
         const errBubble = {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: err instanceof Error ? err.message : "Erro inesperado ao gerar a prévia.",
+          content: err instanceof Error ? err.message : "Erro inesperado ao gerar a imagem.",
           sources: [],
         };
         const comErro = [...msgsWithUser, errBubble];
@@ -1155,29 +1765,36 @@ export default function PainelChatPage() {
         setSending(false);
       }
     },
-    [conversaId, empresaId, sending, actionBusy, syncMensagens, invokeImagePreview],
+    [conversaId, empresaId, sending, actionBusy, syncMensagens, invokeImagePreview, showErr, runGenerateCaptionForImage, runPublishInstagramForCaption, startCaptionEdit],
   );
 
   const onSubmit = useCallback(
     async function onSubmit(event) {
       event.preventDefault();
-      const question = input.trim();
+      inputRef.current?.flushToParent?.();
+      const live = readLiveSlashInput();
+      const question = formatSlashInputForSend(live.text, live.chips);
       if (!question || sending || !empresaId) return;
 
+      const picksAtSend = slashChipsToApiPicks(live.chips);
       const userMsg = { id: crypto.randomUUID(), role: "user", content: question };
       const msgsComUsuario = [...messages, userMsg];
       setInput("");
+      setSlashChips(emptySlashChips());
+      closeSlashMenu();
       setSending(true);
       setMessages(msgsComUsuario);
-      setArteBriefDraft((prev) => {
-        const next = { ...prev };
-        if (detectImageGenerationIntent(question) && isWeakArteTheme(next.tema)) {
-          next.tema = question.slice(0, 200);
-        }
-        const merged = normalizeArteBrief(next, brandColors);
-        persistArteBriefDraft(merged);
-        return merged;
-      });
+      if (!isWagnerPostImageMock(question) && !parseTypedDeliveryCommand(question)) {
+        setArteBriefDraft((prev) => {
+          const next = { ...prev };
+          if (detectImageGenerationIntent(question) && isWeakArteTheme(next.tema)) {
+            next.tema = question.slice(0, 200);
+          }
+          const merged = normalizeArteBrief(next, brandColors);
+          persistArteBriefDraft(merged);
+          return merged;
+        });
+      }
 
       let idChat = conversaId;
       if (!idChat) {
@@ -1213,12 +1830,137 @@ export default function PainelChatPage() {
         return;
       }
 
+      if (isWagnerPostImageMock(question)) {
+        const out = buildWagnerPostImageMockResult();
+        const contextoLinha = buildImageContextNote(out.contexto);
+        const wagnerNote =
+          "\n\n(Simulação dev «wagner» — imagem fictícia para testar legenda e ajustes, sem consumir créditos.)";
+        const assistantFollowUp = buildImagePreviewAssistantMessage(out, contextoLinha, wagnerNote);
+        const finalMsgs = [...msgsComUsuario, assistantFollowUp];
+        setMessages(finalMsgs);
+        await syncMensagens(idChat, finalMsgs);
+        setSending(false);
+        return;
+      }
+
+      const typedCmd = parseTypedDeliveryCommand(question);
+      if (typedCmd) {
+        const priorMsgs = msgsComUsuario.slice(0, -1);
+
+        if (typedCmd.type === "adjust_caption_prompt") {
+          const captionId = findLatestCaptionMessageId(priorMsgs);
+          const captionMsg = captionId ? priorMsgs.find((m) => m.id === captionId) : null;
+          setMessages(priorMsgs);
+          if (captionMsg) {
+            startCaptionEdit(captionId, captionMsg.content);
+          }
+          setSending(false);
+          return;
+        }
+        if (typedCmd.type === "revise_image_prompt") {
+          setInput("Quero alterar a imagem: ");
+          setSending(false);
+          requestAnimationFrame(() => inputRef.current?.focus());
+          return;
+        }
+        if (typedCmd.type === "generate_caption") {
+          const imageMsgId = findLatestImageMessageId(priorMsgs);
+          if (!imageMsgId) {
+            setSending(false);
+            showErr("Gere uma imagem antes de pedir a legenda.");
+            return;
+          }
+          await runGenerateCaptionForImage(imageMsgId, msgsComUsuario, { fromButton: false });
+          setSending(false);
+          return;
+        }
+        if (typedCmd.type === "regenerate_caption") {
+          if (!findLatestCaptionMessageId(priorMsgs) && !findLatestImageMessageId(priorMsgs)) {
+            setSending(false);
+            showErr("Gere uma legenda antes de pedir alterações.");
+            return;
+          }
+          await runRegenerateCaption(msgsComUsuario);
+          setSending(false);
+          return;
+        }
+        if (typedCmd.type === "publish_instagram") {
+          const captionId = findLatestCaptionMessageId(priorMsgs);
+          if (!captionId) {
+            setSending(false);
+            showErr("Gere a legenda antes de publicar no Instagram.");
+            return;
+          }
+          await runPublishInstagramForCaption(captionId, msgsComUsuario, { fromButton: false });
+          setSending(false);
+          return;
+        }
+        if (typedCmd.type === "revise_image" && typedCmd.instructions) {
+          const rawSource = findLatestImageUrlInMessages(priorMsgs);
+          const sourceUrl = resolveImageUrlForRevision(
+            rawSource,
+            typeof window !== "undefined" ? window.location.origin : "",
+          );
+          if (!sourceUrl) {
+            setSending(false);
+            showErr(
+              "Não encontrei uma imagem gerada para alterar. Gere uma imagem real antes (a simulação wagner não serve de base).",
+            );
+            return;
+          }
+          if (
+            typeof window !== "undefined" &&
+            !window.confirm("Alterar a imagem com base na anterior? Pode consumir créditos do seu plano.")
+          ) {
+            setSending(false);
+            return;
+          }
+          const imageMsgId = findLatestImageMessageId(priorMsgs);
+          if (imageMsgId) setImageGeneratingAfterId(imageMsgId);
+          const confirmAnchor = findLatestConfirmedProposalAnchor(priorMsgs, arteBriefDraftRef.current);
+          const latestProposal =
+            confirmAnchor?.proposal || findLatestImageProposalObject(priorMsgs) || {};
+          const latestLinks = Array.isArray(confirmAnchor?.supplement?.links)
+            ? confirmAnchor.supplement.links
+            : [];
+          const out = await invokeImagePreview({
+            msgs: msgsComUsuario,
+            proposal: latestProposal,
+            supplementLinks: latestLinks,
+            focusContextoId: confirmAnchor?.selected_contexto_id,
+            revisionSourceUrl: sourceUrl,
+            revisionInstructions: typedCmd.instructions,
+          });
+          setImageGeneratingAfterId(null);
+          if (!out.ok) {
+            const errBubble = {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: out.error || "Não foi possível alterar a imagem agora.",
+              sources: [],
+            };
+            const comErro = [...msgsComUsuario, errBubble];
+            setMessages(comErro);
+            await syncMensagens(idChat, comErro);
+            setSending(false);
+            return;
+          }
+          const contextoLinha = buildImageContextNote(out.contexto);
+          const assistantFollowUp = buildImagePreviewAssistantMessage(out, contextoLinha);
+          const finalMsgs = [...msgsComUsuario, assistantFollowUp];
+          setMessages(finalMsgs);
+          await syncMensagens(idChat, finalMsgs);
+          setSending(false);
+          return;
+        }
+      }
+
       const confirmAnchor = findLatestConfirmedProposalAnchor(msgsComUsuario, arteBriefDraftRef.current);
       if (shouldGenerateImagePreviewDirectly(question) && confirmAnchor) {
         const latestProposal = confirmAnchor.proposal;
         if (
           typeof window !== "undefined" &&
-          !window.confirm("Gerar a prévia da imagem? Pode consumir créditos do seu plano.")
+          !window.confirm("Gerar a imagem? Pode consumir créditos do seu plano.")
         ) {
           setSending(false);
           return;
@@ -1239,7 +1981,7 @@ export default function PainelChatPage() {
           const errBubble = {
             id: crypto.randomUUID(),
             role: "assistant",
-            content: out.error || "Não foi possível gerar a prévia agora.",
+            content: out.error || "Não foi possível gerar a imagem agora.",
             sources: [],
           };
           const comErro = [...msgsComUsuario, errBubble];
@@ -1250,13 +1992,7 @@ export default function PainelChatPage() {
           return;
         }
         const contextoLinha = buildImageContextNote(out.contexto);
-        const assistantFollowUp = {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: imagePreviewSuccessLine(out.urls, out.model, out.imageGeneration) + contextoLinha,
-          sources: [],
-          image_urls: out.urls.length ? out.urls : undefined,
-        };
+        const assistantFollowUp = buildImagePreviewAssistantMessage(out, contextoLinha);
         const finalMsgs = [...msgsComUsuario, assistantFollowUp];
         setMessages(finalMsgs);
         await syncMensagens(idChat, finalMsgs);
@@ -1371,11 +2107,12 @@ export default function PainelChatPage() {
       setSending(false);
       if (routeImage && empresaId && !post_supplement) {
         const historyForProposal = finalMsgs.map((m) => ({ role: m.role, content: m.content }));
-        void attachPostContextSupplement(idChat, assistantMsg.id, historyForProposal);
+        void attachPostContextSupplement(idChat, assistantMsg.id, historyForProposal, picksAtSend);
       }
     },
     [
       input,
+      readLiveSlashInput,
       sending,
       empresaId,
       messages,
@@ -1385,14 +2122,23 @@ export default function PainelChatPage() {
       attachPostContextSupplement,
       invokeImagePreview,
       showErr,
+      runGenerateCaptionForImage,
+      runRegenerateCaption,
+      runPublishInstagramForCaption,
+      startCaptionEdit,
+      slashChips,
+      closeSlashMenu,
     ],
   );
 
   function onNewChat() {
     if (sending || deleting || loadingConversa || actionBusy) return;
+    cancelCaptionEdit();
     setConversaId(null);
     setMessages([]);
     setInput("");
+    setSlashChips(emptySlashChips());
+    closeSlashMenu();
     resetArteBriefDraft();
     try {
       if (empresaId) sessionStorage.removeItem(lastConversaStorageKey(empresaId));
@@ -1712,7 +2458,50 @@ export default function PainelChatPage() {
                     </div>
                     <div className="min-w-0 max-w-[85%] rounded-2xl border border-border bg-background px-4 py-3 text-foreground shadow-sm md:max-w-[70%]">
                       {!hasSupplement ? (
-                        <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{message.content}</p>
+                        captionEditingId === message.id ? (
+                          <div className="space-y-2">
+                            <textarea
+                              id={`caption-edit-${message.id}`}
+                              value={captionEditDraft}
+                              onChange={(e) => setCaptionEditDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                  e.preventDefault();
+                                  cancelCaptionEdit();
+                                }
+                                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                                  e.preventDefault();
+                                  void saveCaptionEdit(message.id);
+                                }
+                              }}
+                              rows={6}
+                              disabled={!!actionBusy || sending}
+                              className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-base leading-relaxed text-foreground outline-none focus:border-accent/55 focus:ring-2 focus:ring-accent/15"
+                              aria-label="Editar legenda"
+                            />
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={!!actionBusy || sending}
+                                onClick={() => void saveCaptionEdit(message.id)}
+                                className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-accent-foreground disabled:opacity-50"
+                              >
+                                Salvar legenda
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!!actionBusy || sending}
+                                onClick={cancelCaptionEdit}
+                                className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Ctrl+Enter para salvar</p>
+                          </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap break-words text-base leading-relaxed">{message.content}</p>
+                        )
                       ) : String(message.content || "").trim() ? (
                         <p className="mb-2 text-sm text-muted-foreground">{message.content}</p>
                       ) : null}
@@ -1752,7 +2541,12 @@ export default function PainelChatPage() {
                           ))}
                         </div>
                       ) : null}
-                      {hasUiActions ? (
+                      {actionBusy === `${message.id}:generate_caption` ? (
+                        <div className="mt-3 rounded-xl border border-dashed border-accent/40 bg-accent-muted/15 px-3 py-2.5 text-sm text-muted-foreground">
+                          Gerando legenda…
+                        </div>
+                      ) : null}
+                      {hasUiActions && captionEditingId !== message.id ? (
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                           {message.ui_actions.map((a) => (
                             <button
@@ -1822,20 +2616,49 @@ export default function PainelChatPage() {
               >
                 +
               </button>
-              <textarea
-                rows={2}
-                placeholder={empresaId ? "Mensagem…" : "Indisponível"}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    e.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                disabled={chatBusy || !empresaId}
-                className="min-h-[44px] max-h-36 flex-1 resize-y overflow-y-auto rounded-xl border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground outline-none focus:border-accent/70 disabled:bg-muted"
-              />
+              <div className="relative flex min-h-[44px] min-w-0 flex-1 flex-col rounded-xl border border-border bg-surface-elevated focus-within:border-accent/70">
+                <ChatSlashMenu
+                  open={slashMenu.open && !chatBusy && !!empresaId}
+                  query={slashMenu.query}
+                  empresaId={empresaId}
+                  modelosAtivos={modelosAtivos}
+                  selectedMidiaIds={selectedSlashMidiaIds}
+                  onPickModelo={handlePickSlashModelo}
+                  onPickMidia={handlePickSlashMidia}
+                  onClose={closeSlashMenu}
+                />
+                <ChatSlashInput
+                  ref={inputRef}
+                  rows={2}
+                  chips={slashChips}
+                  placeholder={empresaId ? "Mensagem…" : "Indisponível"}
+                  value={input}
+                  onChange={handleChatInputChange}
+                  onSelect={(e) => {
+                    const pos = e.currentTarget.selectionStart ?? 0;
+                    inputCursorRef.current = pos;
+                    const live = readLiveSlashInput();
+                    syncSlashMenuFromInput(live.text, pos);
+                  }}
+                  onKeyDown={(e) => {
+                    if (
+                      slashMenu.open &&
+                      (e.key === "Enter" ||
+                        e.key === "ArrowDown" ||
+                        e.key === "ArrowUp" ||
+                        e.key === "Escape")
+                    ) {
+                      return;
+                    }
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      inputRef.current?.flushToParent?.();
+                      e.currentTarget.closest("form")?.requestSubmit();
+                    }
+                  }}
+                  disabled={chatBusy || !empresaId}
+                />
+              </div>
               <button
                 type="submit"
                 disabled={chatBusy || !empresaId}

@@ -129,7 +129,10 @@ export const contextoParam = z.object({
 export const contextoTipoSchema = z.enum([
   "promocao",
   "lancamento",
+  "produto",
+  "mensagens",
   "data_comemorativa",
+  "lifestyle",
   "personalizado",
   "identidade_marca",
 ]);
@@ -203,25 +206,28 @@ export function perfilAcessoPorCargo(cargo) {
 }
 
 /**
- * Unifica `cargo` (schema legado) e `papel` (ex.: admin) para o contrato da API.
- * @param {{ cargo?: string | null, papel?: string | null }} row
+ * Unifica `cargo` / `perfil_acesso` (schema Supabase) e `papel` (contrato da API) para um papel lógico.
+ * @param {{ cargo?: string | null, perfil_acesso?: string | null, papel?: string | null }} row
  * @returns {"administrador" | "editor" | "membro" | null}
  */
 export function cargoApiDeUsuarioEmpresa(row) {
   if (!row || typeof row !== "object") return null;
-  const c = typeof row.cargo === "string" ? row.cargo.trim().toLowerCase() : "";
-  if (c) {
-    if (c === "admin" || c === "administrador") return "administrador";
-    if (c === "editor") return "editor";
-    if (c === "membro" || c === "member") return "membro";
+
+  function mapRole(raw) {
+    const r = String(raw || "").trim().toLowerCase();
+    if (!r) return null;
+    if (r === "admin" || r === "administrador") return "administrador";
+    if (r === "editor") return "editor";
+    if (r === "membro" || r === "member") return "membro";
+    return null;
   }
-  const p = typeof row.papel === "string" ? row.papel.trim().toLowerCase() : "";
-  if (p) {
-    if (p === "admin" || p === "administrador") return "administrador";
-    if (p === "editor") return "editor";
-    if (p === "membro" || p === "member") return "membro";
-  }
-  return null;
+
+  return (
+    mapRole(row.cargo) ||
+    mapRole(row.perfil_acesso) ||
+    mapRole(row.papel) ||
+    null
+  );
 }
 
 export const MEDIA_BUCKET = env.MEDIA_BUCKET || "midias";
@@ -245,7 +251,7 @@ export async function vincularCriadorComoMembro(supabase, idEmpresa, idUsuario) 
 export async function getMembroAtivoEmpresa(supabase, idEmpresa, idUsuario) {
   const { data, error } = await supabase
     .from("usuario_empresa")
-    .select("id_usuario, cargo, ativo")
+    .select("id_usuario, cargo, perfil_acesso, ativo")
     .eq("id_empresa", idEmpresa)
     .eq("id_usuario", idUsuario)
     .eq("ativo", true)
@@ -276,6 +282,8 @@ function slugify(texto) {
 function nomesTipoAceitos(tipo) {
   if (tipo === "promocao") return ["promocao", "promoção"];
   if (tipo === "lancamento") return ["lancamento", "lançamento"];
+  if (tipo === "produto" || tipo === "lifestyle") return ["produto", "produto em contexto", "dia a dia", "rotina"];
+  if (tipo === "mensagens") return ["mensagens", "mensagem", "recado", "comunicado"];
   if (tipo === "data_comemorativa") return ["data comemorativa", "data_comemorativa"];
   if (tipo === "personalizado") return ["personalizado"];
   if (tipo === "identidade_marca") return ["identidade_marca", "identidade da marca", "identidade"];
@@ -285,6 +293,8 @@ function nomesTipoAceitos(tipo) {
 function nomeTipoPadrao(tipo) {
   if (tipo === "promocao") return "Promoção";
   if (tipo === "lancamento") return "Lançamento";
+  if (tipo === "produto" || tipo === "lifestyle") return "Produto";
+  if (tipo === "mensagens") return "Mensagens";
   if (tipo === "data_comemorativa") return "Data Comemorativa";
   if (tipo === "personalizado") return "Personalizado";
   if (tipo === "identidade_marca") return "Identidade da marca";

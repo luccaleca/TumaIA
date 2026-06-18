@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none">
+  <rect width="400" height="300" fill="#0f172a"/>
+  <rect x="24" y="24" width="352" height="252" rx="16" fill="#1e293b" stroke="#334155"/>
+  <text x="200" y="72" text-anchor="middle" fill="#f8fafc" font-family="system-ui,sans-serif" font-size="22" font-weight="700">MEGA OFERTA</text>
+  <rect x="80" y="96" width="240" height="120" rx="12" fill="#334155"/>
+  <text x="200" y="165" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="14">produto</text>
+  <text x="200" y="248" text-anchor="middle" fill="#22c55e" font-family="system-ui,sans-serif" font-size="28" font-weight="800">R$ 29,90</text>
+</svg>

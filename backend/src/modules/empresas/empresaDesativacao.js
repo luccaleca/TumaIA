@@ -15,7 +15,7 @@ function normalizarNomeConfirmacao(nome) {
 async function countAdminsAtivos(supabase, idEmpresa) {
   const { data, error } = await supabase
     .from("usuario_empresa")
-    .select("id_usuario, cargo, papel")
+    .select("id_usuario, cargo, perfil_acesso")
     .eq("id_empresa", idEmpresa)
     .eq("ativo", true);
   if (error) throw new Error(error.message);
@@ -56,7 +56,7 @@ export async function sairDaEmpresa(supabase, idEmpresa, idUsuario) {
 
   const { data: membro, error: eMem } = await supabase
     .from("usuario_empresa")
-    .select("id_usuario, cargo, papel, ativo")
+    .select("id_usuario, cargo, perfil_acesso, ativo")
     .eq("id_empresa", idEmpresa)
     .eq("id_usuario", idUsuario)
     .eq("ativo", true)
@@ -118,7 +118,7 @@ export async function desativarEmpresa(supabase, idEmpresa, idUsuario, confirmac
 
   const { data: membro, error: eMem } = await supabase
     .from("usuario_empresa")
-    .select("cargo, papel, ativo")
+    .select("cargo, perfil_acesso, ativo")
     .eq("id_empresa", idEmpresa)
     .eq("id_usuario", idUsuario)
     .eq("ativo", true)
@@ -156,6 +156,7 @@ export async function desativarEmpresa(supabase, idEmpresa, idUsuario, confirmac
   if (eVinculos) throw new Error(eVinculos.message);
 
   await supabase.from("contexto_empresa").update({ ativo: false }).eq("id_empresa", idEmpresa).eq("ativo", true);
+  await supabase.from("empresa_modelo_post").update({ ativo: false }).eq("id_empresa", idEmpresa).eq("ativo", true);
   await supabase.from("midia").update({ ativo: false }).eq("id_empresa", idEmpresa).eq("ativo", true);
   await supabase.from("pasta").update({ ativo: false }).eq("id_empresa", idEmpresa).eq("ativo", true);
 

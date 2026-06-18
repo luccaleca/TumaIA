@@ -11,7 +11,7 @@ import { isIdentidadeMarcaContexto } from "../modules/empresas/identidadeMarca.j
 export function formatContextosListAnswer(rows) {
   const list = (rows || []).filter((r) => !isIdentidadeMarcaContexto(r));
   if (!list.length) {
-    return "Ainda não há contextos de campanha cadastrados — você pode adicionar em Contextos no painel (tom, FAQ, promoções).";
+    return "Nenhum modelo de post está ativo — você pode ativar em Modelos de post no painel (Promoção, Lançamento, Produto, Mensagens).";
   }
 
   const names = list
@@ -20,8 +20,11 @@ export function formatContextosListAnswer(rows) {
     .slice(0, 12);
 
   const bullets = names.map((n) => `• ${n}`).join("\n");
-  const extra = list.length > names.length ? `\n… e mais ${list.length - names.length}.` : "";
-  return `Temos ${list.length} ${list.length === 1 ? "contexto" : "contextos"} ativos:\n\n${bullets}${extra}`;
+  const extra = list.length > names.length ? `\n\n… e mais ${list.length - names.length}.` : "";
+  return (
+    `Temos ${list.length} ${list.length === 1 ? "modelo" : "modelos"} de post ativo${list.length === 1 ? "" : "s"}:\n\n${bullets}${extra}` +
+    "\n\nUse no chat qual tipo combina com o pedido (ex.: promoção, lançamento, produto) — eu monto a arte com o layout desse modelo."
+  );
 }
 
 /**
@@ -31,7 +34,7 @@ export function buildContextosPromptBlock(rows) {
   const list = (rows || []).filter((r) => !isIdentidadeMarcaContexto(r)).slice(0, 8);
   if (!list.length) return "";
 
-  const lines = ["[CONTEXTOS DA MARCA — trechos para campanhas e tom]"];
+  const lines = ["[MODELOS DE POST ATIVOS — layout visual para a arte]"];
   for (const r of list) {
     const nome = String(r?.nome ?? "").trim();
     const desc = String(r?.descricao ?? "").trim();

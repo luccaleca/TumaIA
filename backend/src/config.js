@@ -182,6 +182,22 @@ const envSchema = z.object({
     (v) => (v === "" || v === undefined ? 50 : Number(v)),
     z.number().int().min(0).max(100_000),
   ),
+  /** Integração direta WPPConnect → IA no WhatsApp (sem n8n). */
+  WPPCONNECT_ENABLED: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  WPPCONNECT_BASE_URL: z.preprocess(
+    (v) => (v === "" || v === undefined ? "http://127.0.0.1:21465" : String(v).trim()),
+    z.string().url(),
+  ),
+  WPPCONNECT_SESSION: z.preprocess(
+    (v) => (v === "" || v === undefined ? "tumaia" : String(v).trim()),
+    z.string().min(1).max(64),
+  ),
+  WPPCONNECT_SECRET_KEY: z.preprocess(empty, z.string().min(1).optional()),
+  /** Token Bearer fixo (opcional; senão gera via SECRET_KEY). */
+  WPPCONNECT_TOKEN: z.preprocess(empty, z.string().min(1).optional()),
+  /** Segredo opcional no webhook (?secret= ou header x-wppconnect-secret). */
+  WPPCONNECT_WEBHOOK_SECRET: z.preprocess(empty, z.string().min(1).optional()),
+  WPPCONNECT_PROCESS_GROUPS: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
 });
 
 export const env = envSchema.parse(process.env);

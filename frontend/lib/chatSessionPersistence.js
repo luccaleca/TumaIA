@@ -32,6 +32,9 @@ function normalizeCachedMessages(raw) {
       ...(Array.isArray(m.sources) && m.sources.length ? { sources: m.sources } : {}),
       ...(Array.isArray(m.ui_actions) && m.ui_actions.length ? { ui_actions: m.ui_actions } : {}),
       ...(Array.isArray(m.image_urls) && m.image_urls.length ? { image_urls: m.image_urls } : {}),
+      ...(Array.isArray(m.image_midia_ids) && m.image_midia_ids.length
+        ? { image_midia_ids: m.image_midia_ids }
+        : {}),
       ...(m.post_supplement && typeof m.post_supplement === "object" ? { post_supplement: m.post_supplement } : {}),
       ...(m.hidden ? { hidden: true } : {}),
       ...(typeof m.selected_contexto_id === "string" ? { selected_contexto_id: m.selected_contexto_id } : {}),

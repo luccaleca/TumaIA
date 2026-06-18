@@ -2,7 +2,11 @@
  * Briefing adaptativo: a IA interpreta o pedido (texto solto); regras só completam lacunas óbvias.
  */
 
-import { extractFraseFromUserText, normalizeFraseNaImagem } from "./imageHeadline.js";
+import {
+  collectMandatoryImageFacts,
+  extractFraseFromUserText,
+  normalizeFraseNaImagem,
+} from "./imageHeadline.js";
 
 /** @typedef {'produto' | 'beneficio' | 'periodo' | 'frase_imagem' | 'midia_acervo'} BriefingSlotId */
 
@@ -45,7 +49,7 @@ const PRODUTO_HINT =
   /\b(produto|kit|linha|whey|creatina|camiseta|vestido|sapato|curso|plano|servi[cç]o|combo|embalagem|modelo\s+\w+)\b/i;
 
 const BENEFICIO_HINT =
-  /\b(\d+\s*%\s*off|\d+\s*%|desconto|off\b|de\s+r\$\s*\d|por\s+r\$\s*\d|frete\s+gr[aá]tis|leve\s+\d|pague\s+\d|cashback|cupom)\b|\d+\s*%(?=\s|$|[,.;])/i;
+  /\b(\d+\s*%\s*off|\d+\s*%|desconto|off\b|de\s+r\$\s*\d|por\s+r\$\s*\d|frete\s+gr[aá]tis|leve\s+\d|pague\s+\d|cashback|cupom)\b|\d+\s*%(?=\s|$|[,.;])|(?:^|[\s,;])(\d{1,2})\s+por\s+(?:r\$\s*)?\d{1,5}(?:[.,]\d{1,2})?/i;
 
 const PERIODO_HINT =
   /(de\s+\d{1,2}\s*[/\-]\s*\d{1,2}(?:\s+a\s+\d{1,2}\s*[/\-]\s*\d{1,2})?|at[eé]\s+\d{1,2}\s*[/\-]?\s*\d{1,2}|\d{1,2}\s*[/\-]\s*\d{1,2}(?:\s*[/\-]\s*\d{2,4})?|validade|v[aá]lido\s+at[eé]|enquanto\s+durar|at[eé]\s+domingo|at[eé]\s+s[aá]bado)/i;
@@ -252,6 +256,14 @@ export function applyBriefingGate(history, proposalOut) {
       proposal.facts_for_image = {};
     }
     proposal.facts_for_image.frase_na_imagem = extracted;
+  }
+
+  const mandatoryFacts = collectMandatoryImageFacts(history, proposal);
+  if (Object.keys(mandatoryFacts).length) {
+    if (!proposal.facts_for_image || typeof proposal.facts_for_image !== "object") {
+      proposal.facts_for_image = {};
+    }
+    Object.assign(proposal.facts_for_image, mandatoryFacts);
   }
 
   const regexMissing = listMissingBriefingSlots(history, proposal);

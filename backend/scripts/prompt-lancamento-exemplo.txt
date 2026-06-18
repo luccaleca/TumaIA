@@ -1,0 +1,45 @@
+# Exemplo de post — modelo Lançamento — mockup didático
+#
+# Contexto TumaIA (para você, operador):
+# O lojista escolhe um modelo de post no painel e pede a arte no chat.
+# Produto, frase, benefício e logo vêm do acervo + identidade + conversa — o modelo só define o LAYOUT.
+# Lançamento = produto NOVO em destaque; novidade e atributo (sabor/benefício), NÃO preço/oferta como protagonista.
+#
+# Referência (image[]): envie a imagem de produto/mockup que quiser (ex.: pote genérico, packshot neutro).
+# Salvar resultado em: frontend/public/imagens/modelos/lancamento-exemplo.png
+#
+# --- PROMPT (copiar para GPT Image 2) ---
+
+Generate a polished Instagram POST TEMPLATE preview image (aspect ratio 4:5, portrait). Educational layout mockup for a "Lançamento" (product launch) post model in a SaaS called TumaIA: merchants of any industry pick this playbook when introducing something NEW. The real post later fills each zone with the merchant's logo, product photo from their media library, headline and benefit from their chat message — this image only shows WHERE those pieces go. Not a finished ad.
+
+Use the reference picture as the hero product placeholder in the center — preserve the product or container from the reference (shape, colors, lighting); do not replace it with a different product type.
+
+STRICT LAYOUT — top to bottom. All labels in Brazilian Portuguese, exactly as written. Annotated sections on the left are welcome (like a wireframe guide).
+
+1) TOP — Logo slot:
+   - Empty reserved area labeled «Sua logo aqui» (dashed rounded rectangle, top center). Intentionally blank — no logo drawn inside.
+
+2) UPPER — Launch novelty badge (exclusive to Launch model — NOT a price or discount):
+   - Small pill or seal labeled «Seu selo de lançamento aqui»
+   - Example style hint only (smaller, secondary): could look like "Novo" or "Chegou" — but the main label must stay «Seu selo de lançamento aqui»
+
+3) CENTER — Hero product (largest zone, ~45–55% of frame):
+   - Product from reference as protagonist, premium studio lighting, subtle pedestal or clean scene.
+   - Label with arrow: «Sua mídia / produto aqui»
+
+4) MID — Main headline (second-largest text on canvas):
+   - «Sua frase principal aqui»
+
+5) BOTTOM — Benefit / attribute block (NOT price — this differentiates Launch from Promotion):
+   - Bold placeholder: «Seu benefício ou destaque aqui»
+   - Smaller line: «Sabor, diferencial ou CTA leve aqui»
+   - FORBIDDEN in this zone: currency symbols, R$, percent discounts, "2 por", validity dates, urgency countdowns
+
+6) FOOTER (very small, one line):
+   - «Exemplo de layout · adapta à sua marca, mídia e pedido no chat»
+
+VISUAL STYLE:
+- Clean modern mockup; soft neutral background; colorful abstract 3D accents allowed around the product (disks, blocks) for premium launch feel.
+- High contrast labels; legible at thumbnail size; clearly a teaching template, not a real campaign.
+- No real brand names, no real prices, no fake logos in the logo slot.
+- Premium, airy, "new product reveal" mood — less aggressive than a promotion/sale layout.

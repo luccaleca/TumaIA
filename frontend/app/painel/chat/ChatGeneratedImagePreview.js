@@ -162,7 +162,7 @@ export default function ChatGeneratedImagePreview({ url, index = 0 }) {
                 type="button"
                 onClick={() => setFocused(false)}
                 className="absolute -right-1 -top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white shadow-md hover:bg-black/80 sm:-right-2 sm:-top-2"
-                aria-label="Fechar prévia"
+                aria-label="Fechar imagem"
               >
                 <IconClose className="h-4 w-4" />
               </button>
@@ -195,7 +195,7 @@ export default function ChatGeneratedImagePreview({ url, index = 0 }) {
           type="button"
           className="block w-full cursor-zoom-in text-left"
           onClick={() => setFocused(true)}
-          aria-label="Ampliar prévia da imagem"
+          aria-label="Ampliar imagem gerada"
         >
           <img
             src={url}

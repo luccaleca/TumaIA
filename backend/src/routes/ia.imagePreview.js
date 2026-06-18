@@ -19,6 +19,7 @@ import {
 import {
   buildFluxImagePrompt,
   buildImagePreviewContextMeta,
+  buildImageRevisionPrompt,
   buildRefineComposedImagePrompt,
   loadContextosEmpresaAtivos,
   loadEmpresaResumoParaImagem,
@@ -47,6 +48,7 @@ import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarc
 import { FLUX_IMAGE_PROMPT_MAX } from "../services/imagePreviewPrompt.js";
 import { aspectRatioFromArteBrief } from "../services/rawImageArteBrief.js";
 import { composeGeneratedSceneWithProducts } from "../services/productSceneComposer.js";
+import { persistChatPreviewImages } from "../services/chatPreviewMidia.js";
 import {
   CHAT_API_HISTORY_MAX,
   trimChatHistoryForApi,
@@ -79,6 +81,20 @@ export const imagePreviewSchema = z.object({
     .optional(),
   reference_midia_ids: z.array(z.string().uuid()).max(3).optional(),
   focus_contexto_id: z.string().uuid().optional(),
+  id_conversa: z.string().uuid().optional(),
+  /** Edição incremental: prévia anterior + o que mudar (GPT Image 2 images/edits). */
+  revision_source_url: z.string().url().max(4000).optional(),
+  revision_instructions: z.string().trim().min(3).max(2000).optional(),
+}).superRefine((data, ctx) => {
+  const hasUrl = Boolean(String(data.revision_source_url || "").trim());
+  const hasInstr = Boolean(String(data.revision_instructions || "").trim());
+  if (hasUrl !== hasInstr) {
+    ctx.addIssue({
+      code: "custom",
+      message: "revision_source_url e revision_instructions devem ser enviados juntos",
+      path: ["revision_source_url"],
+    });
+  }
 });
 
 function normalizeImageOutputUrls(output) {
@@ -185,13 +201,83 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
 
   const fromBrief = aspectRatioFromArteBrief(parsed.data.post_context_proposal?.arte_brief);
   const aspect = parsed.data.aspect_ratio ?? fromBrief ?? "1:1";
+  const revisionUrl = String(parsed.data.revision_source_url || "").trim();
+  const revisionInstructions = String(parsed.data.revision_instructions || "").trim();
+  const isPreviewRevision = Boolean(revisionUrl && revisionInstructions);
   let out;
   let referenceMeta = null;
   let composedProductIds = [];
   let heroProductId = null;
   let previewProductNames = [];
 
-  if (provider === "openai") {
+  if (isPreviewRevision) {
+    if (provider !== "openai" && provider !== "replicate") {
+      res.status(503).json({
+        error: "Alteração de prévia requer GPT Image 2 (IMAGE_PROVIDER openai ou replicate).",
+      });
+      return;
+    }
+    const revisePrompt = buildImageRevisionPrompt({
+      instructions: revisionInstructions,
+      history: parsed.data.history,
+      proposal: imageIntent.postContextProposal,
+      imageIntent,
+    });
+    if (provider === "openai") {
+      const apiKey = (env.OPENAI_API_KEY || "").trim();
+      if (!apiKey) {
+        res.status(503).json({ error: "OPENAI_API_KEY não configurada." });
+        return;
+      }
+      out = await executeGptImage2WithReferences(apiKey, {
+        prompt: revisePrompt,
+        input_images: [revisionUrl],
+        aspect_ratio: aspect,
+        quality: env.OPENAI_IMAGE_QUALITY,
+      });
+      if (!out.ok) {
+        res.status(out.status || 500).json({
+          error: friendlyOpenAiImageError(out.error),
+          raw: out.raw,
+        });
+        return;
+      }
+      referenceMeta = {
+        mode: "openai/gpt-image-2-revision",
+        pipeline: "revision",
+        preview_revision: true,
+        api: out.api || "images/edits",
+      };
+    } else {
+      const token = (env.REPLICATE_API_TOKEN || "").trim();
+      if (!token) {
+        res.status(503).json({ error: "REPLICATE_API_TOKEN não configurado." });
+        return;
+      }
+      out = await executeReplicateGptImage2(
+        token,
+        replicateGptImage2InputSchema.parse({
+          prompt: revisePrompt,
+          aspect_ratio: aspect,
+          quality: env.REPLICATE_GPT_IMAGE_QUALITY,
+          output_format: "png",
+          input_images: [revisionUrl],
+        }),
+      );
+      if (!out.ok) {
+        res.status(out.status || 500).json({
+          error: friendlyReplicateGptImage2Error(out.error),
+          raw: out.raw,
+        });
+        return;
+      }
+      referenceMeta = {
+        mode: "replicate/gpt-image-2-revision",
+        pipeline: "revision",
+        preview_revision: true,
+      };
+    }
+  } else if (provider === "openai") {
     const apiKey = (env.OPENAI_API_KEY || "").trim();
     if (!apiKey) {
       res.status(503).json({ error: "OPENAI_API_KEY não configurada." });
@@ -453,7 +539,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
 
   let image_urls = normalizeImageOutputUrls(out.output);
   const gptRawProvider = provider === "replicate" || provider === "openai";
-  if (pipeline === "raw" && gptRawProvider && image_urls.length) {
+  if (!isPreviewRevision && pipeline === "raw" && gptRawProvider && image_urls.length) {
     try {
       if (usesSharpProductCollage(productMode) && composedProductIds.length) {
         const hasComposedAssets = Boolean(composedProductIds.length || (logoId && !logoAsHero));
@@ -573,11 +659,35 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
   console.info(
     `[ia/image-preview] ok em ${Date.now() - startedAt}ms urls=${image_urls.length} review=${qualityReview?.approved ?? "n/a"}`,
   );
+
+  let image_midia_ids = [];
+  const idConversa = String(parsed.data.id_conversa || "").trim();
+  const idUsuario = req.usuario?.id_usuario;
+  if (idConversa && idUsuario && image_urls.length) {
+    try {
+      const persisted = await persistChatPreviewImages({
+        db,
+        idEmpresa,
+        idConversa,
+        idUsuario,
+        imageUrls: image_urls,
+      });
+      image_urls = persisted.image_urls;
+      image_midia_ids = persisted.image_midia_ids;
+    } catch (err) {
+      console.warn(
+        "[ia/image-preview] persistência da prévia no storage falhou — entregando URLs originais:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   res.json({
     prediction_id: out.prediction_id ?? null,
     status: out.status ?? "succeeded",
     model: out.model,
     image_urls,
+    ...(image_midia_ids.length ? { image_midia_ids } : {}),
     contexto_geracao,
     ...(referenceMeta
       ? {

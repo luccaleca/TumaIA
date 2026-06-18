@@ -24,6 +24,22 @@ describe("chatConversaNatural", () => {
     assert.match(t.conversaNaturalAnswer || "", /arroz/i);
   });
 
+  it("batata sozinha responde na hora sem LLM pesado", () => {
+    assert.equal(isConversaNaturalQuestion("batata"), true);
+    const t = analyzeChatTurn("batata", [], { nomeFantasia: "FYT" });
+    assert.equal(t.route, "conversa_natural");
+    assert.match(t.conversaNaturalAnswer || "", /batata/i);
+    assert.doesNotMatch(t.conversaNaturalAnswer || "", /foge|n[aã]o\s+entendi/i);
+  });
+
+  it("pergunta curta casual usa llm_light sem acervo no prompt", () => {
+    const t = analyzeChatTurn("saturno", [], {});
+    assert.equal(t.chat_mode, "conversa_aberta");
+    assert.equal(t.route, "llm_light");
+    assert.equal(t.includeAcervoInPrompt, false);
+    assert.equal(t.conversaNaturalAnswer ?? null, null);
+  });
+
   it("pergunta de produto não vai para conversa natural", () => {
     assert.equal(isConversaNaturalQuestion("monta post do whey"), false);
     const t = analyzeChatTurn("monta post do whey", [], { nomeFantasia: "FYT" });

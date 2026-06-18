@@ -45,15 +45,13 @@ describe("conta — validarContaForm", () => {
     const a = validarContaForm({
       nome: "",
       email: "a@b.co",
-      telefone: "",
-      clearTelefone: false,
+      telefone: "11999999999",
     });
     assert.equal(a.ok, false);
     const b = validarContaForm({
       nome: "Ana",
       email: "  ",
-      telefone: "",
-      clearTelefone: false,
+      telefone: "11999999999",
     });
     assert.equal(b.ok, false);
   });
@@ -63,57 +61,68 @@ describe("conta — validarContaForm", () => {
       nome: "Ana",
       email: "ana@exemplo.com",
       telefone: "1".repeat(21),
-      clearTelefone: false,
     });
     assert.equal(r.ok, false);
   });
 
-  it("aceita telefone vazio e normaliza e-mail", () => {
+  it("rejeita telefone vazio ou curto", () => {
+    const a = validarContaForm({
+      nome: "Ana",
+      email: "ana@exemplo.com",
+      telefone: "",
+    });
+    assert.equal(a.ok, false);
+    const b = validarContaForm({
+      nome: "Ana",
+      email: "ana@exemplo.com",
+      telefone: "123",
+    });
+    assert.equal(b.ok, false);
+  });
+
+  it("aceita telefone válido e normaliza e-mail", () => {
     const r = validarContaForm({
       nome: " Ana ",
       email: "  Ana@Exemplo.COM  ",
-      telefone: "",
-      clearTelefone: false,
+      telefone: "(11) 99999-9999",
     });
     assert.equal(r.ok, true);
     assert.equal(r.nome, "Ana");
     assert.equal(r.email, "ana@exemplo.com");
+    assert.equal(r.telefone, "(11) 99999-9999");
   });
 });
 
 describe("conta — montarBodyPatchConta", () => {
-  it("monta corpo com telefone null quando clearTelefone", () => {
+  it("monta corpo com telefone obrigatório", () => {
     const r = montarBodyPatchConta({
       nome: "Ana",
       email: "ana@exemplo.com",
       telefone: "11999999999",
-      clearTelefone: true,
     });
     assert.equal(r.ok, true);
     assert.deepEqual(r.body, {
       nome: "Ana",
       email: "ana@exemplo.com",
-      telefone: null,
+      telefone: "11999999999",
     });
   });
 
-  it("omite string vazia de telefone como null", () => {
+  it("rejeita telefone vazio", () => {
     const r = montarBodyPatchConta({
       nome: "Ana",
       email: "ana@exemplo.com",
       telefone: "  ",
-      clearTelefone: false,
     });
-    assert.equal(r.ok, true);
-    assert.equal(r.body.telefone, null);
+    assert.equal(r.ok, false);
+    assert.ok(typeof r.message === "string");
   });
 
   it("propaga erro de validação", () => {
     const r = montarBodyPatchConta({
       nome: "",
       email: "x@y.z",
-      telefone: "",
-      clearTelefone: false,
+      telefone: "11999999999",
     });
     assert.equal(r.ok, false);
     assert.ok(typeof r.message === "string");

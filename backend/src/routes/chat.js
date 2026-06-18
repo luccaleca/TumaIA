@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { requireUsuario } from "../middleware/requireUsuario.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
+import { purgeChatPreviewMidiasForConversa } from "../services/chatPreviewMidia.js";
 
 const r = Router();
 r.use(requireUserJwt);
@@ -334,6 +335,15 @@ r.delete("/conversas/:idConversa", async (req, res) => {
   }
   if (!conv) {
     res.status(404).json({ error: "Conversa não encontrada." });
+    return;
+  }
+
+  try {
+    await purgeChatPreviewMidiasForConversa(db, idParse.data);
+  } catch (err) {
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Falha ao remover prévias do chat.",
+    });
     return;
   }
 

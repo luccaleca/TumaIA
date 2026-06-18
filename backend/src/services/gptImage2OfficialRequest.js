@@ -45,7 +45,9 @@ export function orderGptImage2ReferenceIds(productRefIds, opts = {}) {
  *   productNames?: string[],
  *   pedido?: string | null,
  *   fraseNaImagem?: string | null,
+ *   mandatoryTypography?: string | null,
  *   contextoNome?: string | null,
+ *   modeloPostPrompt?: string | null,
  *   aspectRatio?: string | null,
  *   logoInReferences?: boolean,
  *   heroProductName?: string | null,
@@ -56,7 +58,9 @@ export function buildOfficialGptImage2Prompt(ctx = {}) {
   const names = (ctx.productNames || []).map((n) => String(n || "").trim()).filter(Boolean);
   const pedido = String(ctx.pedido || "").trim();
   const frase = String(ctx.fraseNaImagem || "").trim();
+  const mandatory = String(ctx.mandatoryTypography || "").trim();
   const contexto = String(ctx.contextoNome || "").trim();
+  const modeloPost = String(ctx.modeloPostPrompt || "").trim();
   const aspect = String(ctx.aspectRatio || "1:1").trim();
   const hero = String(ctx.heroProductName || "").trim();
   const logoInReferences = ctx.logoInReferences === true;
@@ -72,8 +76,15 @@ export function buildOfficialGptImage2Prompt(ctx = {}) {
     frase
       ? `Include this campaign text prominently with correct spelling: «${frase}».`
       : "",
+    mandatory
+      ? `${mandatory} These client-specified details must appear in the image typography and override any generic creative choices.`
+      : "",
     pedido ? `Creative direction from the client: ${pedido}` : "",
-    contexto ? `Campaign context: ${contexto}.` : "",
+    modeloPost
+      ? `Post layout playbook${contexto ? ` (${contexto})` : ""} — follow this visual structure: ${modeloPost}`
+      : contexto
+        ? `Campaign context: ${contexto}.`
+        : "",
     "Preserve the exact packaging design, labels, colors, proportions and brand details from every product reference — do not redraw or invent new labels.",
     "Use professional studio lighting and a cohesive scene.",
     logoInReferences

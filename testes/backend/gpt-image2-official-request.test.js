@@ -37,6 +37,22 @@ describe("gpt-image-2 official request shape", () => {
     assert.doesNotMatch(p, /\n\n\n/);
   });
 
+  it("inclui playbook do modelo de post quando informado", () => {
+    const p = buildOfficialGptImage2Prompt({
+      nomeFantasia: "FYT",
+      productNames: ["whey growth"],
+      pedido: "post promocional 2 por 149",
+      contextoNome: "Promoção",
+      modeloPostPrompt:
+        "Modelo PROMOÇÃO para Instagram. Hierarquia: gancho no topo, produto no centro, preço em destaque.",
+      aspectRatio: "1:1",
+      heroProductName: "whey growth",
+    });
+    assert.match(p, /Post layout playbook \(Promoção\)/i);
+    assert.match(p, /Hierarquia: gancho no topo/i);
+    assert.match(p, /Creative direction from the client: post promocional/i);
+  });
+
   it("API aceita no máximo 4 imagens", () => {
     assert.equal(GPT_IMAGE_REFERENCE_MAX, 4);
   });

@@ -1,4 +1,5 @@
 import { createEmpresaBody, vincularCriadorComoMembro } from "./shared.js";
+import { seedEmpresaModelosPostForNewEmpresa } from "../../services/postModelosService.js";
 
 /** `public.empresa` exige NOT NULL em varchar opcionais — gravamos "" em vez de null. */
 export function empresaCampoTextoParaDb(value) {
@@ -67,6 +68,12 @@ export async function criarEmpresaParaUsuario(supabase, idUsuario, rawBody) {
     await supabase.from("empresa").delete().eq("id_empresa", emp.id_empresa);
     const msg = memb.error?.message ?? String(memb.error ?? "Erro ao vincular membro");
     return { ok: false, status: 500, error: msg };
+  }
+
+  try {
+    await seedEmpresaModelosPostForNewEmpresa(supabase, emp.id_empresa);
+  } catch (seedErr) {
+    console.error("empresa.seedModelosPost:", seedErr);
   }
 
   return { ok: true, empresa: emp };

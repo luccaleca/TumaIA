@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildConfirmedImageIntent } from "../../backend/src/services/imageIntent.js";
-import { buildImagePreviewContextMeta } from "../../backend/src/services/imagePreviewPrompt.js";
+import { buildImagePreviewContextMeta, buildIntegratedProductImagePrompt } from "../../backend/src/services/imagePreviewPrompt.js";
+import { getPostModeloBySlug } from "../../backend/src/modules/empresas/postModelosCatalog.js";
 
 const CTX_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CTX_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -141,5 +142,52 @@ describe("imageIntent", () => {
     assert.equal(intent.heroProduct?.id_midia, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
     assert.equal(intent.postContextProposal.midias_referenced.length, 1);
     assert.doesNotMatch(intent.pedido, /creatina integral/i);
+  });
+
+  it("injeta playbook do modelo Promoção no prompt GPT Image 2", () => {
+    const promoModelo = getPostModeloBySlug("promocao");
+    const history = [
+      { role: "user", content: "post de promoção do whey growth, 2 por 149, válido até domingo" },
+    ];
+    const contextoRows = [
+      {
+        id_contexto_empresa: CTX_A,
+        nome: "Promoção",
+        schema_json: { tipo: "promocao", playbook_slug: "promocao" },
+        dados_json: {
+          playbook: true,
+          playbook_slug: "promocao",
+          tipo: "promocao",
+          prompt_base: promoModelo.prompt_base,
+        },
+      },
+    ];
+    const proposal = {
+      matched_contexto: {
+        id_contexto_empresa: CTX_A,
+        nome: "Promoção",
+        tipo_schema: "promocao",
+        reason: "escolhido_no_painel",
+      },
+      midias_referenced: [
+        { id_midia: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", nome_exibicao: "whey growth" },
+      ],
+    };
+
+    const intent = buildConfirmedImageIntent({
+      history,
+      postContextProposal: proposal,
+      contextoRows,
+      focusContextoId: CTX_A,
+    });
+
+    assert.match(intent.playbookPromptBase || "", /Modelo PROMOÇÃO/i);
+    const prompt = buildIntegratedProductImagePrompt(history, intent.postContextProposal, null, {
+      imageIntent: intent,
+      productNames: ["whey growth"],
+    });
+    assert.match(prompt, /Post layout playbook \(Promoção\)/i);
+    assert.match(prompt, /produto herói no centro/i);
+    assert.match(prompt, /2 por 149/i);
   });
 });

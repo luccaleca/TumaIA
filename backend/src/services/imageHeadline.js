@@ -1,4 +1,11 @@
 import { extractProductMentions } from "./productMentionMatch.js";
+import { describeAmbienteFromCadastro } from "./visualResumoFromCadastro.js";
+import {
+  extractPedidoCampanhaLabels,
+  formatProductDisplayName,
+  intentLooksPromotional,
+  isMeaningfulCadastroValue,
+} from "./cadastroMeaningful.js";
 
 /** Frase curta que aparece NA IMAGEM (não é legenda do post). */
 export const FRASE_NA_IMAGEM_MAX = 56;
@@ -240,85 +247,324 @@ export function looksLikeRawUserCopy(resumo, intent) {
   return chunk.length >= 14 && r.includes(chunk);
 }
 
+/** Resumo do Llama válido para exibir (composição, não cópia do chat nem template de regras). */
+export function isUsableModelResumoVisual(resumo, intent) {
+  const rv = String(resumo ?? "").trim();
+  const it = String(intent ?? "").trim();
+  if (!rv || rv.length < 24) return false;
+  if (looksLikeRawUserCopy(rv, it)) return false;
+  if (/não repetir o pedido do chat|use preço e chamada da promo/i.test(rv)) return false;
+  if (/OBRIGATÓRIO na tipografia/i.test(rv) && !/ao lado|destaque|tipográfico/i.test(rv)) {
+    return false;
+  }
+  return true;
+}
+
 /**
- * Descrição do que a IA vai compor — nunca colar o pedido do cliente palavra por palavra.
- *
- * @param {Record<string, unknown>} proposal
- * @param {string} [userHint]
+ * @param {Array<{ role: string, content: string }>} history
  */
-function extractPromoPricePair(text) {
+export function userTextBlobFromHistory(history) {
+  return (Array.isArray(history) ? history : [])
+    .filter((m) => {
+      const content = String(m?.content ?? "").trim();
+      return m?.role === "user" && content && !isPanelNoiseMessage("user", content);
+    })
+    .map((m) => String(m.content).trim())
+    .join("\n");
+}
+
+/**
+ * @param {string} raw
+ */
+function formatMoneyLabel(raw) {
+  const m = String(raw || "").match(/(\d{1,6}(?:[.,]\d{1,2})?)/);
+  if (!m) return String(raw || "").trim();
+  return m[1].includes(",") || m[1].includes(".") ? m[1] : m[1];
+}
+
+/**
+ * Extrai preços explícitos do pedido (faixas, de/por, 1 por 99,99 e 2 por 149,99).
+ *
+ * @param {string} text
+ * @returns {{ kind: "tiered" | "pair", display: string, lines: string[] } | null}
+ */
+export function extractPromoPricing(text) {
   const lower = String(text || "").toLowerCase();
-  const m =
-    lower.match(/de\s+(\d{1,4})\s+por\s+(\d{1,4})/) ||
-    lower.match(/(\d{1,4})\s+por\s+(\d{1,4})/) ||
-    lower.match(/de\s+(\d{1,4})\s+reais?\s+para\s+(\d{1,4})/) ||
-    lower.match(/(\d{1,4})\s+reais?\s+para\s+(\d{1,4})/);
+
+  const decimalPair = lower.match(
+    /(\d{1,4}[.,]\d{2})\s+por\s+(?:r\$\s*)?(\d{1,4}[.,]\d{2})/,
+  );
+  if (decimalPair) {
+    const de = formatMoneyLabel(decimalPair[1]);
+    const por = formatMoneyLabel(decimalPair[2]);
+    const display = `de R$ ${de} por R$ ${por}`;
+    return { kind: "pair", display, lines: [display] };
+  }
+
+  const dePor =
+    lower.match(
+      /\bde\s+(?:r\$\s*)?(\d{1,5}(?:[.,]\d{1,2})?)\s+por\s+(?:r\$\s*)?(\d{1,5}(?:[.,]\d{1,2})?)/,
+    ) ||
+    lower.match(
+      /(?:r\$\s*)?(\d{1,5}(?:[.,]\d{1,2})?)\s+reais?\s+para\s+(?:r\$\s*)?(\d{1,5}(?:[.,]\d{1,2})?)/,
+    );
+  if (dePor) {
+    const display = `de R$ ${formatMoneyLabel(dePor[1])} por R$ ${formatMoneyLabel(dePor[2])}`;
+    return { kind: "pair", display, lines: [display] };
+  }
+
+  const tierMatches = [...lower.matchAll(/(?:^|[\s,;])(\d{1,2})\s+por\s+(?:r\$\s*)?(\d{1,5}(?:[.,]\d{1,2})?)/g)];
+  const tiers = tierMatches
+    .map((m) => ({ qty: Number(m[1]), price: formatMoneyLabel(m[2]) }))
+    .filter((t) => t.qty >= 1 && t.qty <= 9);
+  if (tiers.length >= 2 || (tiers.length === 1 && /[.,]\d{1,2}/.test(tiers[0].price))) {
+    const lines = tiers.map((t) => `${t.qty} por R$ ${t.price}`);
+    return { kind: "tiered", display: lines.join(" | "), lines };
+  }
+
+  const simplePor = lower.match(
+    /(?:^|[^\d,])(\d{1,2})\s+por\s+(\d{1,2})(?:\s|$|[,.;])(?!\d)/,
+  );
+  if (simplePor && Number(simplePor[1]) >= 1 && Number(simplePor[1]) <= 9) {
+    const display = `de R$ ${simplePor[1]} por R$ ${simplePor[2]}`;
+    return { kind: "pair", display, lines: [display] };
+  }
+
+  return null;
+}
+
+/** @deprecated use extractPromoPricing */
+function extractPromoPricePair(text) {
+  const pricing = extractPromoPricing(text);
+  if (!pricing || pricing.kind !== "pair") return null;
+  const m = pricing.display.match(/de R\$\s*([\d.,]+)\s+por R\$\s*([\d.,]+)/i);
   if (!m) return null;
   return { de: m[1], por: m[2] };
 }
 
-export function synthesizeResumoVisual(proposal, userHint = "") {
+/**
+ * Fatos explícitos do cliente que DEVEM aparecer na arte (preço, ocasião).
+ *
+ * @param {Array<{ role: string, content: string }>} [history]
+ * @param {Record<string, unknown>} [proposal]
+ */
+export function collectMandatoryImageFacts(history = [], proposal = {}) {
+  const blob =
+    userTextBlobFromHistory(history) ||
+    String(proposal.intent_summary ?? "").trim();
+  /** @type {Record<string, string | string[]>} */
+  const facts = {};
+
+  const existing =
+    proposal.facts_for_image && typeof proposal.facts_for_image === "object"
+      ? proposal.facts_for_image
+      : {};
+  for (const [k, v] of Object.entries(existing)) {
+    if (typeof v === "string" && v.trim()) facts[k] = v.trim();
+  }
+
+  const pricing = extractPromoPricing(blob);
+  if (pricing) {
+    facts.precos_promocao = pricing.display;
+    facts.precos_linhas = pricing.lines;
+  }
+
+  if (/dia\s+dos\s+namorados|\bnamorados\b/i.test(blob) && !facts.ocasiao) {
+    facts.ocasiao = "Dia dos Namorados";
+  }
+
+  return facts;
+}
+
+/**
+ * @param {Record<string, string | string[]>} facts
+ */
+export function formatMandatoryFactsAsComposition(facts) {
+  if (!facts || typeof facts !== "object") return "";
+  const parts = [];
+  if (facts.ocasiao) {
+    parts.push(`Ambientação com clima de ${facts.ocasiao}.`);
+  }
+  const priceLines = Array.isArray(facts.precos_linhas)
+    ? facts.precos_linhas.map((x) => String(x))
+    : facts.precos_promocao
+      ? [String(facts.precos_promocao)]
+      : [];
+  if (priceLines.length) {
+    parts.push(`Destaque tipográfico ao lado do produto com ${priceLines.join(" e ")}.`);
+  }
+  return parts.join(" ").trim();
+}
+
+/**
+ * Regras técnicas de tipografia para o prompt do modelo de imagem (não exibir ao cliente).
+ * @param {Record<string, string | string[]>} facts
+ */
+export function formatMandatoryTypographyBlock(facts) {
+  if (!facts || typeof facts !== "object") return "";
+  const lines = [];
+  if (facts.ocasiao) {
+    lines.push(`Tema/ocasião pedida pelo cliente: ${facts.ocasiao}.`);
+  }
+  const priceLines = Array.isArray(facts.precos_linhas)
+    ? facts.precos_linhas.map((x) => String(x))
+    : facts.precos_promocao
+      ? [String(facts.precos_promocao)]
+      : [];
+  if (priceLines.length) {
+    lines.push(
+      `OBRIGATÓRIO na tipografia da arte (não omitir): ${priceLines.join("; ")}.`,
+    );
+  }
+  return lines.join(" ").trim();
+}
+
+/**
+ * @param {string} resumo
+ * @param {Array<{ role: string, content: string }>} [history]
+ * @param {Record<string, unknown>} [proposal]
+ */
+export function mergeMandatoryFactsIntoResumo(resumo, history = [], proposal = {}) {
+  const base = String(resumo || "").trim();
+  const facts = collectMandatoryImageFacts(history, proposal);
+  const composition = formatMandatoryFactsAsComposition(facts);
+  if (!composition) return base.slice(0, 480);
+
+  const priceNeedle = String(facts.precos_promocao || "");
+  if (priceNeedle && base.includes(priceNeedle)) return base.slice(0, 480);
+  if (priceNeedle && facts.precos_linhas?.some((line) => base.includes(String(line)))) {
+    return base.slice(0, 480);
+  }
+  if (facts.ocasiao && base.toLowerCase().includes(String(facts.ocasiao).toLowerCase())) {
+    const withoutOccasion = composition.replace(
+      new RegExp(`Ambientação com clima de ${facts.ocasiao}\\.`, "i"),
+      "",
+    ).trim();
+    if (!withoutOccasion) return base.slice(0, 480);
+  }
+  if (/Destaque tipográfico ao lado do produto/i.test(base)) return base.slice(0, 480);
+
+  const merged = `${base} ${composition}`.replace(/\s+/g, " ").trim();
+  return merged.slice(0, 480);
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} matchedContexto
+ * @param {string} intent
+ */
+function inferCampaignAtmosphere(matchedContexto, intent) {
+  if (/queima\s+de\s+estoque|liquida[cç][aã]o/i.test(String(intent || ""))) {
+    return "Clima de urgência e queima de estoque, com destaque na oferta.";
+  }
+  if (intentLooksPromotional(intent)) {
+    return "Atmosfera vibrante, com cores de alto contraste para destacar a promoção no feed.";
+  }
+  const blob = `${matchedContexto?.nome || ""} ${matchedContexto?.tipo_schema || ""} ${intent}`.toLowerCase();
+  if (/lancamento|lançamento|novidade|nova linha/i.test(blob)) {
+    return "Visual claro e bem iluminado, transmitindo energia e novidade.";
+  }
+  if (/promo|promoção|desconto|oferta|black\s*friday/i.test(blob)) {
+    return "Atmosfera vibrante, com cores de alto contraste para destacar no feed.";
+  }
+  if (/comemor|natal|namorados|páscoa|anivers/i.test(blob)) {
+    return "Clima festivo e acolhedor na ambientação geral.";
+  }
+  return "Iluminação profissional e fundo limpo, mantendo foco no produto.";
+}
+
+/**
+ * @param {Record<string, unknown> | null | undefined} matchedContexto
+ * @param {string} intent
+ * @param {string} heroName
+ */
+function campaignOpeningLine(matchedContexto, intent, heroName) {
+  const productBit = heroName ? ` do ${formatProductDisplayName(heroName)}` : "";
+  if (intentLooksPromotional(intent)) {
+    return `Post promocional para feed do Instagram${productBit}.`;
+  }
+  const modeloNome = String(matchedContexto?.nome || "").toLowerCase();
+  if (/lancamento|lançamento/i.test(modeloNome)) {
+    return `Arte de lançamento para feed do Instagram${productBit}.`;
+  }
+  if (/promo|promoção|desconto|oferta/i.test(String(intent || "").toLowerCase())) {
+    return `Post promocional para feed do Instagram${productBit}.`;
+  }
+  return `Arte de campanha para feed do Instagram${productBit}.`;
+}
+
+export function synthesizeResumoVisual(proposal, userHint = "", visualCadastro = null) {
   const p = proposal && typeof proposal === "object" ? proposal : {};
   const intent =
     String(p.intent_summary ?? "").trim() || String(userHint || "").trim();
   const lower = intent.toLowerCase();
-  const parts = [];
-
-  if (/promo|desconto|off|%\b|de\s+\d+\s+por\s+\d+|\d+\s+reais?\s+para\s+\d+/i.test(intent)) {
-    parts.push("Post promocional para feed do Instagram, visual chamativo e energético.");
-  } else {
-    parts.push("Arte para feed do Instagram alinhada à marca.");
-  }
-
-  if (/academia/i.test(lower)) {
-    parts.push("Público-alvo: academias.");
-  }
-
-  const price = extractPromoPricePair(lower);
-  if (price) {
-    parts.push(`Destaque de preço: de R$ ${price.de} por R$ ${price.por}.`);
-  }
-
+  const matched =
+    p.matched_contexto && typeof p.matched_contexto === "object" ? p.matched_contexto : null;
   const refs = Array.isArray(p.midias_referenced) ? p.midias_referenced : [];
+  const cadastro = visualCadastro && typeof visualCadastro === "object" ? visualCadastro : {};
+  const empresaRow = cadastro.empresaRow || null;
+  const identidadeDados = cadastro.identidadeDados || null;
+  const heroName =
+    p.hero_product && typeof p.hero_product === "object"
+      ? String(p.hero_product.nome_exibicao ?? "").trim()
+      : "";
   const refLabels = refs
     .map((r) => {
-      const nome = String(r?.nome_exibicao ?? "").trim();
-      const arquivo = String(r?.nome_arquivo ?? "").trim();
-      if (nome && arquivo && arquivo !== nome) return `${nome} (${arquivo})`;
-      return nome || arquivo;
+      const nome = formatProductDisplayName(r?.nome_exibicao ?? r?.nome_arquivo ?? "");
+      return nome;
     })
     .filter(Boolean)
-    .slice(0, 4);
+    .slice(0, 3);
+  const focusName = formatProductDisplayName(heroName) || refLabels[0] || "";
+  const parts = [];
+
+  parts.push(campaignOpeningLine(matched, intent, focusName));
+
   if (refLabels.length) {
-    const countLabel = refLabels.length === 1 ? "1 PNG" : `${refLabels.length} PNGs`;
-    parts.push(`${countLabel} do acervo na composição: ${refLabels.join("; ")}.`);
-    const heroName =
-      p.hero_product && typeof p.hero_product === "object"
-        ? String(p.hero_product.nome_exibicao ?? "").trim()
-        : "";
-    if (heroName && !refLabels.some((l) => l.includes(heroName))) {
-      parts.push(`Produto em destaque: ${heroName}.`);
-    } else if (heroName) {
-      parts.push(`Produto em destaque no centro: ${heroName}.`);
+    const pngLabel = refLabels.length === 1 ? refLabels[0] : refLabels.join(", ");
+    parts.push(`O PNG do acervo (${pngLabel}) fica centralizado na composição.`);
+    const price = extractPromoPricing(intent);
+    if (price) {
+      parts.push(`Ao lado do produto, destaque tipográfico com ${price.display}.`);
     }
+    parts.push("Logo da empresa discretamente em um dos cantos.");
+    parts.push(describeAmbienteFromCadastro(empresaRow, identidadeDados, refs));
   } else {
     const mentions = extractProductMentions(intent);
     if (mentions.length) {
       parts.push(
-        `Produto ${mentions.map((m) => `«${m}»`).join(", ")} sem PNG em Mídias — cadastre e tente de novo.`,
+        `Composição prevista com ${mentions.map((m) => `«${m}»`).join(", ")} em destaque no centro — cadastre o PNG em Mídias para montar a arte.`,
       );
-    } else if (/monster|creatina|whey|pro\s*force|produto/i.test(lower)) {
-      parts.push("Sem PNG do produto em Mídias — cadastre e tente de novo.");
+    } else if (/produto|item|servi[cç]o/i.test(lower)) {
+      parts.push("Cadastre o PNG do produto em Mídias para completar a composição central.");
     }
+    const price = extractPromoPricing(intent);
+    if (price) {
+      parts.push(`Destaque tipográfico com ${price.display} ao lado da área do produto.`);
+    }
+    parts.push("Logo da empresa em um dos cantos.");
+    parts.push(describeAmbienteFromCadastro(empresaRow, identidadeDados, refs));
+  }
+
+  parts.push(inferCampaignAtmosphere(matched, intent));
+
+  const publicoCadastro = String(identidadeDados?.publico || "").trim();
+  if (
+    publicoCadastro &&
+    isMeaningfulCadastroValue("publico", publicoCadastro) &&
+    !parts.some((x) => x.includes(publicoCadastro.slice(0, 20)))
+  ) {
+    parts.push(`Tom visual para ${publicoCadastro}.`);
+  } else if (/academia/i.test(lower)) {
+    parts.push("Tom visual direcionado ao público de academias.");
+  }
+
+  if (/queima\s+de\s+estoque|liquida[cç][aã]o/i.test(lower)) {
+    parts.push("Selo ou clima de urgência para queima de estoque.");
   }
 
   const explicit = extractFraseFromUserText(intent) || fraseFromProposal(p);
   if (explicit) {
-    parts.push(`Texto pedido na arte: «${explicit}».`);
-  } else {
-    parts.push(
-      "Use preço e chamada da promo na tipografia; não repetir o pedido do chat como frase única na imagem.",
-    );
+    parts.push(`Texto em destaque na arte: «${explicit}».`);
   }
 
   return parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 480);
@@ -345,10 +591,10 @@ export function synthesizeComposeSceneResumo(proposal, userHint = "") {
 
   if (/academia/i.test(lower)) parts.push("Público-alvo: academias.");
 
-  const price = extractPromoPricePair(lower);
+  const price = extractPromoPricing(intent);
   if (price) {
     parts.push(
-      `Tipografia de preço na arte: de R$ ${price.de} por R$ ${price.por} (texto gráfico, não em embalagem).`,
+      `OBRIGATÓRIO na tipografia: ${price.display} (texto gráfico, não em embalagem).`,
     );
   }
 
@@ -401,7 +647,11 @@ export function buildComposeSceneResumo(proposal, history = [], userHint = "") {
     String(p.intent_summary ?? "").trim() ||
     resolveActivePedidoHint(history, { proposal: p, question: userHint }) ||
     String(userHint || "").trim();
-  return synthesizeComposeSceneResumo(p, intent || userHint);
+  return mergeMandatoryFactsIntoResumo(
+    synthesizeComposeSceneResumo(p, userTextBlobFromHistory(history) || intent || userHint),
+    history,
+    p,
+  );
 }
 
 /**
@@ -411,7 +661,7 @@ export function buildComposeSceneResumo(proposal, history = [], userHint = "") {
  * @param {Array<{ role: string, content: string }>} [history]
  * @param {string} [userHint]
  */
-export function buildResumoVisual(proposal, history = [], userHint = "") {
+export function buildResumoVisual(proposal, history = [], userHint = "", visualCadastro = null) {
   const p = proposal && typeof proposal === "object" ? proposal : {};
   const intent =
     String(p.intent_summary ?? "").trim() ||
@@ -420,11 +670,16 @@ export function buildResumoVisual(proposal, history = [], userHint = "") {
 
   const fromProposal =
     typeof p.resumo_visual === "string" && p.resumo_visual.trim() ? p.resumo_visual.trim() : "";
-  if (fromProposal && !looksLikeRawUserCopy(fromProposal, intent)) {
-    return fromProposal.slice(0, 480);
+  if (fromProposal && isUsableModelResumoVisual(fromProposal, intent)) {
+    return mergeMandatoryFactsIntoResumo(fromProposal, history, p);
   }
 
-  return synthesizeResumoVisual(p, intent || userHint);
+  const hintBlob = userTextBlobFromHistory(history) || intent || userHint;
+  return mergeMandatoryFactsIntoResumo(
+    synthesizeResumoVisual(p, hintBlob, visualCadastro),
+    history,
+    p,
+  );
 }
 
 /**

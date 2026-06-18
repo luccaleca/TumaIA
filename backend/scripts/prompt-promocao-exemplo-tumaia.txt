@@ -1,0 +1,38 @@
+# Exemplo de post — modelo Promoção — mockup didático (card 2:1)
+# Referência (image[]): frontend/public/imagens/modelos/suricato-produto.png
+# Salvar em: frontend/public/imagens/modelos/promocao-exemplo.png
+#
+# --- PROMPT ---
+
+Generate a polished promotional POST TEMPLATE preview image for Instagram merchants (aspect ratio 2:1, landscape). Educational layout mockup for a "Promoção" post model: merchants of any industry must instantly see where their logo, product media, headline, and offer will go. Not a finished ad — a labeled preview that will adapt to each business brand, media library, and chat request.
+
+Use the reference picture only as a temporary stand-in for the merchant product hero — preserve the character exactly as in the reference (colors, proportions, expression). Do not turn it into a different character or a photorealistic animal photo.
+
+STRICT LAYOUT — top to bottom. All labels in Brazilian Portuguese, exactly as written:
+
+1) TOP — Logo slot (most important empty zone):
+   - Large, obvious reserved area labeled «Sua logo aqui» (empty rounded rectangle or subtle frame, top center).
+   - Must look intentionally blank, waiting for the merchant logo. No logo drawn inside.
+
+2) UPPER — Campaign hook (small):
+   - «Gancho da campanha»
+
+3) CENTER — Hero media / product (largest visual, ~40% of frame):
+   - Reference character as hero placeholder.
+   - Clear label with arrow or tag: «Sua mídia / produto aqui»
+
+4) MID — Main message (second-largest typography on the canvas):
+   - «Sua frase principal aqui»
+
+5) BOTTOM — Offer block (bold):
+   - «Sua oferta / preço aqui»
+   - Smaller line: «Validade ou CTA aqui»
+
+6) FOOTER (very small, one line):
+   - «Exemplo de layout · adapta à sua marca, mídia e pedido no chat»
+
+VISUAL STYLE:
+- Clean professional mockup; studio lighting; neutral modern background (soft gradient, does not compete with placeholders).
+- High contrast, legible at thumbnail size; uncluttered; clearly a template with labeled zones.
+- No real prices, no real brand names, no fake logos inside the logo slot.
+- All zones readable at 2:1 width.

@@ -5,6 +5,7 @@ import {
   resolvePedidoCliente,
 } from "./imageHeadline.js";
 import { pruneProposalMidiasToPedido } from "./productMentionMatch.js";
+import { resolvePlaybookPromptFromContextoRow } from "../modules/empresas/postModelosCatalog.js";
 
 function contextIdFromRow(row) {
   return String(row?.id_contexto_empresa ?? "").trim();
@@ -157,6 +158,7 @@ export function buildConfirmedImageIntent(opts = {}) {
   const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, prioritizedContextRows) || "";
   const resumoVisual = buildResumoVisual(postContextProposal, history, pedido);
   const selectionHint = buildSelectionHint(postContextProposal, pedido, fraseNaImagem, matchedContexto);
+  const playbookPromptBase = matchedRow ? resolvePlaybookPromptFromContextoRow(matchedRow) : null;
 
   return {
     pedido,
@@ -165,6 +167,7 @@ export function buildConfirmedImageIntent(opts = {}) {
     matchedContexto,
     heroProduct,
     matchedContextRow: matchedRow,
+    playbookPromptBase,
     contextoRows: prioritizedContextRows,
     selectionHint,
     postContextProposal,

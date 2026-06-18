@@ -6,6 +6,7 @@ import { guardChatProductAnswer } from "../../backend/src/services/chatProductGu
 import { tryChatIdentityResponse } from "../../backend/src/services/chatIdentityResponse.js";
 import { tryChatCompositeResponse, shouldUseCompositeResponse } from "../../backend/src/services/chatCompositeResponse.js";
 import { filterDisplayProductLabels, isArtifactProductLabel } from "../../backend/src/services/chatAcervoResponse.js";
+import { formatContextosListAnswer } from "../../backend/src/services/chatContextosResponse.js";
 import { buildChatTrainingPromptBlock } from "../../backend/src/services/chatPromptBundle.js";
 
 describe("chat routing — identidade vs acervo", () => {
@@ -119,6 +120,28 @@ describe("chat routing — composto e treino", () => {
     assert.equal(t.route, "empresa");
   });
 
+  it("modelos de post ativos → rota contextos (follow-up após acervo)", () => {
+    const history = [
+      { role: "user", content: "quais produtos temos?" },
+      {
+        role: "assistant",
+        content: "No acervo da FYT temos 18 produtos:\n\n• whey\n\nQuer montar post de algum deles?",
+      },
+    ];
+    const t = analyzeChatTurn("e os modelos de post, quais temos ativos?", history, {
+      nomeFantasia: "FYT",
+    });
+    assert.equal(t.route, "contextos");
+    assert.ok(t.topics.includes("CONTEXTOS"));
+    const ans = formatContextosListAnswer([
+      { nome: "Promoção", descricao: "Oferta" },
+      { nome: "Lançamento", descricao: "Novidade" },
+    ]);
+    assert.match(ans, /modelos de post ativos/i);
+    assert.match(ans, /Promoção/);
+    assert.match(ans, /Lançamento/);
+  });
+
   it("não era isso só queria nome → identidade", () => {
     const t = analyzeChatTurn("não era isso só queria seu nome", [], { nomeFantasia: "FYT" });
     assert.equal(t.route, "identity");
@@ -135,6 +158,13 @@ describe("chat routing — composto e treino", () => {
   it("como faço pra pedir um post → capacidade sem arte", () => {
     const ans = tryChatIdentityResponse("como faço pra pedir um post", "FYT");
     assert.match(ans || "", /monta|resumo|painel/i);
+  });
+
+  it("em qual empresa estou → identidade com nome da empresa", () => {
+    const t = analyzeChatTurn("em qual empresa estou?", [], { nomeFantasia: "FYT" });
+    assert.equal(t.route, "identity");
+    assert.match(t.identityAnswer || "", /FYT/);
+    assert.match(t.identityAnswer || "", /workspace/i);
   });
 
   it("para oq vc serve → utilidade, não repetir cumprimento", () => {

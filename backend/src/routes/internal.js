@@ -3,6 +3,7 @@ import { z } from "zod";
 import { env } from "../config.js";
 import { DEFAULT_OLLAMA_CHAT_MODEL } from "../ollamaDefaults.js";
 import { requireInternalSecret } from "../middleware/internalAuth.js";
+import internalWhatsapp from "./internalWhatsapp.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { getLlamaTextUsage, recordLlamaTextCall } from "../services/llamaUsage.js";
 import { llamaChatCompletionJson } from "../services/llamaOpenAiClient.js";
@@ -17,6 +18,7 @@ import {
 
 const r = Router();
 r.use(requireInternalSecret);
+r.use("/whatsapp", internalWhatsapp);
 
 function supabase() {
   return getSupabaseAdmin();

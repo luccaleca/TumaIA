@@ -39,7 +39,7 @@ export default function ChatArteBriefCard({
   showGenerateButton,
   onGenerate,
   generateDisabled,
-  generateLabel = "Gerar prévia da imagem",
+  generateLabel = "Gerar imagem",
   hideFormato = false,
 }) {
   const [editing, setEditing] = useState(false);

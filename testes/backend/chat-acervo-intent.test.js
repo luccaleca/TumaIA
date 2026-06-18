@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   classifyChatAcervoIntent,
   historySuggestsCatalogListing,
+  isPostModelosQuestion,
 } from "../../backend/src/services/chatIntent.js";
 
 const CATALOG_HISTORY = [
@@ -130,5 +131,15 @@ describe("chat acervo intent", () => {
     assert.match(ans || "", /acervo|produtos/i);
     assert.doesNotMatch(ans || "", /«de produtos»/i);
     assert.match(ans || "", /whey de chocolate/i);
+  });
+
+  it("modelos de post ativos → NONE no acervo (não confunde «ativos» com produto)", () => {
+    const q = "e os modelos de post, quais temos ativos?";
+    assert.equal(isPostModelosQuestion(q), true);
+    assert.equal(classifyChatAcervoIntent(q, CATALOG_HISTORY).kind, "NONE");
+  });
+
+  it("temos ativos sozinho após catálogo não vira INFO de produto «ativos»", () => {
+    assert.equal(classifyChatAcervoIntent("temos ativos?", CATALOG_HISTORY).kind, "NONE");
   });
 });

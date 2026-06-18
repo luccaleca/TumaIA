@@ -83,12 +83,19 @@ export function extractChatTopics(question) {
     /\b(qual\s+(?:é|e)\s+(?:a\s+)?empresa|sobre\s+a\s+empresa|nossa\s+empresa|segmento|instagram\s+da\s+empresa)\b/i.test(
       q,
     ) ||
+    /\b(em\s+qual\s+empresa|qual\s+empresa\s+(?:estou|to|ativa|selecionada|usando|no\s+painel)|empresa\s+ativa|workspace)\b/i.test(
+      q,
+    ) ||
     /\b(o\s+que\s+(?:é|e)\s+(?:a\s+)?fyt|fala\s+da\s+empresa)\b/i.test(q)
   ) {
     topics.add("EMPRESA");
   }
 
-  if (/\b(contextos?|campanhas?\s+cadastrad|orientac(?:ao|ões)\s+de\s+marca|tom\s+de\s+voz)\b/i.test(q)) {
+  if (
+    /\b(contextos?|campanhas?\s+cadastrad|orientac(?:ao|ões)\s+de\s+marca|tom\s+de\s+voz)\b/i.test(q) ||
+    /\b(modelos?\s+de\s+post|modelos?\s+post|playbooks?|templates?\s+de\s+post)\b/i.test(q) ||
+    (/\b(quais|que)\s+modelos?\b/i.test(q) && /\b(post|campanha|layout|ativos?)\b/i.test(q))
+  ) {
     topics.add("CONTEXTOS");
   }
 

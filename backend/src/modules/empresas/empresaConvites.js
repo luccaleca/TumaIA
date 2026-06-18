@@ -160,7 +160,7 @@ export async function executarCriacaoConviteAdmin(
 
   const { data: membro, error: eM } = await supabase
     .from("usuario_empresa")
-    .select("cargo, ativo")
+    .select("cargo, perfil_acesso, ativo")
     .eq("id_empresa", idParsed.data)
     .eq("id_usuario", idCriador)
     .eq("ativo", true)

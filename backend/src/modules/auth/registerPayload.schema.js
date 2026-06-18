@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  isTelefoneUsuarioValido,
+  telefoneUsuarioParaDb,
+} from "./telefoneUsuario.js";
 
 /**
  * Espaços no início/fim e variações Unicode comuns ao colar senha.
@@ -20,11 +24,23 @@ export const senhaRegister = z.preprocess(
   z.string().min(8).max(128),
 );
 
+const telefoneRegister = z.preprocess(
+  (v) => (v == null ? "" : String(v).trim()),
+  z
+    .string()
+    .min(1, "Telefone é obrigatório.")
+    .max(20)
+    .transform((s) => telefoneUsuarioParaDb(s))
+    .refine((digits) => Boolean(digits && isTelefoneUsuarioValido(digits)), {
+      message: "Telefone inválido (use DDD + número, mínimo 10 dígitos).",
+    }),
+);
+
 export const registerBody = z.object({
   nome: z.string().min(1).max(150),
   email: emailNorm,
   senha: senhaRegister,
-  telefone: z.string().max(20).optional().nullable(),
+  telefone: telefoneRegister,
 });
 
 export const senhaLogin = z.preprocess(
@@ -41,10 +57,20 @@ export const loginBody = z.object({
 export const patchMeBody = z
   .object({
     nome: z.string().min(1).max(150).optional(),
-    telefone: z.union([z.string().max(20), z.null()]).optional(),
+    telefone: z
+      .preprocess((v) => (v == null ? v : String(v).trim()), z.string().min(10).max(20))
+      .optional(),
     email: emailNorm.optional(),
   })
   .strict()
   .refine((o) => Object.keys(o).length > 0, {
     message: "Envie ao menos um campo: nome, telefone ou email",
+  })
+  .refine((o) => o.telefone !== null, {
+    message: "Telefone é obrigatório e não pode ser removido.",
+    path: ["telefone"],
+  })
+  .refine((o) => o.telefone === undefined || isTelefoneUsuarioValido(o.telefone), {
+    message: "Telefone inválido (use DDD + número, mínimo 10 dígitos).",
+    path: ["telefone"],
   });

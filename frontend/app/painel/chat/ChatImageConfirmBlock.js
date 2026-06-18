@@ -74,9 +74,25 @@ export default function ChatImageConfirmBlock({
         </div>
       ) : null}
 
+      {Array.isArray(proposal?.pedido_campanha) && proposal.pedido_campanha.length > 0 ? (
+        <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
+          <p className={ROW_LABEL_CLASS}>Pedido</p>
+          <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+            {proposal.pedido_campanha.map((label) => (
+              <span
+                key={label}
+                className="inline-flex items-center rounded-md border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs font-medium text-foreground"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {contextLinks.length > 0 ? (
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-          <p className={ROW_LABEL_CLASS}>Contexto</p>
+          <p className={ROW_LABEL_CLASS}>Modelo de post</p>
           <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
             {contextLinks.map((l) => (
               <Link key={`${l.kind}-${l.id}`} href={l.href} className={CHIP_CLASS}>
@@ -118,7 +134,7 @@ export default function ChatImageConfirmBlock({
 
       {!hasArteBrief && contextosCampanha.length > 0 ? (
         <label className="block">
-          <span className="text-xs font-medium text-muted-foreground">Contexto desta arte</span>
+          <span className="text-xs font-medium text-muted-foreground">Modelo de post</span>
           <select
             className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
             value={selectedContextoId || ""}
@@ -127,12 +143,12 @@ export default function ChatImageConfirmBlock({
           >
             {contextosCampanha.map((c) => (
               <option key={c.id_contexto_empresa} value={c.id_contexto_empresa}>
-                {c.nome || "Contexto"}
+                {c.nome || "Modelo"}
               </option>
             ))}
           </select>
           <span className="mt-1 block text-xs text-muted-foreground">
-            Campanha ou tipo de publicação usado nesta arte.
+            Layout visual usado nesta arte (Promoção, Lançamento, etc.).
           </span>
         </label>
       ) : null}

@@ -4,11 +4,14 @@ export const PASTA_IDENTIDADE_MARCA_NOME = "Identidade da marca";
 export const ORIGEM_UPLOAD_MANUAL = "upload_manual";
 export const ORIGEM_UPLOAD_IDENTIDADE_FOTO = "identidade_marca_foto";
 export const ORIGEM_UPLOAD_IDENTIDADE_LOGO = "identidade_marca_logo";
+/** Prévia gerada no chat — não listada no acervo; removida ao apagar a conversa. */
+export const ORIGEM_UPLOAD_CHAT_PREVIEW = "chat_preview";
 
 /** Tamanho recomendado exibido na UI (mínimo 512 px desativado temporariamente para testes). */
 export const LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX = 1024;
 
 const ORIGENS_IDENTIDADE = new Set([ORIGEM_UPLOAD_IDENTIDADE_FOTO, ORIGEM_UPLOAD_IDENTIDADE_LOGO]);
+const ORIGENS_FORA_ACERVO = new Set([...ORIGENS_IDENTIDADE, ORIGEM_UPLOAD_CHAT_PREVIEW]);
 
 /**
  * @param {number} width
@@ -39,10 +42,17 @@ export function isMidiaRowIdentidade(row) {
 }
 
 /**
+ * @param {Record<string, unknown>} row
+ */
+export function isMidiaRowChatPreview(row) {
+  return String(row?.origem_upload || "").trim() === ORIGEM_UPLOAD_CHAT_PREVIEW;
+}
+
+/**
  * @param {Array<Record<string, unknown>>} rows
  */
 export function filterMidiasAcervo(rows) {
-  return (rows || []).filter((r) => !isMidiaRowIdentidade(r));
+  return (rows || []).filter((r) => !ORIGENS_FORA_ACERVO.has(String(r?.origem_upload || "").trim()));
 }
 
 /**

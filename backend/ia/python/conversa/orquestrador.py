@@ -206,10 +206,32 @@ def _bloco_data_hora_brasilia() -> str:
         return ""
 
 
+_RE_NEGOCIO_CURTO = re.compile(
+    r"\b("
+    r"post|arte|instagram|banner|stories|produto|acervo|m[ií]dia|midias|contexto|"
+    r"monta|gera|whey|monster|creatina|powerade|black\s*friday"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _eh_pergunta_casual_curta(pergunta: str) -> bool:
+    q = pergunta.strip()
+    if not q or len(q) > 48:
+        return False
+    if pergunta_sobre_post_redes(q):
+        return False
+    if _RE_NEGOCIO_CURTO.search(q):
+        return False
+    if len(q) <= 24:
+        return True
+    return bool(re.search(r"\b(receita|cozinhar|como\s+fazer|como\s+preparar)\b", q, re.I))
+
+
 def _responder_conversa_aberta_rapida(pergunta: str, historico: list[dict[str, str]]) -> dict:
     """Caminho leve: sem Postgres, RAG nem blocos longos de regras."""
     modelo = llm_conversa_aberta()
-    bloco_hist = formatar_historico_prompt(historico[-6:])
+    bloco_hist = formatar_historico_prompt(historico[-3:])
     bloco_cont = instrucao_continuidade_conversa(historico)
     bloco_data = _bloco_data_hora_brasilia() if _pergunta_pediu_data_hora(pergunta) else ""
     prompt = (
@@ -251,7 +273,7 @@ def responder_mensagem(
     if _pergunta_pediu_data_hora(q):
         return {"result": _formatar_data_hora_usuario(q), "source_documents": []}
 
-    if chat_mode == "conversa_aberta":
+    if chat_mode == "conversa_aberta" or (not chat_mode and _eh_pergunta_casual_curta(q)):
         return _responder_conversa_aberta_rapida(q, historico)
 
     if chat_mode == "identidade":

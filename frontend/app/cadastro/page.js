@@ -48,11 +48,18 @@ export default function CadastroPage() {
       return;
     }
 
+    const telDigits = telefone.replace(/\D/g, "");
+    if (telDigits.length < 10) {
+      setMsg("Informe seu telefone com DDD (mínimo 10 dígitos). É o mesmo número usado no WhatsApp.");
+      setMsgKind("err");
+      return;
+    }
+
     const body = {
       nome: nome.trim(),
       email: normalizeEmailClient(email),
       senha: senhaNorm,
-      telefone: telefone.trim() ? telefone.trim() : null,
+      telefone: telefone.trim(),
     };
 
     if (!body.nome || !body.email) {
@@ -115,10 +122,10 @@ export default function CadastroPage() {
         />
         <AuthField
           id="telefone"
-          label="Telefone"
+          label="Telefone (WhatsApp)"
           value={telefone}
           onChange={(e) => setTelefone(e.target.value)}
-          optional
+          required
         />
         <AuthField
           id="senha"

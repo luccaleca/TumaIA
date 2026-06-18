@@ -6,6 +6,7 @@ import {
   isConversationalMessage,
   isMetaOrHypotheticalQuestion,
   hasExplicitCreateRequest,
+  isImageRevisionRequest,
 } from "../../backend/src/services/imageGenerationIntent.js";
 
 describe("imageGenerationIntent / interpretação", () => {
@@ -61,5 +62,17 @@ describe("imageGenerationIntent / interpretação", () => {
       },
     ];
     assert.equal(detectImageGenerationIntentFromHistory(history, "sim, gera"), true);
+  });
+
+  it("pedido de alterar prévia não abre fluxo de briefing", () => {
+    const q = "Quero alterar a imagem: incluir preço 1 por 99,99";
+    assert.equal(isImageRevisionRequest(q), true);
+    assert.equal(detectImageGenerationIntent(q), false);
+  });
+
+  it("atalhos digitados pós-prévia não abrem fluxo de briefing", () => {
+    assert.equal(detectImageGenerationIntent("Gerar legenda"), false);
+    assert.equal(detectImageGenerationIntent("Publicar no Instagram"), false);
+    assert.equal(detectImageGenerationIntent("Quero alterar a legenda: mais curta"), false);
   });
 });

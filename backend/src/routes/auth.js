@@ -13,6 +13,7 @@ import {
   putEmpresaAtivaBody,
   saveUsuarioEmpresaUltima,
 } from "../modules/auth/usuarioEmpresaUltimaService.js";
+import { telefoneUsuarioParaDb } from "../modules/auth/telefoneUsuario.js";
 
 const r = Router();
 
@@ -82,7 +83,7 @@ r.post("/register", async (req, res) => {
       auth_user_id: userId,
       nome,
       email,
-      telefone: telefone ?? null,
+      telefone: parsed.data.telefone,
       ativo: true,
     });
 
@@ -319,7 +320,7 @@ r.patch("/me", requireUserJwt, async (req, res) => {
 
     const rowUpdates = {};
     if (nome !== undefined) rowUpdates.nome = nome;
-    if (telefone !== undefined) rowUpdates.telefone = telefone;
+    if (telefone !== undefined) rowUpdates.telefone = telefoneUsuarioParaDb(telefone);
     if (email !== undefined) rowUpdates.email = email;
 
     const { data, error } = await db

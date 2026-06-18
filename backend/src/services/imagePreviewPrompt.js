@@ -3,7 +3,10 @@ import { filterMidiasAcervo } from "../modules/empresas/midiaOrigem.js";
 import {
   buildComposeSceneResumo,
   buildResumoVisual,
+  collectMandatoryImageFacts,
   extractFraseFromUserText,
+  formatMandatoryTypographyBlock,
+  mergeMandatoryFactsIntoResumo,
   normalizeFraseNaImagem,
   resolveFraseNaImagem,
   resolvePedidoCliente,
@@ -14,8 +17,10 @@ import {
   formatBrandIdentityBlockForFlux,
   formatBrandIdentityCompact,
   formatBrandIdentityForRawPrompt,
+  isIdentidadeMarcaContexto,
   partitionContextosIdentidade,
 } from "../modules/empresas/identidadeMarca.js";
+import { loadActiveModeloContextoRowsForEmpresa } from "./postModelosService.js";
 
 /** Limite legado FLUX. */
 export const FLUX_IMAGE_PROMPT_MAX = 2000;
@@ -47,12 +52,18 @@ export function buildIntegratedProductImagePrompt(
       ? imageIntent.heroProduct.nome_exibicao.trim()
       : "";
 
+  const mandatoryTypography = formatMandatoryTypographyBlock(
+    collectMandatoryImageFacts(history, proposal),
+  );
+
   return buildOfficialGptImage2Prompt({
     nomeFantasia: identidadeDados?.nome_fantasia || null,
     productNames: opts?.productNames,
     pedido,
     fraseNaImagem: frase,
+    mandatoryTypography,
     contextoNome: imageIntent?.matchedContexto?.nome || null,
+    modeloPostPrompt: imageIntent?.playbookPromptBase || null,
     aspectRatio: opts?.aspectRatio || "1:1",
     logoInReferences: opts?.logoInReferences === true,
     heroProductName,
@@ -81,6 +92,41 @@ export function buildRefineComposedImagePrompt(imageIntent) {
     "Não desenhe logo da marca.",
     pedido ? `Briefing: ${pedido}` : "",
     frase ? `Frase que deve permanecer legível: «${frase}».` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 32_000);
+}
+
+/**
+ * Edição incremental: prévia anterior + pedido pontual do cliente (ex.: incluir preço).
+ *
+ * @param {{
+ *   instructions: string,
+ *   history?: Array<{ role: string, content: string }>,
+ *   proposal?: Record<string, unknown>,
+ *   imageIntent?: import("./imageIntent.js").ConfirmedImageIntent | null,
+ * }} opts
+ */
+export function buildImageRevisionPrompt(opts) {
+  const instructions = String(opts.instructions || "").trim();
+  const history = Array.isArray(opts.history) ? opts.history : [];
+  const proposal = opts.proposal && typeof opts.proposal === "object" ? opts.proposal : {};
+  const imageIntent = opts.imageIntent && typeof opts.imageIntent === "object" ? opts.imageIntent : null;
+  const facts = collectMandatoryImageFacts(history, proposal);
+  const mandatory = formatMandatoryTypographyBlock(facts);
+  const frase =
+    String(imageIntent?.fraseNaImagem || "").trim() ||
+    String(proposal.frase_na_imagem ?? "").trim();
+
+  return [
+    "Edição de prévia já gerada para post promocional (Instagram).",
+    "Use a imagem anexa como base. Mantenha composição, produtos, cores da marca, logo, cenário e tipografia existente.",
+    "Faça SOMENTE as alterações pedidas pelo cliente — não redesenhe do zero.",
+    "Se pedirem preço, CTA ou texto promocional, inclua de forma legível sem apagar elementos que devem permanecer.",
+    instructions ? `Alterações solicitadas: ${instructions}` : "",
+    frase ? `Frase que deve continuar legível (se já existir): «${frase}»` : "",
+    mandatory ? mandatory : "",
   ]
     .filter(Boolean)
     .join("\n\n")
@@ -196,10 +242,18 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
     })}`;
   }
   const pedidoTexto = imageIntent?.pedido || resolvePedidoCliente(proposal, history, 32_000);
+  const resumoFromProposal =
+    proposal && typeof proposal.resumo_visual === "string" && proposal.resumo_visual.trim()
+      ? proposal.resumo_visual.trim()
+      : "";
   const resumoVisual = composeProductAssets
     ? buildComposeSceneResumo(proposal, history || [], pedidoTexto)
-    : (proposal && typeof proposal.resumo_visual === "string" && proposal.resumo_visual.trim()) ||
-      buildResumoVisual(proposal, history || [], pedidoTexto);
+    : resumoFromProposal
+      ? mergeMandatoryFactsIntoResumo(resumoFromProposal, history || [], proposal)
+      : buildResumoVisual(proposal, history || [], pedidoTexto);
+  const mandatoryTypography = formatMandatoryTypographyBlock(
+    collectMandatoryImageFacts(history || [], proposal),
+  );
   const resumoLabel = composeProductAssets
     ? "Direção do cenário (somente fundo — produtos reais entram depois na colagem)"
     : "Direção visual da arte (composição completa — preços, promoção, público e produtos do pedido; não limitar a uma única palavra)";
@@ -212,19 +266,24 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
         (imageIntent?.fraseNaImagem && extractFraseFromUserText(String(imageIntent.fraseNaImagem))
           ? imageIntent.fraseNaImagem
           : null);
+  if (mandatoryTypography) {
+    base = `${base}\n\n${mandatoryTypography} Prioridade absoluta sobre qualquer criatividade visual — se o cliente informou preço ou ocasião, deve aparecer legível na arte.`;
+  }
   if (fraseExplicita) {
     base = `${base}\n\nO cliente pediu este texto em destaque na arte: «${fraseExplicita}». Pode incluir também preços e chamadas do pedido de forma legível.`;
   } else if (hasPhraseOverride && !phraseOverride) {
     base = `${base}\n\nEvite texto legível longo; foque no visual e nos produtos do acervo.`;
   } else if (composeProductAssets) {
     base = `${base}\n\nTipografia de campanha (preços, desconto, público) pode aparecer como texto gráfico; não desenhe embalagens nem mockups de produto.`;
-  } else {
+  } else if (!mandatoryTypography) {
     base = `${base}\n\nUse os elementos textuais do pedido (ex.: preços, desconto, público-alvo) de forma legível na composição, conforme o resumo acima.`;
   }
   if (composeProductAssets) {
     base = `${base}\n\nReforce: nenhum objeto de produto no quadro — apenas cenário vazio nas zonas reservadas para os PNG do acervo.`;
   }
-  if (imageIntent?.matchedContexto?.nome) {
+  if (imageIntent?.playbookPromptBase) {
+    base = `${base}\n\nModelo de post (playbook visual):\n${imageIntent.playbookPromptBase}`;
+  } else if (imageIntent?.matchedContexto?.nome) {
     base = `${base}\n\nContexto/campanha prioritário desta arte: ${imageIntent.matchedContexto.nome}.`;
   }
   if (identidadeDados?.id_midia_logo && !opts?.logoAsHero) {
@@ -239,19 +298,27 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
 }
 
 /**
+ * Contextos ativos da empresa: modelos de post (boolean) + identidade da marca.
+ *
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {string} idEmpresa
  */
 export async function loadContextosEmpresaAtivos(db, idEmpresa) {
-  const { data, error } = await db
-    .from("contexto_empresa")
-    .select("id_contexto_empresa, nome, descricao, schema_json, dados_json, data_criacao")
-    .eq("id_empresa", idEmpresa)
-    .eq("ativo", true)
-    .order("data_criacao", { ascending: false })
-    .limit(24);
-  if (error) throw new Error(error.message);
-  return Array.isArray(data) ? data : [];
+  const [modeloRows, identidadeResult] = await Promise.all([
+    loadActiveModeloContextoRowsForEmpresa(db, idEmpresa),
+    db
+      .from("contexto_empresa")
+      .select("id_contexto_empresa, nome, descricao, schema_json, dados_json, data_criacao")
+      .eq("id_empresa", idEmpresa)
+      .eq("ativo", true)
+      .order("data_criacao", { ascending: false })
+      .limit(8),
+  ]);
+  if (identidadeResult.error) throw new Error(identidadeResult.error.message);
+  const identidadeRows = (Array.isArray(identidadeResult.data) ? identidadeResult.data : []).filter(
+    (row) => isIdentidadeMarcaContexto(row),
+  );
+  return [...modeloRows, ...identidadeRows];
 }
 
 export async function loadEmpresaResumoParaImagem(db, idEmpresa) {

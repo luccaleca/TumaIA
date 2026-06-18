@@ -1,0 +1,46 @@
+# Exemplo de post — modelo Produto (dia a dia / na prática) — card 2:1
+#
+# Mesmo estilo de mockup anotado da Promoção, mas SEM preço/oferta/validade.
+# Referência (image[]): packshot neutro / pote genérico (como nos outros modelos).
+# Salvar em: frontend/public/imagens/modelos/produto-exemplo.png (1024×576, 2:1)
+# --- PROMPT (copiar para GPT Image 2) ---
+
+Generate a polished Instagram POST TEMPLATE preview image for Instagram merchants (aspect ratio 2:1, landscape). Educational layout mockup for a "Produto" post model: merchants show their product or service in real daily use — routine, practice, real environment — without leading with price, discount, or a "new launch" badge. The real post later fills each zone with the merchant's logo, media from their library, headline and soft CTA from their chat request. Not a finished ad.
+
+Use the reference picture as the product to place inside a real-life scene — preserve the product from the reference; integrate it naturally (on a counter, table, shelf, gym bench, hands, service setting), NOT isolated on a promotional pedestal with geometric props only.
+
+STRICT LAYOUT — top to bottom. All labels in Brazilian Portuguese, exactly as written. Use color-coded annotated section tags on the LEFT (wireframe guide style, like a UI mockup): TOP, CENA, CENTRO, MEIO, INFERIOR.
+
+1) TOP — Logo slot:
+   - Tag on left: «TOP — Área reservada para sua logo»
+   - Empty dashed rectangle labeled «Sua logo aqui» (top center). Blank inside.
+
+2) UPPER — Scene / daily context (replaces promo "OFERTA" badge — this model has NO discount tag):
+   - Tag on left: «CENA — Seu ambiente do dia a dia»
+   - Pill or banner labeled «Sua cena / ambiente aqui»
+   - Hint of real context: kitchen, gym, store counter, workspace — soft, generic, any industry.
+
+3) CENTER — Product or service in practice (largest visual):
+   - Tag on left: «CENTRO — Sua mídia / produto aqui»
+   - Reference product integrated in the scene (in use, on surface, being held).
+   - Arrow label: «Sua mídia / produto aqui»
+   - NOT a sterile 3D pedestal promo shot — product shares the frame with the environment.
+
+4) MID — Main headline:
+   - Tag on left: «MEIO — Sua frase principal aqui»
+   - Large text: «SUA FRASE PRINCIPAL AQUI»
+
+5) BOTTOM — Soft CTA block (NOT a price box — different from Promotion):
+   - Tag on left: «INFERIOR — CTA suave, sem preço»
+   - Rounded dark card labeled «Seu CTA suave aqui»
+   - Smaller line: «Conheça · Agende · Peça pelo direct» (as style hint only)
+   - FORBIDDEN in this zone: R$, «Seu preço ou condição aqui», percent discounts, «2 por», «Válido até», countdown, «OFERTA ESPECIAL», launch badges («Novo», «Chegou»)
+
+6) FOOTER (very small, centered):
+   - «Exemplo de layout · adapta à sua marca, mídia e pedido no chat»
+
+VISUAL STYLE:
+- Same clean professional mockup quality as a promotional wireframe template: light gray background, readable labels, color-coded left annotations.
+- Warm, authentic “product in daily life” mood in the center scene.
+- Legible at thumbnail size; clearly a teaching template.
+- No real brand names, no real prices, no fake logos in the logo slot.

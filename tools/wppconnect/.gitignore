@@ -1,0 +1,4 @@
+# Clone upstream (npm run wppconnect:setup)
+server/
+
+tumaia.meta.json

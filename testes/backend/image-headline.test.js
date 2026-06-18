@@ -2,11 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildResumoVisual,
+  collectMandatoryImageFacts,
   deriveFraseNaImagemFromHistory,
   extractFraseFromUserText,
+  extractPromoPricing,
+  mergeMandatoryFactsIntoResumo,
   resolveFraseNaImagem,
   synthesizeResumoVisual,
 } from "../../backend/src/services/imageHeadline.js";
+import { describeAmbienteFromCadastro } from "../../backend/src/services/visualResumoFromCadastro.js";
 
 describe("imageHeadline — frase na imagem", () => {
   it("não puxa 500k do nome do contexto se o pedido recente é promo", () => {
@@ -76,7 +80,82 @@ describe("imageHeadline — frase na imagem", () => {
     );
     assert.match(resumo, /Monster Verde/);
     assert.match(resumo, /Monster Rosa/);
-    assert.match(resumo, /PNG do acervo/i);
+    assert.match(resumo, /PNG|centralizado|Monster/i);
+  });
+
+  it("extrai 12,99 por 8,99 sem confundir com 99 por 8", () => {
+    const pricing = extractPromoPricing(
+      "post de promocao do produto monster, 12,99 por 8,99 , queima de estoque",
+    );
+    assert.ok(pricing);
+    assert.match(pricing.display, /12,99/);
+    assert.match(pricing.display, /8,99/);
+    assert.doesNotMatch(pricing.display, /99 por R\$ 8[^,]/);
+  });
+
+  it("extrai preços em faixa (1 por 99,99 e 2 por 149,99)", () => {
+    const pricing = extractPromoPricing(
+      "promoção de creatina para dia dos namorados, 1 por 99,99 e 2 por 149,99",
+    );
+    assert.ok(pricing);
+    assert.equal(pricing.kind, "tiered");
+    assert.match(pricing.display, /99,99/);
+    assert.match(pricing.display, /149,99/);
+  });
+
+  it("mantém preço da 1ª mensagem quando a 2ª só pede tema", () => {
+    const history = [
+      {
+        role: "user",
+        content:
+          "promoção de creatina para dia dos namorados, 1 por 99,99 e 2 por 149,99",
+      },
+      {
+        role: "user",
+        content:
+          "pode criar a mensagem, quero utilizar todas as creatinas e dar enfase ao dia dos namorados",
+      },
+    ];
+    const facts = collectMandatoryImageFacts(history, {});
+    assert.match(String(facts.precos_promocao), /99,99/);
+    assert.match(String(facts.precos_promocao), /149,99/);
+    assert.equal(facts.ocasiao, "Dia dos Namorados");
+
+    const resumo = buildResumoVisual(
+      {
+        intent_summary: history[1].content,
+        midias_referenced: [
+          { nome_exibicao: "creatina growth" },
+          { nome_exibicao: "creatina integral" },
+          { nome_exibicao: "creatina max" },
+        ],
+        resumo_visual:
+          "Arte romântica para Dia dos Namorados com as três creatinas do acervo em destaque.",
+      },
+      history,
+      history[1].content,
+    );
+    assert.match(resumo, /tipográfico|99,99/i);
+    assert.match(resumo, /149,99/);
+  });
+
+  it("mergeMandatoryFactsIntoResumo não duplica bloco obrigatório", () => {
+    const merged = mergeMandatoryFactsIntoResumo(
+      "OBRIGATÓRIO na tipografia: 1 por R$ 99,99 | 2 por R$ 149,99.",
+      [{ role: "user", content: "1 por 99,99 e 2 por 149,99" }],
+      {},
+    );
+    assert.equal((merged.match(/OBRIGATÓRIO/g) || []).length, 1);
+  });
+
+  it("describeAmbienteFromCadastro usa metadados do produto cadastrado", () => {
+    const ambiente = describeAmbienteFromCadastro(
+      { segmento: "Papelaria" },
+      null,
+      [{ nome_exibicao: "Caderno universitário", descricao: "Capa dura espiral" }],
+    );
+    assert.match(ambiente, /Papelaria/i);
+    assert.match(ambiente, /Caderno universitário|Capa dura/i);
   });
 
   it("ignora linha automática de confirmação do painel", () => {

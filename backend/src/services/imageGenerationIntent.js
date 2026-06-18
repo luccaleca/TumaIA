@@ -8,6 +8,8 @@ export {
   isMetaOrHypotheticalQuestion,
   hasExplicitCreateRequest,
   mentionsVisualTopic,
+  isImageRevisionRequest,
+  isPostDeliveryTypedCommand,
   detectImageGenerationIntent,
   detectImageGenerationIntentFromHistory,
 } from "./tumaInterpretation.js";

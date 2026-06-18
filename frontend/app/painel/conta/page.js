@@ -26,7 +26,6 @@ export default function ContaPage() {
     nome: "",
     email: "",
     telefone: "",
-    clearTelefone: false,
   });
 
   useEffect(() => {
@@ -42,7 +41,6 @@ export default function ContaPage() {
         nome: usuario.nome || "",
         email: usuario.email || "",
         telefone: usuario.telefone || "",
-        clearTelefone: false,
       });
       setUsuarioMeta({
         data_criacao: usuario.data_criacao ?? null,
@@ -65,7 +63,6 @@ export default function ContaPage() {
       nome: form.nome,
       email: form.email,
       telefone: form.telefone,
-      clearTelefone: form.clearTelefone,
     });
     if (!prep.ok) {
       setMsg(prep.message);
@@ -101,7 +98,6 @@ export default function ContaPage() {
           nome: usuario.nome || "",
           email: usuario.email || "",
           telefone: usuario.telefone || "",
-          clearTelefone: false,
         });
         setUsuarioMeta((prev) => ({
           data_criacao: usuario.data_criacao ?? prev.data_criacao,
@@ -162,7 +158,7 @@ export default function ContaPage() {
         <section className="rounded-lg border border-border bg-surface/40 px-4 py-5 dark:bg-surface/20">
           <h2 className="text-sm font-medium text-foreground">Dados pessoais</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Os mesmos dados aparecem no cabeçalho do painel após salvar.
+            O telefone deve ser o mesmo do WhatsApp — é assim que o TumaIA reconhece você no bot.
           </p>
 
           <form className="mt-5 space-y-4" onSubmit={onSubmit}>
@@ -197,36 +193,21 @@ export default function ContaPage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="contaTelefone">
-                Telefone <span className="font-normal text-muted-foreground">(opcional)</span>
+                Telefone (WhatsApp)
               </label>
               <input
                 id="contaTelefone"
                 type="tel"
                 autoComplete="tel"
-                value={form.clearTelefone ? "" : form.telefone}
-                disabled={form.clearTelefone}
+                required
+                value={form.telefone}
                 onChange={(e) =>
-                  setForm((s) => ({ ...s, telefone: e.target.value.slice(0, 20), clearTelefone: false }))
+                  setForm((s) => ({ ...s, telefone: e.target.value.slice(0, 20) }))
                 }
-                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:cursor-not-allowed disabled:opacity-60"
+                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
                 placeholder="Ex.: (11) 99999-9999"
                 maxLength={20}
               />
-              <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-                <input
-                  type="checkbox"
-                  className="rounded border-border text-accent focus:ring-accent/40"
-                  checked={form.clearTelefone}
-                  onChange={(e) =>
-                    setForm((s) => ({
-                      ...s,
-                      clearTelefone: e.target.checked,
-                      telefone: e.target.checked ? "" : s.telefone,
-                    }))
-                  }
-                />
-                Remover telefone do perfil
-              </label>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 pt-1">

@@ -1,0 +1,40 @@
+# Exemplo de post — modelo Mensagens (texto / recado em destaque) — card 2:1
+#
+# Referência (image[]): opcional — logo neutra ou nenhuma; o foco é tipografia.
+# Salvar em: frontend/public/imagens/modelos/mensagens-exemplo.png (1024×576, 2:1)
+#
+# --- PROMPT (copiar para GPT Image 2) ---
+
+Generate a polished Instagram POST TEMPLATE preview image for Instagram merchants (aspect ratio 2:1, landscape). Educational layout mockup for a "Mensagens" post model: merchants communicate a direct message, notice, quote or short announcement — the TEXT is the hero, not product, price or launch. The real post later fills each zone with the merchant's logo, the exact message from chat, optional small support media and soft CTA. Not a finished ad.
+
+STRICT LAYOUT — top to bottom. All labels in Brazilian Portuguese, exactly as written. Color-coded annotated section tags on the LEFT (wireframe guide style): TOP, MENSAGEM, APOIO, RODAPÉ.
+
+1) TOP — Logo slot:
+   - Tag on left: «TOP — Área reservada para sua logo»
+   - Empty dashed rectangle labeled «Sua logo aqui» (top center). Blank inside.
+
+2) CENTER — Main message (largest element, ~50–60% of visual weight):
+   - Tag on left: «MENSAGEM — Seu recado principal»
+   - Very large, bold, high-contrast typography: «SUA MENSAGEM PRINCIPAL AQUI»
+   - Clean background (brand-tinted solid or soft gradient) that does NOT compete with text.
+   - This zone must dominate the layout — unlike Product (scene) or Promotion (price).
+
+3) MID — Optional support visual (small, subordinate):
+   - Tag on left: «APOIO — Mídia opcional»
+   - Small dashed area labeled «Sua mídia de apoio (opcional)»
+   - Must be clearly secondary — icon, small product thumb, or empty placeholder. NOT a hero product shot.
+
+4) BOTTOM — Complement or soft CTA:
+   - Tag on left: «RODAPÉ — Complemento ou CTA»
+   - Rounded card labeled «Seu complemento ou CTA aqui»
+   - Smaller line hint: «Ex.: Saiba mais · Obrigado · Nos vemos em breve»
+   - FORBIDDEN as dominant: R$, percent off, «2 por», «Válido até», «OFERTA ESPECIAL», launch badges («Novo», «Chegou»), full lifestyle scene as background
+
+5) FOOTER (very small, centered):
+   - «Exemplo de layout · adapta à sua marca, mídia e pedido no chat»
+
+VISUAL STYLE:
+- Clean typographic poster feel; message-first; excellent mobile legibility.
+- Same professional annotated mockup quality as other TumaIA template examples.
+- No real brand names, no real prices, no fake logos in logo slot.
+- Clearly different from promotional, launch and product-in-scene layouts.

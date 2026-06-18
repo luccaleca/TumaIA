@@ -18,6 +18,9 @@ function marca(nomeFantasia) {
   return n || null;
 }
 
+const EMPRESA_ATIVA_RE =
+  /\b(em\s+qual\s+empresa|qual\s+empresa\s+(?:estou|to|ativa|selecionada|usando|no\s+painel)|empresa\s+ativa|no\s+workspace)\b/i;
+
 /**
  * @param {string} question
  * @param {string | null} nomeFantasia
@@ -27,6 +30,12 @@ export function tryChatIdentityResponse(question, nomeFantasia = null) {
   const q = String(question || "").trim();
   if (!q) return null;
   const emp = marca(nomeFantasia);
+
+  if (EMPRESA_ATIVA_RE.test(q)) {
+    return emp
+      ? `Você está no workspace da ${emp} — é a empresa ativa na sua conta agora.`
+      : "Ainda não identifiquei a empresa ativa. Abra o painel TumaIA e escolha «Usar no painel» na empresa desejada.";
+  }
 
   if (AGRADECIMENTO_RE.test(q) || classifyPerfilGeralTheme(q) === "AGRADECIMENTO") {
     return emp

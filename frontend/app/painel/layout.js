@@ -142,7 +142,7 @@ function PainelShell({ children }) {
     () => [
       { href: "/painel/chat", label: "Chat", icon: IconChat },
       { href: "/painel/empresa", label: "Empresa", icon: IconEmpresa },
-      { href: "/painel/contextos", label: "Contextos", icon: IconContextos },
+      { href: "/painel/contextos", label: "Modelos de post", icon: IconContextos },
       { href: "/painel/midias", label: "Mídias", icon: IconMidias },
     ],
     [],

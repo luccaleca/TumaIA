@@ -7,7 +7,8 @@
     "testes"
   ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
+    "dev": "concurrently -n wpp,backend,frontend -c yellow,cyan,magenta \"npm run wppconnect:dev\" \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
+    "dev:web": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
     "dev:backend": "npm run dev -w tumaia-backend",
     "dev:backend:stable": "npm run dev:stable -w tumaia-backend",
     "dev:frontend": "npm run dev -w frontend",
@@ -16,10 +17,15 @@
     "test:frontend": "node testes/run-frontend.mjs",
     "test:all": "node testes/run-backend.mjs && node testes/run-frontend.mjs",
     "test:post-supplement": "node --test testes/backend/post-supplement-flow.test.js",
+    "test:post-caption": "node --test testes/backend/post-caption.test.js",
+    "test:post-caption:live": "node backend/scripts/test-post-caption-fixture.mjs",
     "check:replicate": "npm run check:replicate -w tumaia-backend",
     "test:replicate:smoke": "npm run test:replicate:smoke -w tumaia-backend",
     "repertorio:1000": "node backend/scripts/gerar-repertorio-1000.mjs",
-    "repertorio:simular": "node backend/scripts/simular-repertorio-tuma.mjs"
+    "repertorio:simular": "node backend/scripts/simular-repertorio-tuma.mjs",
+    "wppconnect:setup": "node tools/wppconnect/setup.mjs",
+    "wppconnect:dev": "node tools/wppconnect/start.mjs",
+    "wppconnect:session": "node tools/wppconnect/session.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

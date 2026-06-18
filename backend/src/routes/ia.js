@@ -1,11 +1,9 @@
 import { Router } from "express";
 import { z } from "zod";
-import { env } from "../config.js";
 import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { requireUsuario } from "../middleware/requireUsuario.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
-import { ensureChatWorkerReady, runChatSerialized } from "../services/chatPythonWorker.js";
-import { detectImageGenerationIntentFromHistory } from "../services/chatDeliveryUi.js";
+import { processChatMessage } from "../services/processChatMessage.js";
 import { generatePostContextProposal } from "../services/postContextProposalService.js";
 import { loadContextosEmpresaAtivos } from "../services/imagePreviewPrompt.js";
 import {
@@ -19,23 +17,11 @@ import {
   isAllowedImageDownloadUrl,
 } from "../services/imageDownloadUrl.js";
 import { handleImagePreview, handleImageGenerationPlan } from "./ia.imagePreview.js";
-import { tryChatAcervoResponse } from "../services/chatAcervoResponse.js";
-import {
-  guardChatProductAnswer,
-} from "../services/chatProductGuard.js";
-import { sanitizeChatAnswer } from "../services/chatAnswerSanitizer.js";
-import { analyzeChatTurn } from "../services/chatTurnIntent.js";
-import { loadChatFacts } from "../services/chatFacts.js";
-import { buildChatTrainingPromptBlock } from "../services/chatPromptBundle.js";
-import { buildConversaNaturalPromptHint } from "../services/chatConversaNatural.js";
-import { buildPerfilGeralLlmPromptBlock } from "../services/chatPerfilGeralThemes.js";
-import { tryChatCompositeResponse } from "../services/chatCompositeResponse.js";
-import { formatEmpresaInfoAnswer } from "../services/chatEmpresaResponse.js";
-import { formatContextosListAnswer } from "../services/chatContextosResponse.js";
 import {
   CHAT_API_HISTORY_MAX,
   trimChatHistoryForApi,
 } from "../services/chatHistoryLimit.js";
+import { generatePostCaption } from "../services/postCaptionService.js";
 
 const r = Router();
 
@@ -44,7 +30,12 @@ const historyEntrySchema = z.object({
   content: z.string().trim().min(1).max(6000),
 });
 
-const CONFIRM_IMAGE_UI = [{ id: "confirm_generate_image", label: "Gerar prévia da imagem" }];
+const CONFIRM_IMAGE_UI = [{ id: "confirm_generate_image", label: "Gerar imagem" }];
+
+export const POST_IMAGE_UI = [
+  { id: "revise_image", label: "Alterar imagem" },
+  { id: "generate_caption", label: "Gerar legenda" },
+];
 
 const bodySchema = z.object({
   question: z.string().trim().min(1).max(4000),
@@ -82,224 +73,18 @@ r.post("/chat", requireUserJwt, requireUsuario, async (req, res) => {
     return;
   }
 
-  let v;
-  try {
-    const out = await Promise.all([
-      assertEmpresaVinculo(req, parsed.data.id_empresa),
-      ensureChatWorkerReady(),
-    ]);
-    v = out[0];
-  } catch (err) {
-    console.error("[ia/chat] worker não subiu:", err instanceof Error ? err.message : err);
-    res.status(503).json({
-      error:
-        err instanceof Error
-          ? err.message
-          : "IA indisponível. Se mudou o modelo de embedding, apague backend/ia/indice_contextos e reinicie.",
-    });
-    return;
-  }
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
   if (!v.ok) {
     res.status(v.status).json({ error: v.error });
     return;
   }
 
-  try {
-    const db = getSupabaseAdmin();
-    const history = parsed.data.history ?? [];
-    const route_image_generation =
-      Boolean(parsed.data.id_empresa) &&
-      Boolean(db) &&
-      detectImageGenerationIntentFromHistory(history, parsed.data.question);
-
-    let facts = null;
-
-    if (parsed.data.id_empresa && db) {
-      facts = await loadChatFacts(db, parsed.data.id_empresa);
-    }
-
-    const nomeFantasia = facts?.nomeFantasia ?? null;
-    const acervoBundle = facts?.acervo ?? null;
-    const turn = analyzeChatTurn(parsed.data.question, history, { nomeFantasia });
-
-    const postExtras =
-      turn.wantsImageRoute || route_image_generation
-        ? {
-            route_image_generation: true,
-            offer_post_context: true,
-            image_provider: env.IMAGE_PROVIDER || "replicate",
-            image_pipeline: env.IMAGE_PIPELINE || "raw",
-          }
-        : {};
-
-    if (turn.identityAnswer) {
-      res.json({
-        answer: turn.identityAnswer,
-        source_documents: [],
-        chat_route: "identity",
-        chat_topics: turn.topics,
-        ...postExtras,
-      });
-      return;
-    }
-
-    if (turn.outOfScopeAnswer) {
-      res.json({
-        answer: turn.outOfScopeAnswer,
-        source_documents: [],
-        chat_route: "out_of_scope",
-        chat_topics: turn.topics,
-        ...postExtras,
-      });
-      return;
-    }
-
-    if (turn.conversaNaturalAnswer) {
-      res.json({
-        answer: turn.conversaNaturalAnswer,
-        source_documents: [],
-        chat_route: "conversa_natural",
-        chat_topics: turn.topics,
-        ...postExtras,
-      });
-      return;
-    }
-
-    if (parsed.data.id_empresa && db && facts && turn.route === "composite") {
-      const compositeAnswer = await tryChatCompositeResponse({
-        question: parsed.data.question,
-        facts,
-        idEmpresa: parsed.data.id_empresa,
-        db,
-      });
-      if (compositeAnswer) {
-        res.json({
-          answer: compositeAnswer,
-          source_documents: [],
-          chat_route: "composite",
-          chat_topics: turn.topics,
-          ...postExtras,
-        });
-        return;
-      }
-    }
-
-    if (parsed.data.id_empresa && db && facts && turn.route === "empresa") {
-      res.json({
-        answer: formatEmpresaInfoAnswer(facts.empresa),
-        source_documents: [],
-        chat_route: "empresa",
-        chat_topics: turn.topics,
-        ...postExtras,
-      });
-      return;
-    }
-
-    if (parsed.data.id_empresa && db && facts && turn.route === "contextos") {
-      res.json({
-        answer: formatContextosListAnswer(facts.contextos),
-        source_documents: [],
-        chat_route: "contextos",
-        chat_topics: turn.topics,
-        ...postExtras,
-      });
-      return;
-    }
-
-    if (parsed.data.id_empresa && db && turn.route === "acervo" && turn.acervo && acervoBundle) {
-      const acervoAnswer = await tryChatAcervoResponse({
-        question: parsed.data.question,
-        history,
-        idEmpresa: parsed.data.id_empresa,
-        db,
-        midias: acervoBundle.midias,
-        nomeFantasia: acervoBundle.nomeFantasia,
-        classifyIntent: () => turn.acervo,
-      });
-      if (acervoAnswer) {
-        res.json({
-          answer: acervoAnswer,
-          source_documents: [],
-          acervo_query: true,
-          chat_route: "acervo",
-          chat_topics: turn.topics,
-          ...postExtras,
-        });
-        return;
-      }
-    }
-
-    let trainingBlock =
-      facts && turn.includeAcervoInPrompt
-        ? buildChatTrainingPromptBlock({
-            empresa: facts.empresa,
-            contextos: facts.contextos,
-            acervoLabels: acervoBundle?.labels ?? [],
-            nomeFantasia,
-          })
-        : "";
-
-    if (turn.chat_mode === "identidade") {
-      trainingBlock = buildPerfilGeralLlmPromptBlock(nomeFantasia, turn.perfilGeralTheme ?? null);
-    } else if (turn.chat_mode === "conversa_aberta") {
-      const hint = buildConversaNaturalPromptHint(nomeFantasia);
-      trainingBlock = [hint, trainingBlock].filter(Boolean).join("\n\n");
-    }
-
-    const t0 = Date.now();
-    const result = await runChatSerialized({
-      ...parsed.data,
-      history,
-      ...(trainingBlock ? { acervo_context: trainingBlock } : {}),
-      ...(turn.chat_mode ? { chat_mode: turn.chat_mode } : {}),
-    });
-    const elapsedMs = Date.now() - t0;
-    if (elapsedMs > 15_000) {
-      console.info(`[ia/chat] resposta em ${Math.round(elapsedMs / 1000)}s`);
-    }
-
-    if (!result?.ok) {
-      res.status(502).json({ error: result?.error || "Falha na IA" });
-      return;
-    }
-    let answer = String(result.result || "");
-    if (acervoBundle?.midias?.length && turn.needsProductGuard) {
-      answer = guardChatProductAnswer(answer, acervoBundle.midias, acervoBundle.nomeFantasia, {
-        userQuestion: parsed.data.question,
-      });
-    }
-    answer = sanitizeChatAnswer({
-      answer,
-      question: parsed.data.question,
-      history,
-      nomeFantasia: acervoBundle?.nomeFantasia ?? nomeFantasia,
-    });
-    const source_documents = Array.isArray(result.source_documents) ? result.source_documents : [];
-
-    res.json({
-      answer,
-      source_documents,
-      chat_route: turn.route,
-      ...(turn.chat_mode ? { chat_mode: turn.chat_mode } : {}),
-      ...(turn.topics?.length ? { chat_topics: turn.topics } : {}),
-      ...(route_image_generation
-        ? {
-            route_image_generation: true,
-            offer_post_context: true,
-            image_provider: env.IMAGE_PROVIDER || "replicate",
-            image_pipeline: env.IMAGE_PIPELINE || "raw",
-          }
-        : {}),
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Erro ao consultar IA";
-    const timedOut = /tempo esgotado|timed?\s*out/i.test(msg);
-    res.status(timedOut ? 504 : 500).json({
-      error: timedOut
-        ? "A IA demorou mais que o limite configurado. Na primeira mensagem após reiniciar o backend, o índice pode levar vários minutos — aguarde e tente de novo."
-        : msg,
-    });
+  const out = await processChatMessage(parsed.data);
+  if (!out.ok) {
+    res.status(out.status).json({ error: out.error });
+    return;
   }
+  res.json(out.data);
 });
 
 const postContextProposalBodySchema = z.object({
@@ -315,6 +100,24 @@ const postContextProposalBodySchema = z.object({
     .transform((arr) => trimChatHistoryForApi(arr) ?? []),
   id_empresa: z.string().uuid(),
   arte_brief: z.record(z.string(), z.unknown()).optional(),
+  focus_contexto_id: z.string().uuid().optional(),
+  reference_midia_ids: z.array(z.string().uuid()).max(4).optional(),
+});
+
+const postCaptionBodySchema = z.object({
+  history: z
+    .array(
+      z.object({
+        role: z.enum(["user", "assistant"]),
+        content: z.string().trim().min(1).max(8000),
+      }),
+    )
+    .min(1)
+    .max(CHAT_API_HISTORY_MAX * 3)
+    .transform((arr) => trimChatHistoryForApi(arr) ?? []),
+  id_empresa: z.string().uuid(),
+  post_context_proposal: z.record(z.string(), z.unknown()).optional(),
+  limite_hashtags: z.coerce.number().int().min(3).max(30).optional(),
 });
 
 const arteBriefDefaultsQuerySchema = z.object({
@@ -384,6 +187,8 @@ r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res
       idEmpresa: parsed.data.id_empresa,
       db,
       arteBriefDraft: parsed.data.arte_brief,
+      attachmentMidiaIds: parsed.data.reference_midia_ids,
+      focusContextoId: parsed.data.focus_contexto_id,
     });
     const ready = out.briefing_status !== "collecting";
     res.json({
@@ -399,6 +204,44 @@ r.post("/post-context-proposal", requireUserJwt, requireUsuario, async (req, res
     const msg = err instanceof Error ? err.message : "Erro ao montar confirmação de contexto";
     const status = err?.status && Number(err.status) >= 400 && Number(err.status) < 600 ? Number(err.status) : 500;
     res.status(status).json({ error: msg });
+  }
+});
+
+/** Legenda + hashtags após prévia da imagem. */
+r.post("/post-caption", requireUserJwt, requireUsuario, async (req, res) => {
+  const parsed = postCaptionBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+
+  try {
+    const out = await generatePostCaption({
+      history: parsed.data.history,
+      idEmpresa: parsed.data.id_empresa,
+      db,
+      postContextProposal: parsed.data.post_context_proposal,
+      limiteHashtags: parsed.data.limite_hashtags,
+    });
+    res.json(out);
+  } catch (err) {
+    const status =
+      err?.status && Number(err.status) >= 400 && Number(err.status) < 600 ? Number(err.status) : 500;
+    res.status(status).json({
+      error: err instanceof Error ? err.message : "Erro ao gerar legenda",
+    });
   }
 });
 

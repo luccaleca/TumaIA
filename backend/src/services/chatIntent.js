@@ -5,6 +5,24 @@
 import { isIdentityOrMetaQuestion } from "./chatOffTopic.js";
 import { parseProductMentionSpec } from "./productMentionMatch.js";
 
+/** Adjetivos de status — não são nomes de produto no acervo. */
+const ACERVO_STATUS_WORDS = new Set([
+  "ativo",
+  "ativa",
+  "ativos",
+  "ativas",
+  "disponivel",
+  "disponiveis",
+  "cadastrado",
+  "cadastrada",
+  "cadastrados",
+  "cadastradas",
+  "habilitado",
+  "habilitada",
+  "habilitados",
+  "habilitadas",
+]);
+
 /**
  * @param {string} q — já normalizado (sem acento, minúsculo)
  */
@@ -33,6 +51,30 @@ function isGenericCatalogPhrase(termo) {
   if (/^temos(\s+de\s+produtos?)?$/.test(t)) return true;
   if (/^(no\s+)?(acervo|catalogo|midias?)$/.test(t)) return true;
   if (/^cadastrad[oa]s?$/.test(t)) return true;
+  if (ACERVO_STATUS_WORDS.has(t)) return true;
+  return false;
+}
+
+/**
+ * Pergunta sobre modelos/playbooks de post (não confundir com produto no acervo).
+ * @param {string} text
+ */
+export function isPostModelosQuestion(text) {
+  const q = normalizeForIntent(text);
+  if (!q) return false;
+
+  if (/\b(modelos?\s+de\s+post|modelos?\s+post|playbooks?|templates?\s+de\s+post)\b/.test(q)) {
+    return true;
+  }
+  if (/\b(quais|que)\s+modelos?\b/.test(q) && /\b(post|campanha|layout|arte|ativos?)\b/.test(q)) {
+    return true;
+  }
+  if (/\bcontextos?\s+ativos?\b/.test(q) && !/\bprodutos?\b/.test(q)) {
+    return true;
+  }
+  if (/\b(quais|que)\s+(?:tem|temos|ha)\s+ativos?\b/.test(q) && /\bmodelos?\b/.test(q)) {
+    return true;
+  }
   return false;
 }
 
@@ -119,6 +161,7 @@ export function historySuggestsCatalogListing(history = []) {
  * @param {Array<{ role: string, content: string }>} history
  */
 function wantsFilteredProductList(raw, history = []) {
+  if (isPostModelosQuestion(raw)) return false;
   if (!historySuggestsCatalogListing(history)) return false;
 
   const filtro = extractAcervoListFilter(raw);
@@ -201,7 +244,7 @@ export function extractAcervoListFilter(question) {
  */
 export function classifyChatAcervoIntent(question, history = []) {
   const raw = String(question || "").trim();
-  if (!raw || isIdentityOrMetaQuestion(raw)) {
+  if (!raw || isIdentityOrMetaQuestion(raw) || isPostModelosQuestion(raw)) {
     return { kind: "NONE", termo: null };
   }
 
@@ -230,7 +273,17 @@ export function classifyChatAcervoIntent(question, history = []) {
       .replace(/\?.*$/, "")
       .replace(/\b(no\s+acervo|em\s+midias?|disponivel|disponiveis)\b/g, "")
       .trim();
-    if (termo.length >= 2 && !/^(isso|aquilo|la|aqui)$/.test(termo) && !isGenericCatalogPhrase(termo)) {
+    const termoNorm = termo
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+    if (
+      termo.length >= 2 &&
+      !/^(isso|aquilo|la|aqui)$/.test(termo) &&
+      !isGenericCatalogPhrase(termo) &&
+      !ACERVO_STATUS_WORDS.has(termoNorm)
+    ) {
       return { kind: "INFO_PRODUTO", termo };
     }
   }
