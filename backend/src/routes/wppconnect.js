@@ -4,6 +4,7 @@ import { handleWppconnectWebhook } from "../services/whatsappBridge.js";
 import {
   isWppconnectEnabled,
   wppconnectCheckSession,
+  ensureWppconnectSession,
 } from "../services/wppconnectClient.js";
 
 const r = Router();
@@ -56,11 +57,29 @@ r.get("/status", async (_req, res) => {
   res.json({
     enabled: true,
     session: session.session,
-    connected: session.ok,
+    connected: Boolean(session.ok),
     connection_status: session.status,
     error: session.error,
     webhook_path: "/wppconnect/webhook",
     auth_mode: "usuario_telefone_e_workspace",
+    hint: session.ok
+      ? undefined
+      : "Rode npm run wppconnect:dev e depois npm run wppconnect:session — ou POST /wppconnect/recover",
+  });
+});
+
+/** Força fechar + reabrir sessão zumbi (browser fechou). */
+r.post("/recover", async (_req, res) => {
+  if (!isWppconnectEnabled()) {
+    res.status(503).json({ error: "WPPCONNECT_ENABLED não está ativo." });
+    return;
+  }
+  const session = await ensureWppconnectSession({ force: true });
+  res.status(session.ok ? 200 : 503).json({
+    connected: Boolean(session.ok),
+    session: session.session,
+    connection_status: session.status,
+    error: session.error,
   });
 });
 

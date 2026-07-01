@@ -1,5 +1,8 @@
 import { env } from "../config.js";
+import { fetchImageBuffer } from "./llamaVisionImage.js";
 import { normalizeWhatsappPhone, isPlausibleAuthPhone } from "./whatsappPhoneAuth.js";
+
+const WPP_API_TIMEOUT_MS = 120_000;
 
 function formatRecipient(raw) {
   const s = String(raw || "").trim();
@@ -41,9 +44,33 @@ export function clearWppconnectTokenCache() {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
-  const payload = await response.json().catch(() => ({}));
-  return { response, payload };
+  const timeoutMs = Number(options.timeoutMs) || 0;
+  const { timeoutMs: _drop, ...fetchOpts } = options;
+  let timer;
+  try {
+    if (timeoutMs > 0) {
+      const ac = new AbortController();
+      timer = setTimeout(() => ac.abort(), timeoutMs);
+      fetchOpts.signal = ac.signal;
+    }
+    const response = await fetch(url, fetchOpts);
+    const payload = await response.json().catch(() => ({}));
+    return { response, payload };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * @param {string} recipient
+ */
+function buildOutboundPhoneBody(recipient) {
+  const phone = formatRecipient(recipient);
+  return {
+    phone,
+    isGroup: false,
+    isLid: /@lid$/i.test(phone),
+  };
 }
 
 /**
@@ -95,22 +122,27 @@ export async function getWppconnectToken() {
  * @param {string} message
  */
 export async function wppconnectSendText(recipient, message) {
+  const session = await ensureWppconnectSession();
+  if (!session.ok) {
+    return { ok: false, error: session.error || "WhatsApp desconectado." };
+  }
+
   const token = await getWppconnectToken();
-  const phone = formatRecipient(recipient);
+  const phoneBody = buildOutboundPhoneBody(recipient);
   const text = String(message || "").trim();
-  if (!phone || !text) return { ok: false, error: "Telefone ou mensagem vazios." };
+  if (!phoneBody.phone || !text) return { ok: false, error: "Telefone ou mensagem vazios." };
 
   const url = `${baseUrl()}/api/${encodeURIComponent(sessionName())}/send-message`;
   const { response, payload } = await fetchJson(url, {
     method: "POST",
+    timeoutMs: 60_000,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      phone,
-      isGroup: false,
+      ...phoneBody,
       message: text,
     }),
   });
@@ -132,22 +164,45 @@ export async function wppconnectSendText(recipient, message) {
  * @param {string} [caption]
  */
 export async function wppconnectSendImageUrl(recipient, imageUrl, caption = "") {
+  const session = await ensureWppconnectSession();
+  if (!session.ok) {
+    return { ok: false, error: session.error || "WhatsApp desconectado." };
+  }
+
   const token = await getWppconnectToken();
-  const phone = formatRecipient(recipient);
+  const phoneBody = buildOutboundPhoneBody(recipient);
   const path = String(imageUrl || "").trim();
-  if (!phone || !path) return { ok: false, error: "Telefone ou URL da imagem vazios." };
+  if (!phoneBody.phone || !path) return { ok: false, error: "Telefone ou URL da imagem vazios." };
+
+  /** @type {{ base64?: string, path?: string }} */
+  let filePayload = { path };
+  try {
+    const { buffer, mime } = await fetchImageBuffer(path, {
+      maxBytes: 8 * 1024 * 1024,
+      timeoutMs: 90_000,
+    });
+    filePayload = {
+      base64: `data:${mime};base64,${buffer.toString("base64")}`,
+    };
+  } catch (err) {
+    console.warn(
+      "[wppconnect] download da imagem falhou — tentando URL direta no WPP:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 
   const url = `${baseUrl()}/api/${encodeURIComponent(sessionName())}/send-file`;
   const { response, payload } = await fetchJson(url, {
     method: "POST",
+    timeoutMs: WPP_API_TIMEOUT_MS,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
       Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify({
-      phone,
-      path,
+      ...phoneBody,
+      ...filePayload,
       caption: String(caption || "").trim() || undefined,
       filename: "tumaia-post.png",
     }),
@@ -228,6 +283,107 @@ export async function wppconnectResolvePnLid(pnLid) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function wppconnectWebhookUrl() {
+  const port = env.PORT || 4000;
+  return `http://localhost:${port}/wppconnect/webhook`;
+}
+
+/** @type {number} */
+let lastRecoverAt = 0;
+const RECOVER_COOLDOWN_MS = 45_000;
+/** @type {Promise<{ ok: boolean, session?: string, status?: string, error?: string }> | null} */
+let recoverInFlight = null;
+
+async function wppconnectCloseSessionInternal() {
+  const token = await getWppconnectToken();
+  const url = `${baseUrl()}/api/${encodeURIComponent(sessionName())}/close-session`;
+  await fetchJson(url, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  }).catch(() => ({}));
+}
+
+async function wppconnectStartSessionInternal() {
+  const token = await getWppconnectToken();
+  const url = `${baseUrl()}/api/${encodeURIComponent(sessionName())}/start-session`;
+  await fetchJson(url, {
+    method: "POST",
+    timeoutMs: 120_000,
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ webhook: wppconnectWebhookUrl() }),
+  });
+}
+
+/**
+ * Reabre sessão zumbi (browser fechou mas status-session ainda diz CONNECTED).
+ * @param {{ force?: boolean }} [opts]
+ */
+export async function ensureWppconnectSession(opts = {}) {
+  const check = await wppconnectCheckSession();
+  if (check.ok) return check;
+
+  const force = Boolean(opts.force);
+  const now = Date.now();
+  if (!force && now - lastRecoverAt < RECOVER_COOLDOWN_MS) {
+    return check;
+  }
+
+  if (recoverInFlight) return recoverInFlight;
+
+  recoverInFlight = (async () => {
+    lastRecoverAt = Date.now();
+    console.warn("[wppconnect] sessão inativa — fechando e reiniciando…");
+    try {
+      await wppconnectCloseSessionInternal();
+      await sleep(1500);
+      await wppconnectStartSessionInternal();
+
+      for (let i = 0; i < 40; i++) {
+        await sleep(3000);
+        const again = await wppconnectCheckSession();
+        if (again.ok) {
+          console.info("[wppconnect] sessão recuperada");
+          return again;
+        }
+      }
+      return await wppconnectCheckSession();
+    } catch (err) {
+      return {
+        ok: false,
+        session: sessionName(),
+        error: err instanceof Error ? err.message : "Falha ao recuperar sessão WPPConnect",
+      };
+    } finally {
+      recoverInFlight = null;
+    }
+  })();
+
+  return recoverInFlight;
+}
+
+/** @param {unknown} payload */
+function isWppconnectPayloadConnected(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const p = /** @type {{ status?: unknown; message?: unknown }} */ (payload);
+  if (p.status === true) return true;
+  if (p.status === false) return false;
+  const msg = String(p.message || "").trim().toLowerCase();
+  if (msg === "connected" || msg === "inchat") return true;
+  if (msg === "disconnected" || msg === "closed") return false;
+  return false;
+}
+
 /**
  * @returns {Promise<{ ok: boolean, session?: string, status?: string, error?: string }>}
  */
@@ -245,12 +401,16 @@ export async function wppconnectCheckSession() {
         Authorization: `Bearer ${token}`,
       },
     });
-    const status = String(payload?.status || payload?.message || "").trim();
+    const message = String(
+      (payload && typeof payload === "object" && "message" in payload ? payload.message : "") || "",
+    ).trim();
+    const connected = response.ok && isWppconnectPayloadConnected(payload);
+    const status = message || (connected ? "Connected" : "Disconnected");
     return {
-      ok: response.ok,
+      ok: connected,
       session: sessionName(),
-      status: status || (response.ok ? "connected" : "unknown"),
-      error: response.ok ? undefined : status || `HTTP ${response.status}`,
+      status,
+      error: connected ? undefined : message || `HTTP ${response.status}`,
     };
   } catch (err) {
     return {

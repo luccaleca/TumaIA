@@ -6,6 +6,33 @@ import {
   resgatarBody,
   cargoApiDeUsuarioEmpresa,
 } from "./shared.js";
+import { saveUsuarioEmpresaUltima } from "../auth/usuarioEmpresaUltimaService.js";
+
+/**
+ * Define a empresa recém-entrada como workspace ativo (painel + WhatsApp).
+ * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+ * @param {string} idUsuario
+ * @param {string} idEmpresa
+ */
+async function ativarWorkspaceAposConvite(supabase, idUsuario, idEmpresa) {
+  try {
+    const out = await saveUsuarioEmpresaUltima(supabase, idUsuario, idEmpresa);
+    if (!out.ok) {
+      console.warn(
+        "[convite] membro vinculado mas falhou ao definir workspace ativo:",
+        out.error,
+      );
+      return null;
+    }
+    return idEmpresa;
+  } catch (err) {
+    console.warn(
+      "[convite] erro ao definir workspace ativo:",
+      err instanceof Error ? err.message : err,
+    );
+    return null;
+  }
+}
 
 /**
  * Resgata convite por código (POST /empresas/convites/resgatar).
@@ -63,6 +90,7 @@ export async function executarResgateConvite(supabase, idUsuario, rawBody) {
     .maybeSingle();
 
   if (jaMembro?.ativo) {
+    const idEmpresaUltima = await ativarWorkspaceAposConvite(supabase, idUsuario, conv.id_empresa);
     return {
       ok: true,
       status: 200,
@@ -70,7 +98,8 @@ export async function executarResgateConvite(supabase, idUsuario, rawBody) {
         ja_membro: true,
         empresa,
         papel: jaMembro.cargo,
-        mensagem: "Você já faz parte desta empresa.",
+        id_empresa_ultima: idEmpresaUltima,
+        mensagem: "Você já faz parte desta empresa. Workspace ativo para o painel e WhatsApp.",
       },
     };
   }
@@ -127,13 +156,16 @@ export async function executarResgateConvite(supabase, idUsuario, rawBody) {
     };
   }
 
+  const idEmpresaUltima = await ativarWorkspaceAposConvite(supabase, idUsuario, conv.id_empresa);
+
   return {
     ok: true,
     status: 201,
     body: {
       empresa,
       papel: membroPayload.cargo,
-      mensagem: `Você entrou em ${empresa.nome_fantasia || "empresa"}.`,
+      id_empresa_ultima: idEmpresaUltima,
+      mensagem: `Você entrou em ${empresa.nome_fantasia || "empresa"}. Esta empresa está ativa no painel e no WhatsApp.`,
     },
   };
 }

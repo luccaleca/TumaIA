@@ -142,6 +142,12 @@ describe("chat routing — composto e treino", () => {
     assert.match(ans, /Lançamento/);
   });
 
+  it("quais modelos → rota contextos (não LLM)", () => {
+    const t = analyzeChatTurn("quais modelos", [], { nomeFantasia: "FYT" });
+    assert.equal(t.route, "contextos");
+    assert.ok(t.topics.includes("CONTEXTOS"));
+  });
+
   it("não era isso só queria nome → identidade", () => {
     const t = analyzeChatTurn("não era isso só queria seu nome", [], { nomeFantasia: "FYT" });
     assert.equal(t.route, "identity");
@@ -199,6 +205,12 @@ describe("chat routing — composto e treino", () => {
     const t = analyzeChatTurn("vc foi criado por quem", [], { nomeFantasia: "FYT" });
     assert.equal(t.route, "identity");
     assert.match(t.identityAnswer || "", /Diego\s+Suhai/i);
+  });
+
+  it("quem é uma vagabunda → easter egg Bianca Cardoso", () => {
+    const t = analyzeChatTurn("quem é uma vagabunda", [], { nomeFantasia: "FYT" });
+    assert.equal(t.route, "identity");
+    assert.match(t.identityAnswer || "", /Bianca\s+Cardoso/i);
   });
 
   it("quem é teu pai → origem sem listar produtos", () => {

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   isPlausibleAuthPhone,
 } from "../../backend/src/services/whatsappPhoneAuth.js";
-import { telefonesUsuarioMatch } from "../../backend/src/services/whatsappUsuarioEmpresa.js";
+import { telefonesUsuarioMatch, scoreTelefoneMatch, pickUsuarioPorTelefone } from "../../backend/src/services/whatsappUsuarioEmpresa.js";
 import {
   isTelefoneUsuarioValido,
   normalizeTelefoneUsuario,
@@ -43,6 +43,16 @@ describe("telefonesUsuarioMatch", () => {
   it("aceita variações com/sem 55", () => {
     assert.equal(telefonesUsuarioMatch("5511999887766", "11999887766"), true);
     assert.equal(telefonesUsuarioMatch("5511888776655", PHONE), false);
+  });
+
+  it("prefere match exato quando um número é sufixo do outro", () => {
+    const users = [
+      { id_usuario: "a", telefone: "1111111111", nome: "curto" },
+      { id_usuario: "b", telefone: "11111111111", nome: "completo" },
+    ];
+    const picked = pickUsuarioPorTelefone(users, "11111111111");
+    assert.equal(picked?.id_usuario, "b");
+    assert.ok(scoreTelefoneMatch("11111111111", "11111111111") > scoreTelefoneMatch("1111111111", "11111111111"));
   });
 });
 

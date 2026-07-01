@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX, uploadImagemIdentidade } from "../../../lib/identidadeMarcaUi";
+import ConfirmModal from "../../components/ConfirmModal";
 
 const BTN =
   "rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60";
@@ -32,6 +33,7 @@ export default function IdentidadeMarcaLogoField({
 }) {
   const inputRef = useRef(null);
   const [busyUpload, setBusyUpload] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const busy = busyUpload || busyParent;
 
   const logoMidia = idMidiaLogo
@@ -59,9 +61,9 @@ export default function IdentidadeMarcaLogoField({
     }
   }
 
-  async function handleRemove() {
+  async function confirmRemoveLogo() {
     if (!canEdit || busy || !idMidiaLogo || !onRemove) return;
-    if (typeof window !== "undefined" && !window.confirm("Remover a logo da identidade da marca?")) return;
+    setRemoveConfirmOpen(false);
     try {
       await onRemove();
     } catch (err) {
@@ -129,7 +131,7 @@ export default function IdentidadeMarcaLogoField({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => void handleRemove()}
+                  onClick={() => setRemoveConfirmOpen(true)}
                   className="text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
                 >
                   {busyParent && !busyUpload ? "Removendo…" : "Remover logo"}
@@ -139,6 +141,16 @@ export default function IdentidadeMarcaLogoField({
           </div>
         ) : null}
       </div>
+      <ConfirmModal
+        open={removeConfirmOpen}
+        onClose={() => !busy && setRemoveConfirmOpen(false)}
+        title="Remover logo"
+        description="Remover a logo da identidade da marca?"
+        confirmLabel="Remover logo"
+        onConfirm={confirmRemoveLogo}
+        busy={busyParent && !busyUpload}
+        variant="danger"
+      />
     </div>
   );
 }

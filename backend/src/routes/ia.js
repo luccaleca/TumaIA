@@ -22,6 +22,7 @@ import {
   trimChatHistoryForApi,
 } from "../services/chatHistoryLimit.js";
 import { generatePostCaption } from "../services/postCaptionService.js";
+import { publishToInstagramViaN8n } from "../services/instagramPublishService.js";
 
 const r = Router();
 
@@ -313,6 +314,69 @@ r.post("/image-preview/plan", requireUserJwt, requireUsuario, async (req, res) =
     return;
   }
   await handleImageGenerationPlan(req, res, db, assertEmpresaVinculo);
+});
+
+const publishInstagramBodySchema = z.object({
+  id_empresa: z.string().uuid(),
+  caption: z.string().trim().min(1).max(2200),
+  image_storage_path: z.string().trim().min(3).max(500).optional(),
+  image_url: z.string().url().max(4000).optional(),
+  client_id: z.string().trim().min(1).max(64).optional(),
+}).superRefine((data, ctx) => {
+  if (!data.image_storage_path?.trim() && !data.image_url?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Informe image_storage_path ou image_url",
+      path: ["image_storage_path"],
+    });
+  }
+});
+
+/** Publica post no Instagram via n8n (imagem pública no Supabase + legenda). */
+r.post("/publish-instagram", requireUserJwt, requireUsuario, async (req, res) => {
+  const parsed = publishInstagramBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+
+  try {
+    const out = await publishToInstagramViaN8n(db, {
+      idEmpresa: parsed.data.id_empresa,
+      caption: parsed.data.caption,
+      imageStoragePath: parsed.data.image_storage_path,
+      imageUrl: parsed.data.image_url,
+      clientId: parsed.data.client_id,
+    });
+    if (!out.ok) {
+      res.status(out.status || 500).json({ error: out.error, ...(out.n8n_response ? { n8n: out.n8n_response } : {}) });
+      return;
+    }
+    res.json({
+      success: true,
+      message: out.message,
+      instagram_media_id: out.instagram_media_id,
+      image_url: out.image_url,
+      storage_path: out.storage_path,
+    });
+  } catch (err) {
+    console.error("[ia/publish-instagram]", err);
+    res.status(500).json({
+      error: err instanceof Error ? err.message : "Erro ao publicar no Instagram.",
+    });
+  }
 });
 
 export default r;

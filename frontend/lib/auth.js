@@ -203,7 +203,11 @@ export async function authApiFetch(path, opts = {}) {
         networkError: new Error(messageForFetchTimeout(timeoutMs, timeoutLabel)),
       };
     }
-    return { ok: false, status: 0, json: null, networkError: err };
+    const friendly =
+      /fetch failed|Failed to fetch|ECONNREFUSED|ENOTFOUND|network/i.test(String(err?.message || ""))
+        ? new Error("Não consegui falar com o servidor. Verifique se o backend está rodando (npm run dev).")
+        : err;
+    return { ok: false, status: 0, json: null, networkError: friendly };
   }
 }
 

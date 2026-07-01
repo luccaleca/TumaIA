@@ -13,8 +13,12 @@ const POST_WITH_ACTION =
 
 const PEDIDO_META_NAO_ARTE = /\bfazer\s+um\s+pedido\b|\bpedido\s+de\s+(um|uma)\s+post(agem)?\b/i;
 
+/** Pedido com modelo de post + produto/cena (ex.: «postagem no modelo de produto com whey…»). */
+const POST_MODEL_CREATE_REQUEST =
+  /\b(post(agem|ar)?|arte|imagem)\b.{0,48}\bmodelo\s+de\s+(produto|promo[cç][aã]o|lan[cç]amento|mensagens?)\b|\bmodelo\s+de\s+(produto|promo[cç][aã]o|lan[cç]amento|mensagens?)\b.{0,48}\b(com|do|da|usando|whey|creatina|produto)\b|\bgostaria\s+de\s+(uma\s+)?post(agem|ar)?\b/i;
+
 const EXPLICIT_CREATE_REQUEST =
-  /\b(quero|preciso|vamos|bora)\s+(de\s+)?(fazer|criar|montar|gerar|publicar)\s+(um|uma|minha|meu)?\s*(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+(um|uma|minha|meu)\s+(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(gera|gerar|monta|montar|cria|criar|faz|faça|manda|mandar)\s+(um|uma|a|o|minha|meu|pra|para|meu|minha)?\s*(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\bfazer\s+(um|uma)\s+(arte|imagem|post(agem)?|banner|flyer)\b|\bme\s+ajuda\s+a\s+(fazer|criar|montar|gerar|publicar)\s+(um|uma)?\s*(arte|imagem|post(agem)?|banner)?\b|\bcri(e|ar)\s+(um|uma)\s+(arte|imagem|post(agem)?|visual)\b|\bmont(a|ar)\s+(um|uma|a)\s+(arte|imagem|post(agem)?|banner)\b|\bgera(r|ç)[aã]o\s+(de\s+)?(imagem|arte|visual)\b|\bgera(r)?\s+imagem\b|\bimagem\s+(para|de|com)\b/i;
+  /\b(quero|preciso|vamos|bora|gostaria\s+de)\s+(de\s+)?(fazer|criar|montar|gerar|publicar|uma?)?\s*(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+(um|uma|minha|meu)\s+(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(gera|gerar|monta|montar|cria|criar|faz|faça|manda|mandar)\s+(um|uma|a|o|minha|meu|pra|para|meu|minha)?\s*(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\bfazer\s+(um|uma)\s+(arte|imagem|post(agem)?|banner|flyer)\b|\bme\s+ajuda\s+a\s+(fazer|criar|montar|gerar|publicar)\s+(um|uma)?\s*(arte|imagem|post(agem)?|banner)?\b|\bcri(e|ar)\s+(um|uma)\s+(arte|imagem|post(agem)?|visual)\b|\bmont(a|ar)\s+(um|uma|a)\s+(arte|imagem|post(agem)?|banner)\b|\bgera(r|ç)[aã]o\s+(de\s+)?(imagem|arte|visual)\b|\bgera(r)?\s+imagem\b|\bimagem\s+(para|de|com)\b|\bpode\s+fazer\b.{0,40}\b(pessoa|academia|usando|produto|arte|imagem|post)\b/i;
 
 const META_OR_HYPOTHETICAL_PATTERNS = [
   /\bse\s+eu\s+(fizer|pedir|quiser|for|puder|montar|criar|fazer|solicitar)\b/i,
@@ -45,7 +49,18 @@ const CONVERSATIONAL_ONLY =
   /^(oi+|ol[aá]+|opa+|e\s*a[ií]+|bom\s+dia|boa\s+tarde|boa\s+noite|tudo\s+bem|blz+|ok[!.,?\s]*$|teste+)\b|quem\s+(é|e)\s+(você|voce|vc|tu)\b|o\s+que\s+(é|e)\s+(você|voce|vc|tu|isso)\b|como\s+(você|voce|vc)\s+funciona|qual\s+(é|e)\s+seu\s+nome|qual\s+seu\s+nome|me\s+(fala|conta)\s+sobre\s+(você|voce|vc)|o\s+que\s+você\s+faz|o\s+que\s+voce\s+faz|quem\s+é\s+(o\s+)?(tuma|bot|assistente)|^(ajuda|help)\b/i;
 
 const ASSISTANT_IMAGE_OFFER =
-  /(posso|quer\s+que\s+eu|vamos)\s+(montar|gerar|criar|fazer).{0,40}(arte|imagem|post|pr[eé]via|visual)|gerar\s+(a\s+)?pr[eé]via|confirma(r)?\s+(a\s+)?(arte|imagem|post)|resumo\s+do\s+pedido\s+para\s+a\s+arte/i;
+  /(posso|quer\s+que\s+eu|vamos)\s+(montar|gerar|criar|fazer).{0,40}(arte|imagem|post|pr[eé]via|visual)|gerar\s+(a\s+)?pr[eé]via|confirma(r)?\s+(a\s+)?(arte|imagem|post)|resumo\s+do\s+pedido\s+para\s+a\s+arte|monta\s+a\s+arte\s+com|modelos?\s+de\s+post\s+ativos?|layout\s+desse\s+modelo|qual\s+tipo\s+combina/i;
+
+/** Assistente enviou resumo de confirmação de post — correção do cliente reabre briefing. */
+const ASSISTANT_POST_BRIEFING =
+  /confira se entendi certo|modelo de post|resumo do pedido|gerar imagem para criar/i;
+
+/** Assistente listou modelos de post — resposta seguinte pode ser o pedido. */
+const ASSISTANT_POST_MODEL_LIST =
+  /modelos?\s+de\s+post|monta\s+a\s+arte\s+com|layout\s+desse\s+modelo|qual\s+tipo\s+combina/i;
+
+const POST_BRIEFING_CORRECTION =
+  /^(n[aã]o\s+(est[aá]|t[aá])\s+corret|errado|n[aã]o\s+[eé]\s+isso|n[aã]o\s+era\s+isso|ta\s+errado|est[aá]\s+errado)/i;
 
 const SHORT_CONFIRM =
   /^(sim|ok|pode|gera|gerar|manda|faz|faça|confirmo|confirmar|bora|vai)\b/i;
@@ -93,9 +108,55 @@ export function hasExplicitCreateRequest(text) {
   const q = String(text || "").trim();
   if (!q) return false;
   if (PEDIDO_META_NAO_ARTE.test(q)) return false;
+  if (POST_MODEL_CREATE_REQUEST.test(q)) return true;
   if (EXPLICIT_CREATE_REQUEST.test(q)) return true;
-  if (POST_WITH_ACTION.test(q) && /\b(quero|preciso|agora|hoje|bora|vamos)\b/i.test(q)) return true;
+  if (POST_WITH_ACTION.test(q) && /\b(quero|preciso|agora|hoje|bora|vamos|gostaria)\b/i.test(q)) return true;
   return false;
+}
+
+/**
+ * Resposta após o assistente listar modelos de post — pedido com produto ou cena.
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {string} text
+ */
+export function isPostModelBriefingFollowUp(history, text) {
+  const q = String(text || "").trim();
+  if (!q || q.length < 12) return false;
+  if (isPostDeliveryTypedCommand(q) || isImageRevisionRequest(q)) return false;
+  if (isConversationalMessage(q) || isMetaOrHypotheticalQuestion(q)) return false;
+
+  const h = Array.isArray(history) ? history : [];
+  const lastAssistant = [...h].reverse().find((m) => m.role === "assistant");
+  if (
+    !lastAssistant ||
+    typeof lastAssistant.content !== "string" ||
+    !ASSISTANT_POST_MODEL_LIST.test(lastAssistant.content)
+  ) {
+    return false;
+  }
+
+  return (
+    POST_MODEL_CREATE_REQUEST.test(q) ||
+    /\bmodelo\s+de\s+(produto|promo[cç][aã]o|lan[cç]amento)\b/i.test(q) ||
+    /\b(whey|creatina|protein|produto|academia|pessoa|usando|embalagem|png)\b/i.test(q)
+  );
+}
+
+/**
+ * Cliente corrigiu o resumo de confirmação — remontar briefing sem LLM.
+ * @param {Array<{ role: string, content: string }>} history
+ * @param {string} text
+ */
+export function isPostBriefingCorrectionFollowUp(history, text) {
+  const q = String(text || "").trim();
+  if (!POST_BRIEFING_CORRECTION.test(q)) return false;
+  const h = Array.isArray(history) ? history : [];
+  const lastAssistant = [...h].reverse().find((m) => m.role === "assistant");
+  return Boolean(
+    lastAssistant &&
+      typeof lastAssistant.content === "string" &&
+      ASSISTANT_POST_BRIEFING.test(lastAssistant.content),
+  );
 }
 
 /**
@@ -156,6 +217,8 @@ export function detectImageGenerationIntent(text) {
  */
 export function detectImageGenerationIntentFromHistory(history, latestUserText) {
   if (detectImageGenerationIntent(latestUserText)) return true;
+  if (isPostModelBriefingFollowUp(history, latestUserText)) return true;
+  if (isPostBriefingCorrectionFollowUp(history, latestUserText)) return true;
 
   const h = Array.isArray(history) ? history : [];
   const lastAssistant = [...h].reverse().find((m) => m.role === "assistant");

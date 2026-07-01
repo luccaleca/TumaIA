@@ -10,6 +10,7 @@ import EmpresaWorkspaceCard from "./EmpresaWorkspaceCard";
 import EmpresaUsoToggle from "./EmpresaUsoToggle";
 import EmpresaDadosSection from "./EmpresaDadosSection";
 import EmpresaMembrosSection from "./EmpresaMembrosSection";
+import EmpresaAcoesInicio from "./EmpresaAcoesInicio";
 import EmpresaFormulario from "./EmpresaFormulario";
 import {
   emptyEmpresaFields,
@@ -58,12 +59,13 @@ export default function EmpresaPage() {
   const [empresaEditOpen, setEmpresaEditOpen] = useState(false);
   const [criandoNovaEmpresa, setCriandoNovaEmpresa] = useState(false);
   const [conviteCodigo, setConviteCodigo] = useState("");
-  const [conviteExpiraEm, setConviteExpiraEm] = useState("");
   const [creatingConvite, setCreatingConvite] = useState(false);
   const [conviteModalOpen, setConviteModalOpen] = useState(false);
   const [conviteCargo, setConviteCargo] = useState("membro");
-  const [conviteEmail, setConviteEmail] = useState("");
   const [membroToRemove, setMembroToRemove] = useState(null);
+  const [codigoEntradaConvite, setCodigoEntradaConvite] = useState("");
+  const [resgatandoConvite, setResgatandoConvite] = useState(false);
+  const [entrandoComConvite, setEntrandoComConvite] = useState(false);
   const empresaIdRef = useRef(null);
   const [empresaAtivaPainelId, setEmpresaAtivaPainelId] = useState(null);
 
@@ -77,7 +79,6 @@ export default function EmpresaPage() {
   }, []);
 
   const hasEmpresa = useMemo(() => Boolean(empresaId), [empresaId]);
-  const podeAdicionarOutraEmpresa = useMemo(() => empresasMinhas.length >= 1, [empresasMinhas.length]);
 
   const canEditEmpresa = useMemo(() => {
     if (criandoNovaEmpresa) return true;
@@ -165,10 +166,7 @@ export default function EmpresaPage() {
         applyMinhasPayload(result.json, { autoSelectFirst: false, selectRow: false });
         const vazia = !Array.isArray(result.json?.empresas) || result.json.empresas.length === 0;
         if (vazia) {
-          setMsg(
-            "Nenhuma empresa vinculada a este usuário. Cadastre abaixo ou confira no banco se o vínculo em usuario_empresa está ativo (ativo = true).",
-          );
-          setMsgKind("err");
+          setMsg("");
         }
       } else {
         setMsg(
@@ -229,12 +227,12 @@ export default function EmpresaPage() {
   }
 
   function onNovaEmpresa() {
+    setEntrandoComConvite(false);
     setCriandoNovaEmpresa(true);
     setEmpresaEditOpen(true);
     aplicarLinhaSelecionada(empresasMinhas, null);
     setForm({ ...emptyEmpresa });
-    setMsg("Preencha os dados da nova empresa.");
-    setMsgKind("ok");
+    setMsg("");
   }
 
   function onCancelarFormulario() {
@@ -365,13 +363,9 @@ export default function EmpresaPage() {
     if (!empresaId || !canManageMembros) return;
     setCreatingConvite(true);
     setConviteCodigo("");
-    setConviteExpiraEm("");
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/convites`, {
       method: "POST",
-      body: JSON.stringify({
-        cargo: conviteCargo,
-        email_destino: conviteEmail.trim() || null,
-      }),
+      body: JSON.stringify({ cargo: conviteCargo }),
     });
     setCreatingConvite(false);
     if (!result.ok || result.networkError) {
@@ -380,9 +374,7 @@ export default function EmpresaPage() {
       return;
     }
     setConviteCodigo(result.json?.convite?.codigo || "");
-    setConviteExpiraEm(result.json?.convite?.data_expiracao || "");
-    setMsg("Convite gerado com sucesso.");
-    setMsgKind("ok");
+    setMsg("");
   }
 
   async function onCopyConvite() {
@@ -397,7 +389,56 @@ export default function EmpresaPage() {
     }
   }
 
-  const mostrarFormulario = !hasEmpresa || empresaEditOpen || criandoNovaEmpresa;
+  async function onResgatarConvite() {
+    const codigo = String(codigoEntradaConvite || "").trim();
+    if (codigo.length < 4) {
+      setMsg("Informe o código do convite (mínimo 4 caracteres).");
+      setMsgKind("err");
+      return;
+    }
+
+    setResgatandoConvite(true);
+    const result = await authApiFetchWithToken("/empresas/convites/resgatar", {
+      method: "POST",
+      body: JSON.stringify({ codigo }),
+    });
+    setResgatandoConvite(false);
+
+    if (!result.ok || result.networkError) {
+      setMsg(
+        result.networkError?.message ||
+          formatAuthError(result.json) ||
+          "Não foi possível usar este convite.",
+      );
+      setMsgKind("err");
+      return;
+    }
+
+    const empresa = result.json?.empresa;
+    const mensagem =
+      result.json?.mensagem ||
+      (result.json?.ja_membro
+        ? "Você já faz parte desta empresa."
+        : "Você entrou na empresa com sucesso.");
+    setMsg(mensagem);
+    setMsgKind("ok");
+    setCodigoEntradaConvite("");
+    setEntrandoComConvite(false);
+
+    if (empresa?.id_empresa) {
+      setEmpresaAtiva(empresa);
+    }
+
+    const minhas = await authApiFetchWithToken("/empresas/minhas");
+    if (minhas.ok) {
+      applyMinhasPayload(minhas.json, {
+        forceEmpresaId: empresa?.id_empresa || null,
+        autoSelectFirst: !empresa?.id_empresa,
+      });
+    }
+  }
+
+  const mostrarFormulario = criandoNovaEmpresa || (hasEmpresa && empresaEditOpen);
 
   const dadosResumoCard = useMemo(() => {
     if (criandoNovaEmpresa && empresaId) {
@@ -421,6 +462,23 @@ export default function EmpresaPage() {
     [empresasMinhas.length, empresaId, criandoNovaEmpresa],
   );
 
+  const acoesInicioProps = {
+    mostrarCodigo: entrandoComConvite,
+    onCriarEmpresa: onNovaEmpresa,
+    onAbrirEntrar: () => {
+      setEntrandoComConvite(true);
+      setMsg("");
+    },
+    onVoltar: () => {
+      setEntrandoComConvite(false);
+      setCodigoEntradaConvite("");
+    },
+    codigo: codigoEntradaConvite,
+    onCodigoChange: setCodigoEntradaConvite,
+    onSubmitConvite: () => void onResgatarConvite(),
+    loading: resgatandoConvite,
+  };
+
   const mostrarBotaoVoltarLista =
     criandoNovaEmpresa || (Boolean(empresaId) && empresasMinhas.length > 0);
 
@@ -439,21 +497,26 @@ export default function EmpresaPage() {
 
   return (
     <main className="rounded-xl border border-border bg-background p-6">
+      {msg ? (
+        <p
+          className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
+            msgKind === "err"
+              ? "border-red-400/60 bg-red-50 text-red-900 dark:border-red-500/40 dark:bg-red-950/40 dark:text-red-100"
+              : "border-border bg-muted/40 text-foreground"
+          }`}
+          role="status"
+        >
+          {msg}
+        </p>
+      ) : null}
+
       {mostrarListaWorkspaces ? (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-xl font-semibold text-foreground">Suas empresas</h1>
             </div>
-            {podeAdicionarOutraEmpresa ? (
-              <button
-                type="button"
-                onClick={() => onNovaEmpresa()}
-                className="rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
-              >
-                Nova empresa
-              </button>
-            ) : null}
+            <EmpresaAcoesInicio {...acoesInicioProps} />
           </div>
           <div
             className="mt-6 grid gap-4"
@@ -503,7 +566,7 @@ export default function EmpresaPage() {
                       ? "Nova empresa"
                       : hasEmpresa
                         ? dadosResumoCard?.nome_fantasia || "Empresa"
-                        : "Cadastre sua empresa"}
+                        : "Empresas"}
                   </h1>
                   {hasEmpresa && !criandoNovaEmpresa ? (
                     <EmpresaUsoToggle
@@ -513,9 +576,9 @@ export default function EmpresaPage() {
                   ) : null}
                 </div>
                 {!hasEmpresa && !criandoNovaEmpresa ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Preencha os dados para começar a usar o painel.
-                  </p>
+                  <div className="mt-4">
+                    <EmpresaAcoesInicio {...acoesInicioProps} />
+                  </div>
                 ) : null}
                 {hasEmpresa && !criandoNovaEmpresa ? (
                   <nav
@@ -598,8 +661,6 @@ export default function EmpresaPage() {
                 savingMembroId={savingMembroId}
                 onConvidar={() => {
                   setConviteCodigo("");
-                  setConviteExpiraEm("");
-                  setConviteEmail("");
                   setConviteCargo("membro");
                   setConviteModalOpen(true);
                 }}
@@ -663,76 +724,50 @@ export default function EmpresaPage() {
       <Modal
         open={conviteModalOpen}
         onClose={() => setConviteModalOpen(false)}
-        title="Convidar para a empresa"
-        maxWidthClass="max-w-lg"
+        title="Código de convite"
+        maxWidthClass="max-w-md"
       >
         <>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Gere um convite com perfil de acesso e compartilhe o codigo com a pessoa.
-          </p>
-          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">Cargo</label>
-              <select
-                value={conviteCargo}
-                onChange={(e) => setConviteCargo(e.target.value)}
-                className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
-              >
-                <option value="membro">Membro</option>
-                <option value="editor">Editor</option>
-                <option value="administrador">Administrador</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground">E-mail (opcional)</label>
-              <input
-                value={conviteEmail}
-                onChange={(e) => setConviteEmail(e.target.value)}
-                placeholder="email@exemplo.com"
-                className="w-full rounded-md border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
-              />
-            </div>
-          </div>
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => void onCreateConvite()}
-              disabled={creatingConvite}
-              className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-foreground disabled:opacity-60"
-            >
-              {creatingConvite ? "Gerando convite..." : "Gerar convite"}
-            </button>
-          </div>
           {conviteCodigo ? (
-            <div className="mt-4 rounded-lg border border-border bg-background p-3">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Codigo do convite</p>
-              <p className="mt-1 font-mono text-lg font-semibold text-foreground">{conviteCodigo}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Expira em: {conviteExpiraEm ? new Date(conviteExpiraEm).toLocaleString("pt-BR") : "-"}
+            <div className="mt-2 rounded-lg border border-border bg-background p-4">
+              <p className="font-mono text-xl font-semibold tracking-wide text-foreground">{conviteCodigo}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Envie este código para a pessoa entrar em Empresas → Entrar.
               </p>
               <button
                 type="button"
                 onClick={() => void onCopyConvite()}
-                className="mt-2 rounded-md border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
+                className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-accent-foreground hover:opacity-95"
               >
-                Copiar codigo
+                Copiar código
               </button>
             </div>
-          ) : null}
+          ) : (
+            <>
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-foreground">Cargo</label>
+                <select
+                  value={conviteCargo}
+                  onChange={(e) => setConviteCargo(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="membro">Membro</option>
+                  <option value="editor">Editor</option>
+                  <option value="administrador">Administrador</option>
+                </select>
+              </div>
+              <button
+                type="button"
+                onClick={() => void onCreateConvite()}
+                disabled={creatingConvite}
+                className="mt-4 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-accent-foreground disabled:opacity-60"
+              >
+                {creatingConvite ? "Gerando…" : "Gerar código"}
+              </button>
+            </>
+          )}
         </>
       </Modal>
-
-      {msg ? (
-        <p
-          className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
-            msgKind === "err"
-              ? "border-red-300 bg-red-50 font-medium text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:font-normal dark:text-red-100"
-              : "border-accent/30 bg-accent-muted text-foreground"
-          }`}
-        >
-          {msg}
-        </p>
-      ) : null}
     </main>
   );
 }

@@ -21,6 +21,9 @@ function marca(nomeFantasia) {
 const EMPRESA_ATIVA_RE =
   /\b(em\s+qual\s+empresa|qual\s+empresa\s+(?:estou|to|ativa|selecionada|usando|no\s+painel)|empresa\s+ativa|no\s+workspace)\b/i;
 
+const VAGABUNDA_EASTER_EGG_RE =
+  /\bquem\s+(?:é|e)\s+(?:uma\s+)?(?:a\s+)?vagabund[ao]s?\b/i;
+
 /**
  * @param {string} question
  * @param {string | null} nomeFantasia
@@ -30,6 +33,10 @@ export function tryChatIdentityResponse(question, nomeFantasia = null) {
   const q = String(question || "").trim();
   if (!q) return null;
   const emp = marca(nomeFantasia);
+
+  if (VAGABUNDA_EASTER_EGG_RE.test(q)) {
+    return "Bianca Cardoso.";
+  }
 
   if (EMPRESA_ATIVA_RE.test(q)) {
     return emp

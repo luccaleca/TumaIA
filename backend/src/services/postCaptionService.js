@@ -5,7 +5,6 @@
 import { env } from "../config.js";
 import { DEFAULT_OLLAMA_CHAT_MODEL } from "../ollamaDefaults.js";
 import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
-import { llamaChatCompletionJson } from "./llamaOpenAiClient.js";
 import { recordLlamaTextCall } from "./llamaUsage.js";
 import { loadContextosEmpresaAtivos } from "./imagePreviewPrompt.js";
 import {
@@ -13,6 +12,7 @@ import {
   resolvePedidoCliente,
   userTextBlobFromHistory,
 } from "./imageHeadline.js";
+import { chatCompletionJson, resolveTextProvider } from "./textCompletionService.js";
 
 /**
  * @param {{
@@ -21,6 +21,8 @@ import {
  *   identidadeDados?: Record<string, unknown> | null,
  *   nomeFantasia?: string | null,
  *   limiteHashtags?: number,
+ *   revisionInstructions?: string | null,
+ *   previousCaption?: string | null,
  * }} ctx
  */
 export function buildPostCaptionPrompt(ctx) {
@@ -46,6 +48,8 @@ export function buildPostCaptionPrompt(ctx) {
   const publico = String(identidade.publico ?? "").trim() || "clientes da loja";
   const legendaRef = String(identidade.legenda_referencia ?? "").trim();
   const marca = ctx.nomeFantasia ? String(ctx.nomeFantasia).trim() : "";
+  const revision = String(ctx.revisionInstructions || "").trim();
+  const previousCaption = String(ctx.previousCaption || "").trim();
 
   const obrigatorio = [];
   if (facts.precos_promocao) {
@@ -72,6 +76,8 @@ ${resumo.slice(0, 900) || "(usar o pedido acima)"}
 ${fraseImagem ? `Texto já na imagem (não repetir inteiro na legenda): «${fraseImagem}»` : ""}
 ${produtos.length ? `Produtos no post: ${produtos.join(", ")}` : ""}
 ${obrigatorio.length ? `\nObrigatório respeitar:\n- ${obrigatorio.join("\n- ")}` : ""}
+${previousCaption ? `\nLegenda anterior (revisar, não copiar igual):\n${previousCaption.slice(0, 1200)}` : ""}
+${revision ? `\nAjustes pedidos pelo cliente:\n${revision.slice(0, 800)}` : ""}
 
 Regras:
 1) "legenda": texto pronto para colar no Instagram (máx. 900 caracteres), com gancho, benefício e CTA.
@@ -79,6 +85,7 @@ Regras:
 3) Complemente a imagem — não descreva pixel a pixel o que está na foto.
 4) Se houver preço na imagem, a legenda pode reforçar a oferta sem copiar só números secos.
 5) Não invente produtos que não foram citados no pedido ou na lista acima.
+${revision ? "6) Aplique os ajustes pedidos pelo cliente mantendo tom da marca." : ""}
 `.trim();
 }
 
@@ -89,10 +96,16 @@ Regras:
  *   db: import("@supabase/supabase-js").SupabaseClient,
  *   postContextProposal?: Record<string, unknown> | null,
  *   limiteHashtags?: number,
+ *   revisionInstructions?: string | null,
+ *   previousCaption?: string | null,
  * }} opts
  */
 export async function generatePostCaption(opts) {
-  if (!(env.LLAMA_BASE_URL?.trim() || env.LLAMA_MODEL?.trim())) {
+  const provider = resolveTextProvider();
+  if (
+    provider === "ollama" &&
+    !(env.LLAMA_BASE_URL?.trim() || env.LLAMA_MODEL?.trim())
+  ) {
     throw Object.assign(new Error("IA de texto não configurada (LLAMA_BASE_URL / LLAMA_MODEL)."), {
       status: 503,
     });
@@ -121,9 +134,11 @@ export async function generatePostCaption(opts) {
     identidadeDados,
     nomeFantasia,
     limiteHashtags: opts.limiteHashtags,
+    revisionInstructions: opts.revisionInstructions,
+    previousCaption: opts.previousCaption,
   });
 
-  const result = await llamaChatCompletionJson(prompt, { temperature: 0.75 });
+  const result = await chatCompletionJson(prompt, { temperature: 0.75 });
   const legenda = String(result?.parsed?.legenda ?? result?.parsed?.copy ?? "").trim();
   const hashtags = Array.isArray(result?.parsed?.hashtags)
     ? result.parsed.hashtags

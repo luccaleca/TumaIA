@@ -1,7 +1,7 @@
 import { createApp } from "./app.js";
 import { env } from "./config.js";
 import { ensureChatWorkerReady, shutdownChatWorker } from "./services/chatPythonWorker.js";
-import { isWppconnectEnabled } from "./services/wppconnectClient.js";
+import { isWppconnectEnabled, ensureWppconnectSession } from "./services/wppconnectClient.js";
 
 const app = createApp();
 
@@ -43,6 +43,10 @@ const server = app.listen(env.PORT, () => {
     console.info(
       "[wppconnect] configure webhook.url no wppconnect-server apontando para essa URL",
     );
+    ensureWppconnectSession({ force: true }).then((s) => {
+      if (s.ok) console.info("[wppconnect] sessão WhatsApp conectada");
+      else console.warn("[wppconnect] sessão WhatsApp inativa:", s.error || s.status);
+    });
   }
 });
 

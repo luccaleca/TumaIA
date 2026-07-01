@@ -100,9 +100,34 @@ export function intentLooksLaunch(intent) {
  * @returns {"promocao" | "lancamento" | "produto" | "mensagens" | null}
  */
 export function inferPreferredPlaybookSlug(intent) {
+  const t = String(intent ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  const postModelMatch = t.match(
+    /modelo\s+(?:de\s+)?post\s+(?:de\s+)?(produto|promo[cç]ao|lancamento|mensagens?)|post\s+com\s+modelo\s+(?:de\s+)?post\s+(?:de\s+)?(produto|promo[cç]ao|lancamento|mensagens?)/,
+  );
+  const postKind = postModelMatch?.[1] || postModelMatch?.[2];
+  if (postKind) {
+    if (/promo/.test(postKind)) return "promocao";
+    if (/lanc/.test(postKind)) return "lancamento";
+    if (/mensagem/.test(postKind)) return "mensagens";
+    return "produto";
+  }
+
+  if (
+    /modelo\s+de\s+produto|\bpost(agem)?\s+(no\s+)?modelo\s+produto\b|\bno\s+modelo\s+de\s+produto\b|\bmodelo\s+produto\b/.test(
+      t,
+    )
+  ) {
+    return "produto";
+  }
+  if (/modelo\s+de\s+promo/.test(t)) return "promocao";
+  if (/modelo\s+de\s+lan[cç]amento/.test(t)) return "lancamento";
+  if (/modelo\s+de\s+mensagem/.test(t)) return "mensagens";
   if (intentLooksPromotional(intent)) return "promocao";
   if (intentLooksLaunch(intent)) return "lancamento";
-  const t = String(intent ?? "").toLowerCase();
   if (/institucional|nossa marca|sobre a empresa|mensagem da marca/i.test(t)) return "mensagens";
   if (/no dia a dia|em uso|rotina|mostra o produto/i.test(t)) return "produto";
   return null;

@@ -216,6 +216,83 @@ function formatInfoAnswer(rows, termo, nomeFantasia) {
   return `Sim — temos ${lista}${marca ? ` no acervo${marca}` : ""}.`;
 }
 
+/** @param {import("./chatIntent.js").CampanhaTipo | undefined} campanhaTipo */
+function campaignIntroLine(campanhaTipo, rotulo, beneficio) {
+  const tipo = campanhaTipo || "promocao";
+  const baseByTipo = {
+    lancamento: "Entendi: você quer um lançamento",
+    promocao: "Entendi: você quer uma campanha promocional",
+    destaque: "Entendi: você quer um post de destaque",
+    campanha: "Entendi: você quer uma campanha",
+  };
+  let intro = baseByTipo[tipo] || baseByTipo.promocao;
+  if (rotulo) intro += ` com itens relacionados a «${rotulo}»`;
+  if (beneficio) intro += ` (${beneficio})`;
+  return `${intro}.`;
+}
+
+/** @param {import("./chatIntent.js").CampanhaTipo | undefined} campanhaTipo */
+function campaignItemsLine(campanhaTipo, qtd) {
+  const tipo = campanhaTipo || "promocao";
+  if (tipo === "lancamento") {
+    return qtd === 1 ? "este item entra no lançamento" : "estes itens entram no lançamento";
+  }
+  if (tipo === "destaque") {
+    return qtd === 1 ? "este item entra no destaque" : "estes itens entram no destaque";
+  }
+  if (tipo === "campanha") {
+    return qtd === 1 ? "este item entra na campanha" : "estes itens entram na campanha";
+  }
+  return qtd === 1 ? "este item entra na promo" : "estes itens entram na promo";
+}
+
+/** @param {import("./chatIntent.js").CampanhaTipo | undefined} campanhaTipo */
+function campaignEmptyHint(campanhaTipo) {
+  const tipo = campanhaTipo || "promocao";
+  if (tipo === "lancamento") return "para eu montar o lançamento";
+  if (tipo === "destaque") return "para eu montar o destaque";
+  return "para eu combinar na campanha";
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} rows
+ * @param {string | null} nomeFantasia
+ * @param {string | null} attr
+ * @param {import("./productMentionMatch.js").ReturnType<typeof import("./productMentionMatch.js").parseProductMentionSpec> | null} filtro
+ * @param {string | null} beneficio
+ * @param {import("./chatIntent.js").CampanhaTipo} [campanhaTipo]
+ */
+function formatPromoAcervoAnswer(rows, nomeFantasia, attr, filtro, beneficio, campanhaTipo) {
+  const marca = nomeFantasia ? ` da ${nomeFantasia}` : "";
+  const rotulo = String(attr || "").trim();
+  const imgs = filterRowsForList(rows, filtro);
+  const rawLabels = [...new Set(imgs.map(midiaProductLabel))];
+  const labels = filterDisplayProductLabels(rawLabels).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const intro = campaignIntroLine(campanhaTipo, rotulo, beneficio);
+
+  if (!labels.length) {
+    if (rotulo) {
+      return (
+        `${intro} Não encontrei produtos com «${rotulo}» em Mídias${marca}. ` +
+        `Cadastre as fotos no painel ou ajuste o nome — aí monto a arte com todos eles.`
+      );
+    }
+    return (
+      `${intro} Ainda não há produtos com foto em Mídias${marca} ${campaignEmptyHint(campanhaTipo)}. ` +
+      "Cadastre o acervo e me diga o tema de novo."
+    );
+  }
+
+  const bullets = labels.map((l) => `• ${l}`).join("\n");
+  const qtd = labels.length;
+  return (
+    `${intro} No acervo${marca}, ${campaignItemsLine(campanhaTipo, qtd)}:\n\n` +
+    `${bullets}\n\n` +
+    "Quer que eu monte a arte do post com eles? Descreva o visual ou confirme no resumo do painel."
+  );
+}
+
 /**
  * @param {{
  *   question: string,
@@ -249,9 +326,20 @@ export async function tryChatAcervoResponse(opts) {
     : await loadMidiasEmpresaResumo(db, idEmpresa, 200);
 
   const classify = opts.classifyIntent || classifyChatAcervoIntent;
-  const { kind, termo, filtro } = classify(question, opts.history || []);
+  const { kind, termo, filtro, beneficio, campanhaTipo } = classify(question, opts.history || []);
 
   if (kind === "NONE") return null;
+
+  if (kind === "USO_ACERVO_PROMO") {
+    return formatPromoAcervoAnswer(
+      midias,
+      nomeFantasia || null,
+      termo,
+      filtro ?? null,
+      beneficio ?? null,
+      campanhaTipo,
+    );
+  }
 
   if (kind === "LISTAR_PRODUTOS") {
     return formatListAnswer(midias, nomeFantasia || null, termo, filtro ?? null);

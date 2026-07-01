@@ -94,10 +94,6 @@ function parseFollowerMilestone(text) {
   return null;
 }
 
-/**
- * Extrai frase explícita do pedido (ex.: "frase: TumaIA entende seu negócio").
- * @param {string} text
- */
 export function extractFraseFromUserText(text) {
   const t = String(text || "");
   const patterns = [
@@ -112,6 +108,50 @@ export function extractFraseFromUserText(text) {
     if (n) return n;
   }
   return null;
+}
+
+/** @param {string} text */
+export function isPostBriefingCorrectionText(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  return /^(n[aã]o\s+(est[aá]|t[aá])\s+corret|errado|n[aã]o\s+[eé]\s+isso|n[aã]o\s+era\s+isso|ta\s+errado|est[aá]\s+errado)/i.test(
+    t,
+  );
+}
+
+/**
+ * Cenário visual explícito no pedido (mesa, pessoa, ambiente…).
+ * @param {string} text
+ */
+export function extractExplicitSceneFromPedido(text) {
+  const t = String(text || "").trim();
+  if (!t) return "";
+
+  const patterns = [
+    /\b(?:a\s+)?ideia\s+[eé]\s+(.+)$/i,
+    /\b(?:quero|gostaria)\s+(?:que\s+)?(?:fazer|seja|mostrar|montar)\s+(.+)$/i,
+    /\b(?:cen[aá]rio|ambienta[cç][aã]o)\s*[:\-]?\s*(.+)$/i,
+    /\b(?:com|fazer)\s+((?:ele|ela|os|as).{12,280})$/i,
+  ];
+  for (const re of patterns) {
+    const m = t.match(re);
+    const scene = String(m?.[1] ?? "").trim().replace(/[.!?]+$/, "");
+    if (scene.length >= 12) return scene.slice(0, 320);
+  }
+
+  const sceneBits = [];
+  if (/\b(?:mesa|cozinha|sala|casa|varanda)\b/i.test(t)) {
+    const home = t.match(
+      /(?:em\s+cima\s+da\s+)?mesa\s+(?:de\s+uma?\s+)?(?:casa|cozinha)|(?:na|em)\s+(?:mesa|cozinha|sala|casa)[^.!?]{0,80}/i,
+    );
+    if (home?.[0]) sceneBits.push(home[0].trim());
+  }
+  if (/\bpessoa\b/i.test(t)) {
+    const person = t.match(/\bpessoa[^.!?]{0,100}/i);
+    if (person?.[0]) sceneBits.push(person[0].trim());
+  }
+  if (sceneBits.length) return sceneBits.join("; ").slice(0, 320);
+  return "";
 }
 
 /**
@@ -141,10 +181,13 @@ export function normalizeFraseNaImagem(raw) {
  */
 export function resolveActivePedidoHint(history, opts = {}) {
   const question = typeof opts.question === "string" ? opts.question.trim() : "";
-  if (question) return question.slice(0, 2000);
+  if (question && !isPostBriefingCorrectionText(question)) {
+    return question.slice(0, 2000);
+  }
 
-  const latestUser = recentUserTexts(history, 1).join(" ").trim();
-  if (latestUser) return latestUser.slice(0, 2000);
+  const pedidoTexts = recentUserTexts(history, 6).filter((t) => !isPostBriefingCorrectionText(t));
+  const latestPedido = pedidoTexts.length ? pedidoTexts[pedidoTexts.length - 1].trim() : "";
+  if (latestPedido) return latestPedido.slice(0, 2000);
 
   const proposal = opts.proposal && typeof opts.proposal === "object" ? opts.proposal : null;
   const fromProposal = proposal ? String(proposal.intent_summary ?? "").trim() : "";
@@ -162,6 +205,7 @@ export function recentUserTexts(history, maxUserMessages = 3) {
     if (!t) continue;
     const norm = t.toLowerCase().replace(/\s+/g, " ");
     if (HIDDEN_USER_LINES.has(norm)) continue;
+    if (isPostBriefingCorrectionText(t)) continue;
     out.unshift(t);
   }
   return out;
@@ -479,14 +523,23 @@ function inferCampaignAtmosphere(matchedContexto, intent) {
  */
 function campaignOpeningLine(matchedContexto, intent, heroName) {
   const productBit = heroName ? ` do ${formatProductDisplayName(heroName)}` : "";
+  const modeloNome = String(matchedContexto?.nome || "").trim();
+  const modeloNorm = modeloNome.toLowerCase();
+  const intentNorm = String(intent || "").toLowerCase();
+
+  if (
+    modeloNorm === "produto" ||
+    /\bmodelo\s+(?:de\s+)?post\s+de\s+produto\b|\bmodelo\s+de\s+produto\b/.test(intentNorm)
+  ) {
+    return `Arte de produto para feed do Instagram${productBit}.`;
+  }
   if (intentLooksPromotional(intent)) {
     return `Post promocional para feed do Instagram${productBit}.`;
   }
-  const modeloNome = String(matchedContexto?.nome || "").toLowerCase();
-  if (/lancamento|lançamento/i.test(modeloNome)) {
+  if (/lancamento|lançamento/i.test(modeloNorm)) {
     return `Arte de lançamento para feed do Instagram${productBit}.`;
   }
-  if (/promo|promoção|desconto|oferta/i.test(String(intent || "").toLowerCase())) {
+  if (/promo|promoção|desconto|oferta/i.test(intentNorm)) {
     return `Post promocional para feed do Instagram${productBit}.`;
   }
   return `Arte de campanha para feed do Instagram${productBit}.`;
@@ -516,6 +569,7 @@ export function synthesizeResumoVisual(proposal, userHint = "", visualCadastro =
     .slice(0, 3);
   const focusName = formatProductDisplayName(heroName) || refLabels[0] || "";
   const parts = [];
+  const explicitScene = extractExplicitSceneFromPedido(intent);
 
   parts.push(campaignOpeningLine(matched, intent, focusName));
 
@@ -527,7 +581,11 @@ export function synthesizeResumoVisual(proposal, userHint = "", visualCadastro =
       parts.push(`Ao lado do produto, destaque tipográfico com ${price.display}.`);
     }
     parts.push("Logo da empresa discretamente em um dos cantos.");
-    parts.push(describeAmbienteFromCadastro(empresaRow, identidadeDados, refs));
+    if (explicitScene) {
+      parts.push(`Cenário pedido pelo cliente: ${explicitScene}.`);
+    } else {
+      parts.push(describeAmbienteFromCadastro(empresaRow, identidadeDados, refs));
+    }
   } else {
     const mentions = extractProductMentions(intent);
     if (mentions.length) {
@@ -542,10 +600,16 @@ export function synthesizeResumoVisual(proposal, userHint = "", visualCadastro =
       parts.push(`Destaque tipográfico com ${price.display} ao lado da área do produto.`);
     }
     parts.push("Logo da empresa em um dos cantos.");
-    parts.push(describeAmbienteFromCadastro(empresaRow, identidadeDados, refs));
+    if (explicitScene) {
+      parts.push(`Cenário pedido pelo cliente: ${explicitScene}.`);
+    } else {
+      parts.push(describeAmbienteFromCadastro(empresaRow, identidadeDados, refs));
+    }
   }
 
-  parts.push(inferCampaignAtmosphere(matched, intent));
+  if (!explicitScene) {
+    parts.push(inferCampaignAtmosphere(matched, intent));
+  }
 
   const publicoCadastro = String(identidadeDados?.publico || "").trim();
   if (

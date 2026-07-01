@@ -5,6 +5,9 @@ import { processChatMessage } from "./processChatMessage.js";
 import { generatePostContextProposal } from "./postContextProposalService.js";
 import { generatePostCaption } from "./postCaptionService.js";
 import { runImagePreviewInternal } from "./imagePreviewInternal.js";
+import { persistWhatsappGeneratedImages } from "./chatGeneratedImageStorage.js";
+import { publishToInstagramViaN8n } from "./instagramPublishService.js";
+import { buildWhatsappPostConfirmation } from "./postConfirmationWhatsapp.js";
 import { resolveWhatsappUsuarioEmpresa } from "./whatsappUsuarioEmpresa.js";
 import {
   appendWhatsappTurn,
@@ -19,7 +22,7 @@ const CHAT_PEDIDO_COLETANDO_INTRO = "Falta só completar o pedido:";
 const WHATSAPP_HINT_GENERATE_IMAGE = "\n\n_Digite *gerar imagem* quando quiser a arte._";
 const WHATSAPP_HINT_GENERATE_CAPTION = "\n\n_Digite *gerar legenda* para montar o texto do post._";
 const WHATSAPP_HINT_PUBLISH =
-  "\n\n_Digite *publicar no instagram* quando a legenda estiver pronta._";
+  "\n\n_Se não gostar de algo, envie: *Quero alterar a legenda:* e diga o que mudar._\n\n_Digite *publicar no instagram* quando estiver pronta._";
 
 /**
  * @param {Array<{ id?: string, label?: string }>} uiActions
@@ -96,22 +99,38 @@ async function handleDeliveryCommand(session, body) {
       ? preview.data.image_urls.filter((u) => typeof u === "string" && u.trim())
       : [];
 
+    let storagePaths = [];
+    let deliveryUrls = urls;
+    if (db && urls.length) {
+      try {
+        const persisted = await persistWhatsappGeneratedImages(db, session.id_empresa, session.phone, urls);
+        storagePaths = persisted.storage_paths;
+        if (persisted.public_urls.length) deliveryUrls = persisted.public_urls;
+      } catch (err) {
+        console.warn(
+          "[whatsapp] falha ao persistir imagem no storage:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+
     patchWhatsappSession(session, {
-      last_image_urls: urls,
-      estado: urls.length ? "has_image" : session.estado,
+      last_image_urls: deliveryUrls,
+      last_image_storage_paths: storagePaths,
+      estado: deliveryUrls.length ? "has_image" : session.estado,
     });
     appendWhatsappTurn(session, body, urls.length ? "Imagem gerada." : "Não foi possível gerar a imagem.");
 
-    const reply = urls.length
+    const reply = deliveryUrls.length
       ? `Arte pronta!${WHATSAPP_HINT_GENERATE_CAPTION}`
       : "Não consegui gerar a imagem desta vez. Ajuste o pedido ou tente novamente.";
 
     return {
       ok: true,
       reply,
-      image_urls: urls,
+      image_urls: deliveryUrls,
       estado: session.estado,
-      ui_actions: urls.length
+      ui_actions: deliveryUrls.length
         ? [{ id: "generate_caption", label: "Gerar legenda" }]
         : undefined,
     };
@@ -135,6 +154,8 @@ async function handleDeliveryCommand(session, body) {
         idEmpresa: session.id_empresa,
         db,
         postContextProposal: session.post_context_proposal || undefined,
+        revisionInstructions: cmd.type === "regenerate_caption" ? cmd.instructions : undefined,
+        previousCaption: cmd.type === "regenerate_caption" ? session.last_caption : undefined,
       });
       const legenda = String(out?.legenda || out?.caption || "").trim();
       const hashtags = Array.isArray(out?.hashtags)
@@ -163,9 +184,10 @@ async function handleDeliveryCommand(session, body) {
         ],
       };
     } catch (err) {
+      console.warn("[whatsapp] erro ao gerar legenda:", err instanceof Error ? err.message : err);
       return {
         ok: true,
-        reply: err instanceof Error ? err.message : "Erro ao gerar legenda.",
+        reply: "Não consegui montar a legenda agora. Tente *gerar legenda* de novo.",
         estado: session.estado,
       };
     }
@@ -179,14 +201,42 @@ async function handleDeliveryCommand(session, body) {
         estado: session.estado,
       };
     }
-    appendWhatsappTurn(session, body, "Pedido de publicação registrado.");
+    if (!db) {
+      return { ok: false, status: 503, error: "Supabase não configurado." };
+    }
+    const storagePath = session.last_image_storage_paths?.[0] || "";
+    const imageUrl = session.last_image_urls?.[0] || "";
+    if (!storagePath && !imageUrl) {
+      return {
+        ok: true,
+        reply: "Não encontrei a imagem do post. Gere a arte de novo com *gerar imagem*.",
+        estado: session.estado,
+      };
+    }
+
+    appendWhatsappTurn(session, body, "Publicando no Instagram…");
+    const published = await publishToInstagramViaN8n(db, {
+      idEmpresa: session.id_empresa,
+      caption: session.last_caption,
+      imageStoragePath: storagePath || undefined,
+      imageUrl: storagePath ? undefined : imageUrl,
+    });
+
+    if (!published.ok) {
+      return {
+        ok: true,
+        reply: published.error || "Não foi possível publicar no Instagram agora. Tente de novo em instantes.",
+        estado: session.estado,
+        error_code: published.status,
+      };
+    }
+
     return {
       ok: true,
-      reply:
-        "Perfeito! Legenda e imagem estão prontas. A publicação automática no Instagram será configurada em seguida.",
-      trigger_publish_instagram: true,
+      reply: published.message || "Post publicado no Instagram com sucesso!",
+      instagram_media_id: published.instagram_media_id,
+      image_urls: published.image_url ? [published.image_url] : session.last_image_urls,
       caption: session.last_caption,
-      image_urls: session.last_image_urls,
       estado: session.estado,
     };
   }
@@ -325,15 +375,18 @@ export async function handleWhatsappInbound(input) {
             : null;
         post_supplement_links = Array.isArray(proposal.links) ? proposal.links : [];
 
-        if (ready && confirm) {
-          reply = confirm;
+        const whatsappConfirm = buildWhatsappPostConfirmation(
+          post_context_proposal,
+          post_supplement_links,
+          { briefingStatus: ready ? "ready" : "collecting" },
+        );
+
+        if (ready) {
+          reply = whatsappConfirm;
           ui_actions = [{ id: "confirm_generate_image", label: "Gerar imagem" }];
           estado = "ready_for_image";
-        } else if (!ready) {
-          reply = confirm || CHAT_PEDIDO_COLETANDO_INTRO;
-          estado = "briefing";
         } else {
-          reply = CHAT_PEDIDO_RESUMO_MSG;
+          reply = whatsappConfirm || confirm || CHAT_PEDIDO_COLETANDO_INTRO;
           estado = "briefing";
         }
       } catch (err) {

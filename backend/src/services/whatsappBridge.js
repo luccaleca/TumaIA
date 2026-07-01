@@ -36,6 +36,13 @@ export function clearWppconnectDedupCache() {
 /**
  * @param {import("./wppconnectWebhookParser.js").ReturnType<typeof parseWppconnectWebhookMessage>} msg
  */
+function buildOutboundText(out) {
+  let text = String(out.reply || "").trim();
+  const hints = String(out.hints || "").trim();
+  if (hints && !text.includes(hints)) text = text ? `${text}${hints}` : hints;
+  return text;
+}
+
 async function deliverWhatsappReply(msg, out) {
   const chatId = msg.chat_id || msg.from;
   if (!out.ok) {
@@ -66,13 +73,10 @@ async function deliverWhatsappReply(msg, out) {
     return;
   }
 
-  if (out.reply) {
-    await wppconnectSendText(chatId, out.reply);
-  }
-
   const urls = Array.isArray(out.image_urls) ? out.image_urls.filter(Boolean) : [];
   for (let i = 0; i < urls.length; i++) {
     const caption = i === 0 && out.caption ? String(out.caption) : "";
+    console.info(`[wppconnect] enviando imagem ${i + 1}/${urls.length} para ${chatId}`);
     const sent = await wppconnectSendImageUrl(chatId, urls[i], caption);
     if (!sent.ok) {
       console.warn("[wppconnect] falha ao enviar imagem:", sent.error);
@@ -80,7 +84,14 @@ async function deliverWhatsappReply(msg, out) {
         chatId,
         `Gerei a arte, mas não consegui enviar a imagem aqui. URL: ${urls[i]}`,
       );
+    } else {
+      console.info(`[wppconnect] imagem ${i + 1}/${urls.length} enviada`);
     }
+  }
+
+  const text = buildOutboundText(out);
+  if (text) {
+    await wppconnectSendText(chatId, text);
   }
 }
 
@@ -113,16 +124,36 @@ async function processInboundMessage(msg) {
   const authPhone = await resolveInboundAuthPhone(msg);
 
   const isImageCmd = /^gerar\s+imagem/i.test(msg.body);
+  const isCaptionCmd = /^gerar\s+legenda/i.test(msg.body);
   if (isImageCmd) {
-    await wppconnectSendText(msg.chat_id || msg.from, "Gerando a arte… isso pode levar até 1 minuto. Aguarde ⏳");
+    await wppconnectSendText(msg.chat_id || msg.from, "Gerando a arte… isso vai levar alguns instantes. Aguarde ⏳");
+  } else if (isCaptionCmd) {
+    await wppconnectSendText(
+      msg.chat_id || msg.from,
+      "Montando legenda e hashtags com IA… isso vai levar alguns instantes. Aguarde ⏳",
+    );
   }
 
-  const out = await handleWhatsappInbound({
-    from: authPhone,
-    body: msg.body,
-    message_id: msg.message_id || undefined,
-  });
+  const startedAt = Date.now();
+  let out;
+  try {
+    out = await handleWhatsappInbound({
+      from: authPhone,
+      body: msg.body,
+      message_id: msg.message_id || undefined,
+    });
+  } catch (err) {
+    console.error("[wppconnect] erro em handleWhatsappInbound:", err);
+    await wppconnectSendText(
+      msg.chat_id || msg.from,
+      "Algo deu errado ao processar seu pedido. Tente de novo em instantes.",
+    );
+    return;
+  }
 
+  console.info(
+    `[wppconnect] resposta pronta em ${Date.now() - startedAt}ms imgs=${out.image_urls?.length || 0}`,
+  );
   await deliverWhatsappReply(msg, out);
 }
 

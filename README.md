@@ -32,5 +32,15 @@ O painel em Next.js é o backoffice do produto: nele a empresa gerencia contexto
 
 ## Desenvolvimento
 
-- Rodar tudo na raiz: `npm run dev`
-- Ajustes específicos por pacote: veja os READMEs de `backend/` e `frontend/`
+Em **dois terminais** na raiz do projeto:
+
+```bash
+npm run dev    # backend (estável) + frontend
+npm run whats  # WPP Connect (WhatsApp)
+```
+
+Na primeira conexão do WhatsApp: `npm run whats:session` (QR no terminal do `whats`).
+
+- Backend com hot-reload: `npm run dev:watch`
+- Tudo em um terminal só: `npm run dev:mono`
+- Ajustes por pacote: veja os READMEs de `backend/` e `frontend/`

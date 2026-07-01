@@ -4,6 +4,10 @@ import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { requireUsuario } from "../middleware/requireUsuario.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { purgeChatPreviewMidiasForConversa } from "../services/chatPreviewMidia.js";
+import {
+  deleteChatConversationImages,
+  hydrateChatMessageImageMeta,
+} from "../services/chatGeneratedImageStorage.js";
 
 const r = Router();
 r.use(requireUserJwt);
@@ -164,9 +168,25 @@ r.get("/conversas/:idConversa", async (req, res) => {
     return;
   }
 
+  const mensagens = [];
+  for (const m of msgs || []) {
+    let metadados_json = m.metadados_json;
+    if (metadados_json && typeof metadados_json === "object") {
+      try {
+        metadados_json = await hydrateChatMessageImageMeta(db, metadados_json);
+      } catch (err) {
+        console.warn(
+          "[chat] hydrate imagens:",
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    mensagens.push({ ...m, metadados_json });
+  }
+
   res.json({
     conversa: conv,
-    mensagens: msgs || [],
+    mensagens,
   });
 });
 
@@ -339,12 +359,13 @@ r.delete("/conversas/:idConversa", async (req, res) => {
   }
 
   try {
+    await deleteChatConversationImages(db, conv.id_empresa, idParse.data);
     await purgeChatPreviewMidiasForConversa(db, idParse.data);
   } catch (err) {
-    res.status(500).json({
-      error: err instanceof Error ? err.message : "Falha ao remover prévias do chat.",
-    });
-    return;
+    console.warn(
+      "[chat] apagar imagens da conversa:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   const { error } = await db.from("chat_conversa").delete().eq("id_conversa", idParse.data);

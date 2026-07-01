@@ -7,13 +7,39 @@ import { isPlausibleAuthPhone, normalizeWhatsappPhone } from "./whatsappPhoneAut
  * @param {string} b
  */
 export function telefonesUsuarioMatch(a, b) {
-  const da = normalizeTelefoneUsuario(a);
-  const db = normalizeTelefoneUsuario(b);
-  if (!da || !db) return false;
-  if (da === db) return true;
-  if (da.length > db.length && da.endsWith(db)) return true;
-  if (db.length > da.length && db.endsWith(da)) return true;
-  return false;
+  return scoreTelefoneMatch(a, b) > 0;
+}
+
+/**
+ * Quanto maior, melhor o match (prioriza número idêntico sobre sufixo parcial).
+ * @param {string} cadastro
+ * @param {string} whatsapp
+ */
+export function scoreTelefoneMatch(cadastro, whatsapp) {
+  const da = normalizeTelefoneUsuario(cadastro);
+  const db = normalizeTelefoneUsuario(whatsapp);
+  if (!da || !db) return 0;
+  if (da === db) return 1000 + da.length;
+  if (da.length > db.length && da.endsWith(db)) return 100 + db.length;
+  if (db.length > da.length && db.endsWith(da)) return 50 + da.length;
+  return 0;
+}
+
+/**
+ * @param {Array<{ telefone?: string | null }>} users
+ * @param {string} phone
+ */
+export function pickUsuarioPorTelefone(users, phone) {
+  let best = null;
+  let bestScore = 0;
+  for (const u of users || []) {
+    const score = scoreTelefoneMatch(u.telefone, phone);
+    if (score > bestScore) {
+      bestScore = score;
+      best = u;
+    }
+  }
+  return bestScore > 0 ? best : null;
 }
 
 /**
@@ -51,7 +77,7 @@ export async function resolveWhatsappUsuarioEmpresa(from) {
     return { ok: false, status: 500, error: eUsers.message, reason: "db_error" };
   }
 
-  const usuario = (users || []).find((u) => telefonesUsuarioMatch(u.telefone, phone));
+  const usuario = pickUsuarioPorTelefone(users, phone);
   if (!usuario) {
     return {
       ok: false,

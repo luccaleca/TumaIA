@@ -37,10 +37,114 @@ describe("chat acervo intent", () => {
     assert.equal(classifyChatAcervoIntent("o que temos").kind, "LISTAR_PRODUTOS");
   });
 
+  it("listar: quais produtos temos — não filtra por «quais»", () => {
+    const intent = classifyChatAcervoIntent("quais produtos temos");
+    assert.equal(intent.kind, "LISTAR_PRODUTOS");
+    assert.equal(intent.termo, null);
+    assert.equal(intent.filtro, null);
+  });
+
+  it("listar: produtos disponiveis — lista catálogo inteiro", () => {
+    const intent = classifyChatAcervoIntent("produtos disponiveis");
+    assert.equal(intent.kind, "LISTAR_PRODUTOS");
+    assert.equal(intent.termo, null);
+    assert.equal(intent.filtro, null);
+  });
+
   it("info: tem whey", () => {
     const r = classifyChatAcervoIntent("tem whey?");
     assert.equal(r.kind, "INFO_PRODUTO");
     assert.match(r.termo || "", /whey/i);
+  });
+
+  it("promo combinatória: chocolate + 40% — não vira INFO_PRODUTO", () => {
+    const q =
+      "vc consegue fazer uma promocao de chocolate na fyt? entao todos os produtos que tem chocolate a gente coloca nessa promocao sera 40% de desconto";
+    const r = classifyChatAcervoIntent(q);
+    assert.equal(r.kind, "USO_ACERVO_PROMO");
+    assert.equal(r.termo, "chocolate");
+    assert.equal(r.campanhaTipo, "promocao");
+    assert.match(r.beneficio || "", /40%/);
+    assert.equal(r.filtro?.mode, "generic");
+    assert.deepEqual(r.filtro?.genericTerms, ["chocolate"]);
+  });
+
+  it("lançamento: pro force morango — filtro específico", () => {
+    const q = "monta um post de lancamento do pro force morango";
+    const r = classifyChatAcervoIntent(q);
+    assert.equal(r.kind, "USO_ACERVO_PROMO");
+    assert.equal(r.campanhaTipo, "lancamento");
+    assert.equal(r.filtro?.mode, "specific");
+    assert.ok(r.filtro?.specificPhrases?.some((p) => /pro force morango/i.test(p)));
+  });
+
+  it("destaque: divulgar linha whey growth", () => {
+    const q = "quero divulgar a linha whey growth no insta";
+    const r = classifyChatAcervoIntent(q);
+    assert.equal(r.kind, "USO_ACERVO_PROMO");
+    assert.equal(r.campanhaTipo, "destaque");
+    assert.match(r.termo || "", /whey growth/i);
+  });
+
+  it("promo por linha: campanha dos pro force com 20%", () => {
+    const q = "faz uma campanha dos pro force com 20% de desconto";
+    const r = classifyChatAcervoIntent(q);
+    assert.equal(r.kind, "USO_ACERVO_PROMO");
+    assert.equal(r.campanhaTipo, "promocao");
+    assert.match(r.termo || "", /pro force/i);
+    assert.match(r.beneficio || "", /20%/);
+  });
+
+  it("black friday: tudo que tem whey no nome", () => {
+    const q = "quero post de black friday com tudo que tem whey no nome, 30% off";
+    const r = classifyChatAcervoIntent(q);
+    assert.equal(r.kind, "USO_ACERVO_PROMO");
+    assert.equal(r.campanhaTipo, "promocao");
+    assert.match(r.termo || "", /whey/i);
+    assert.match(r.beneficio || "", /30%/);
+  });
+
+  it("lançamento: lista item específico no acervo", async () => {
+    const midias = [
+      { tipo_midia: "imagem", nome_exibicao: "pro force morango" },
+      { tipo_midia: "imagem", nome_exibicao: "pro force chocolate" },
+      { tipo_midia: "imagem", nome_exibicao: "whey de chocolate" },
+    ];
+    const ans = await tryChatAcervoResponse({
+      question: "monta um post de lancamento do pro force morango",
+      idEmpresa: "00000000-0000-0000-0000-000000000001",
+      nomeFantasia: "FYT",
+      midias,
+      classifyIntent: classifyChatAcervoIntent,
+    });
+    assert.match(ans || "", /lan[cç]amento/i);
+    assert.match(ans || "", /pro force morango/i);
+    assert.doesNotMatch(ans || "", /pro force chocolate/i);
+    assert.doesNotMatch(ans || "", /whey/i);
+  });
+
+  it("promo combinatória: lista itens com chocolate no acervo", async () => {
+    const midias = [
+      { tipo_midia: "imagem", nome_exibicao: "whey de chocolate" },
+      { tipo_midia: "imagem", nome_exibicao: "naked wafer dark chocolate" },
+      { tipo_midia: "imagem", nome_exibicao: "monster" },
+    ];
+    const ans = await tryChatAcervoResponse({
+      question:
+        "faz uma promocao de chocolate com 40% — todos os produtos que tem chocolate entram",
+      idEmpresa: "00000000-0000-0000-0000-000000000001",
+      nomeFantasia: "FYT",
+      midias,
+      classifyIntent: classifyChatAcervoIntent,
+    });
+    assert.match(ans || "", /campanha promocional/i);
+    assert.match(ans || "", /chocolate/i);
+    assert.match(ans || "", /40%/);
+    assert.match(ans || "", /whey de chocolate/i);
+    assert.match(ans || "", /naked wafer dark chocolate/i);
+    assert.doesNotMatch(ans || "", /monster/i);
+    assert.doesNotMatch(ans || "", /a gente coloca/i);
+    assert.match(ans || "", /monte a arte/i);
   });
 
   it("histórico: detecta listagem de catálogo", () => {
@@ -137,6 +241,18 @@ describe("chat acervo intent", () => {
     const q = "e os modelos de post, quais temos ativos?";
     assert.equal(isPostModelosQuestion(q), true);
     assert.equal(classifyChatAcervoIntent(q, CATALOG_HISTORY).kind, "NONE");
+  });
+
+  it("quais modelos → modelos de post (não stack de IA)", () => {
+    assert.equal(isPostModelosQuestion("quais modelos"), true);
+    assert.equal(isPostModelosQuestion("modelos"), true);
+    assert.equal(isPostModelosQuestion("qual modelo"), true);
+    assert.equal(classifyChatAcervoIntent("quais modelos", CATALOG_HISTORY).kind, "NONE");
+  });
+
+  it("qual modelo de ia → não é modelos de post", () => {
+    assert.equal(isPostModelosQuestion("qual modelo de ia vocês usam"), false);
+    assert.equal(isPostModelosQuestion("qual modelo ollama"), false);
   });
 
   it("temos ativos sozinho após catálogo não vira INFO de produto «ativos»", () => {

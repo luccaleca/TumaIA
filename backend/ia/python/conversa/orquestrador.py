@@ -20,8 +20,10 @@ from .identidade import (
     resposta_cordial_curta,
     resposta_criador_curta,
     resposta_followup_nome,
+    resposta_vagabunda_easter_egg,
     sanitizar_resposta_perfil_identidade,
     usuario_pergunta_sobre_criador,
+    usuario_pergunta_vagabunda_easter_egg,
 )
 from .instrucoes import (
     PROMPT_RAG,
@@ -131,6 +133,9 @@ def _responder_identidade_rapida(
     """Perfil identidade: prompt curto, sem RAG nem acervo."""
     if usuario_pergunta_sobre_criador(pergunta):
         return {"result": resposta_criador_curta(), "source_documents": []}
+
+    if usuario_pergunta_vagabunda_easter_egg(pergunta):
+        return {"result": resposta_vagabunda_easter_egg(), "source_documents": []}
 
     modelo = llm_conversa_aberta()
     nome_fantasia, _ = _carregar_bloco_empresa(id_empresa)
@@ -272,6 +277,9 @@ def responder_mensagem(
 
     if _pergunta_pediu_data_hora(q):
         return {"result": _formatar_data_hora_usuario(q), "source_documents": []}
+
+    if usuario_pergunta_vagabunda_easter_egg(q):
+        return {"result": resposta_vagabunda_easter_egg(), "source_documents": []}
 
     if chat_mode == "conversa_aberta" or (not chat_mode and _eh_pergunta_casual_curta(q)):
         return _responder_conversa_aberta_rapida(q, historico)

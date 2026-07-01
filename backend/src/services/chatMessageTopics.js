@@ -2,7 +2,7 @@
  * Tópicos detectados na mensagem — base do treino dinâmico (várias perguntas na mesma frase).
  */
 
-import { classifyChatAcervoIntent } from "./chatIntent.js";
+import { classifyChatAcervoIntent, isPostModelosQuestion } from "./chatIntent.js";
 
 const TOPIC_ORDER = [
   "SAUDACAO",
@@ -16,6 +16,7 @@ const TOPIC_ORDER = [
   "CONTEXTOS",
   "ACERVO_LISTA",
   "ACERVO_INFO",
+  "ACERVO_PROMO",
   "AGRADECIMENTO",
 ];
 
@@ -93,8 +94,7 @@ export function extractChatTopics(question) {
 
   if (
     /\b(contextos?|campanhas?\s+cadastrad|orientac(?:ao|ões)\s+de\s+marca|tom\s+de\s+voz)\b/i.test(q) ||
-    /\b(modelos?\s+de\s+post|modelos?\s+post|playbooks?|templates?\s+de\s+post)\b/i.test(q) ||
-    (/\b(quais|que)\s+modelos?\b/i.test(q) && /\b(post|campanha|layout|ativos?)\b/i.test(q))
+    isPostModelosQuestion(raw)
   ) {
     topics.add("CONTEXTOS");
   }
@@ -102,6 +102,7 @@ export function extractChatTopics(question) {
   const acervo = classifyChatAcervoIntent(raw);
   if (acervo.kind === "LISTAR_PRODUTOS") topics.add("ACERVO_LISTA");
   if (acervo.kind === "INFO_PRODUTO") topics.add("ACERVO_INFO");
+  if (acervo.kind === "USO_ACERVO_PROMO") topics.add("ACERVO_PROMO");
 
   if (/^\s*(obrigad|valeu|show|perfeito|fechou|tchau|ate\s+mais)\b/i.test(q)) {
     topics.add("AGRADECIMENTO");

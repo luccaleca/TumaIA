@@ -103,6 +103,16 @@ const envSchema = z.object({
     },
     z.enum(["low", "medium", "high", "auto"]),
   ),
+  /** IA de texto: `replicate` (padrão se billing ativo), `ollama` ou `openai`. */
+  TEXT_PROVIDER: z.preprocess((v) => {
+    const s = String(v ?? "").trim().toLowerCase();
+    if (s === "replicate" || s === "ollama" || s === "openai") return s;
+    return undefined;
+  }, z.enum(["replicate", "ollama", "openai"]).optional()),
+  /** Modelo Replicate para legenda/copy (`owner/name`). */
+  REPLICATE_TEXT_MODEL: z.preprocess(empty, z.string().min(1).optional()),
+  /** Modelo OpenAI para texto (legenda, etc.). */
+  OPENAI_CHAT_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   REPLICATE_GPT_IMAGE_TIMEOUT_MS: z.preprocess(
     (v) => (v === "" || v === undefined ? 300_000 : Number(v)),
     z.number().int().min(60_000).max(600_000),
@@ -125,14 +135,11 @@ const envSchema = z.object({
     if (s === "collage" || s === "collage_refine") return s;
     return "gpt_integrated";
   }, z.enum(["gpt_integrated", "collage", "collage_refine"])),
-  /**
-   * Revisão visual (Ollama/Llava) antes de entregar `/ia/image-preview` ao painel.
-   * Vazio = ligado se `LLAMA_VISION_MODEL` estiver definido; `false` desliga.
-   */
-  IMAGE_PREVIEW_QUALITY_REVIEW: z.preprocess((v) => {
-    if (v === "" || v === undefined) return undefined;
-    return parseEnvBool(v, false);
-  }, z.boolean().optional()),
+  /** Revisão visual (Ollama/Llava) antes de entregar prévia — padrão desligado; `true` liga. */
+  IMAGE_PREVIEW_QUALITY_REVIEW: z.preprocess(
+    (v) => parseEnvBool(v, false),
+    z.boolean(),
+  ),
   /** Nota mínima (0–100) para aprovar na revisão. Padrão 68. */
   IMAGE_PREVIEW_QUALITY_MIN_SCORE: z.preprocess(
     (v) => (v === "" || v === undefined ? 68 : Number(v)),
@@ -198,6 +205,16 @@ const envSchema = z.object({
   /** Segredo opcional no webhook (?secret= ou header x-wppconnect-secret). */
   WPPCONNECT_WEBHOOK_SECRET: z.preprocess(empty, z.string().min(1).optional()),
   WPPCONNECT_PROCESS_GROUPS: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  /** Webhook n8n para publicar no Instagram (POST image_url + caption). */
+  N8N_INSTAGRAM_WEBHOOK_URL: z.preprocess(empty, z.string().url().optional()),
+  N8N_INSTAGRAM_CLIENT_ID: z.preprocess(
+    (v) => (v === "" || v === undefined ? "tumaia" : String(v).trim()),
+    z.string().min(1).max(64),
+  ),
+  N8N_INSTAGRAM_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 90_000 : Number(v)),
+    z.number().int().min(5_000).max(300_000),
+  ),
 });
 
 export const env = envSchema.parse(process.env);

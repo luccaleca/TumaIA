@@ -15,6 +15,7 @@ import IdentidadeMarcaProgressBar from "./IdentidadeMarcaProgressBar";
 import IdentidadeMarcaResumo from "./IdentidadeMarcaResumo";
 import IdentidadeMarcaLogoField from "./IdentidadeMarcaLogoField";
 import EmpresaSectionPanel from "./EmpresaSectionPanel";
+import ConfirmModal from "../../components/ConfirmModal";
 
 const BTN_SECUNDARIO =
   "rounded-lg border border-border bg-surface-elevated px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60";
@@ -33,6 +34,7 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
   const [completude, setCompletude] = useState(null);
   const [midiasIdentidade, setMidiasIdentidade] = useState([]);
   const [lockedFields, setLockedFields] = useState(() => new Set());
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   const onMsg = useCallback((text, kind) => {
     setMsg(text);
@@ -150,15 +152,14 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
     onMsg("Identidade salva.", "ok");
   }
 
-  async function onClearIdentidade() {
+  function requestClearIdentidade() {
     if (!empresaId || !canEdit || saving) return;
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm("Limpar a identidade da marca? Isso remove os dados preenchidos e a logo salva nesta seção.")
-    ) {
-      return;
-    }
+    setClearConfirmOpen(true);
+  }
 
+  async function confirmClearIdentidade() {
+    if (!empresaId || !canEdit || saving) return;
+    setClearConfirmOpen(false);
     setSaving(true);
     onMsg("Limpando identidade...", "ok");
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/identidade`, {
@@ -336,7 +337,7 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
               <button
                 type="button"
                 disabled={saving}
-                onClick={() => void onClearIdentidade()}
+                onClick={requestClearIdentidade}
                 className="rounded-lg border border-red-400/70 px-4 py-2 text-sm font-medium text-red-800 transition disabled:opacity-60 hover:bg-red-100 dark:border-red-500/45 dark:font-normal dark:text-red-300 dark:hover:bg-red-950/45"
               >
                 Limpar identidade
@@ -353,6 +354,16 @@ export default function IdentidadeMarcaSection({ empresaId, canEdit, siteEmpresa
           ) : null}
         </>
       ) : null}
+      <ConfirmModal
+        open={clearConfirmOpen}
+        onClose={() => !saving && setClearConfirmOpen(false)}
+        title="Limpar identidade da marca"
+        description="Isso remove os dados preenchidos e a logo salva nesta seção. Não dá para desfazer."
+        confirmLabel="Limpar identidade"
+        onConfirm={confirmClearIdentidade}
+        busy={saving}
+        variant="danger"
+      />
     </EmpresaSectionPanel>
   );
 }

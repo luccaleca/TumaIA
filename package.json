@@ -7,8 +7,15 @@
     "testes"
   ],
   "scripts": {
-    "dev": "concurrently -n wpp,backend,frontend -c yellow,cyan,magenta \"npm run wppconnect:dev\" \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
-    "dev:web": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
+    "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev:stable -w tumaia-backend\" \"npm run dev -w frontend\"",
+    "dev:status": "node tools/dev-status.mjs",
+    "dev:reset": "node tools/dev-reset.mjs",
+    "whats": "npm run wppconnect:dev",
+    "whats:session": "npm run wppconnect:session",
+    "dev:watch": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
+    "dev:web": "npm run dev",
+    "dev:app": "npm run dev",
+    "dev:mono": "concurrently -n wpp,backend,frontend -c yellow,cyan,magenta \"npm run whats\" \"npm run dev:stable -w tumaia-backend\" \"npm run dev -w frontend\"",
     "dev:backend": "npm run dev -w tumaia-backend",
     "dev:backend:stable": "npm run dev:stable -w tumaia-backend",
     "dev:frontend": "npm run dev -w frontend",

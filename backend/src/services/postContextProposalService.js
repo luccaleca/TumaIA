@@ -281,7 +281,18 @@ function resolveContextoPlaybookSlug(row) {
 function findCampanhaRowBySlug(campanhaRows, slug) {
   const target = String(slug ?? "").trim();
   if (!target || !Array.isArray(campanhaRows)) return null;
-  return campanhaRows.find((row) => resolveContextoPlaybookSlug(row) === target) ?? null;
+  const bySlug = campanhaRows.find((row) => resolveContextoPlaybookSlug(row) === target);
+  if (bySlug) return bySlug;
+
+  const nomePatterns = {
+    produto: /^produto$/i,
+    promocao: /^promo/i,
+    lancamento: /^lan[cç]amento$/i,
+    mensagens: /^mensagem/i,
+  };
+  const nomeRe = nomePatterns[target];
+  if (!nomeRe) return null;
+  return campanhaRows.find((row) => nomeRe.test(String(row?.nome ?? "").trim())) ?? null;
 }
 
 /**

@@ -23,7 +23,7 @@ export default function EmpresaMembrosSection({
       step={3}
       id="membros-empresa"
       title="Membros da empresa"
-      description="Quem tem acesso a este workspace, cargos e convites."
+      description="Quem tem acesso a este workspace."
       actions={
         canManageMembros ? (
           <button

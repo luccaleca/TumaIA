@@ -35,13 +35,9 @@ const ISSUE_USER_LABELS = {
   muitos_elementos: "excesso de elementos competindo na mesma área",
 };
 
-/**
- * Revisão visual ligada quando há modelo de visão, salvo desligar no .env.
- */
+/** Revisão visual (Llava) — só quando `IMAGE_PREVIEW_QUALITY_REVIEW=true` no .env. */
 export function isImagePreviewQualityReviewEnabled() {
-  if (env.IMAGE_PREVIEW_QUALITY_REVIEW === false) return false;
-  if (env.IMAGE_PREVIEW_QUALITY_REVIEW === true) return true;
-  return Boolean(String(env.LLAMA_VISION_MODEL || env.IDENTIDADE_VISION_MODEL || "").trim());
+  return env.IMAGE_PREVIEW_QUALITY_REVIEW === true;
 }
 
 export function imagePreviewQualityMinScore() {

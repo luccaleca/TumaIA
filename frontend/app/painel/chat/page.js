@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "../../components/Modal";
+import ConfirmModal from "../../components/ConfirmModal";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import {
   detectImageGenerationIntent,
@@ -101,6 +102,22 @@ function modeloSlugFromContextoRow(row) {
     return row.dados_json.playbook_slug.trim();
   }
   return "";
+}
+
+/** ID de mensagem local; fallback quando `crypto.randomUUID` não existe (ex.: HTTP, Safari antigo). */
+function newMessageId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return `msg-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
 function friendlyUiActionLabel(action) {
@@ -248,16 +265,27 @@ function findLatestImageMessageId(msgs) {
   return null;
 }
 
+function findLatestImageStoragePathInMessages(msgs) {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const paths = msgs[i]?.image_storage_paths;
+    if (Array.isArray(paths) && typeof paths[0] === "string" && paths[0].trim()) {
+      return paths[0].trim();
+    }
+  }
+  return null;
+}
+
 function buildImagePreviewAssistantMessage(out, contextoLinha, contentSuffix = "") {
   const base =
     imagePreviewSuccessLine(out.urls, out.model, out.imageGeneration) + contextoLinha + contentSuffix;
   return {
-    id: crypto.randomUUID(),
+    id: newMessageId(),
     role: "assistant",
     content: base,
     sources: [],
     image_urls: out.urls.length ? out.urls : undefined,
     image_midia_ids: out.imageMidiaIds?.length ? out.imageMidiaIds : undefined,
+    image_storage_paths: out.storagePaths?.length ? out.storagePaths : undefined,
     ui_actions: out.urls.length ? POST_IMAGE_UI : undefined,
   };
 }
@@ -366,7 +394,9 @@ function buildImagePreviewRequestBody({
   return {
     history,
     id_empresa: empresaId,
-    ...(conversaId && UUID_RE.test(String(conversaId)) ? { id_conversa: String(conversaId) } : {}),
+    ...(conversaId && UUID_RE.test(String(conversaId).trim())
+      ? { id_conversa: String(conversaId).trim() }
+      : {}),
     ...(prop && Object.keys(prop).length ? { post_context_proposal: prop } : {}),
     ...(aspect ? { aspect_ratio: aspect } : {}),
     ...(linksForApi.length ? { post_supplement_links: linksForApi } : {}),
@@ -470,6 +500,10 @@ function fromApiMensagem(m) {
     meta && typeof meta === "object" && Array.isArray(meta.image_midia_ids)
       ? meta.image_midia_ids.filter((id) => typeof id === "string" && UUID_RE.test(id.trim()))
       : [];
+  const image_storage_paths =
+    meta && typeof meta === "object" && Array.isArray(meta.image_storage_paths)
+      ? meta.image_storage_paths.filter((p) => typeof p === "string" && p.trim())
+      : [];
   const post_supplementRaw =
     meta && typeof meta === "object" && meta.post_supplement && typeof meta.post_supplement === "object"
       ? meta.post_supplement
@@ -526,13 +560,14 @@ function fromApiMensagem(m) {
       ? meta.selected_contexto_id.trim()
       : null;
   const out = {
-    id: typeof m.id_mensagem === "string" ? m.id_mensagem : crypto.randomUUID(),
+    id: typeof m.id_mensagem === "string" ? m.id_mensagem : newMessageId(),
     role: papel,
     content: conteudo,
     sources,
     ui_actions: ui_actions.length ? ui_actions : undefined,
     image_urls: image_urls.length ? image_urls : undefined,
     image_midia_ids: image_midia_ids.length ? image_midia_ids : undefined,
+    image_storage_paths: image_storage_paths.length ? image_storage_paths : undefined,
     ...(hidden ? { hidden: true } : {}),
     ...(selected_contexto_id && UUID_RE.test(selected_contexto_id)
       ? { selected_contexto_id }
@@ -564,6 +599,9 @@ function toApiMensagens(messages) {
     const meta = {};
     if (m.sources && m.sources.length) meta.sources = m.sources;
     if (m.ui_actions && m.ui_actions.length) meta.ui_actions = m.ui_actions;
+    if (m.image_storage_paths && m.image_storage_paths.length) {
+      meta.image_storage_paths = m.image_storage_paths;
+    }
     if (m.image_urls && m.image_urls.length) meta.image_urls = m.image_urls;
     if (m.image_midia_ids && m.image_midia_ids.length) meta.image_midia_ids = m.image_midia_ids;
     if (m.post_supplement && typeof m.post_supplement === "object") {
@@ -645,6 +683,9 @@ export default function PainelChatPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameInput, setRenameInput] = useState("");
   const [renameSaving, setRenameSaving] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [imagePreviewConfirmOpen, setImagePreviewConfirmOpen] = useState(false);
+  const imagePreviewConfirmResolverRef = useRef(null);
   const [errMsg, setErrMsg] = useState("");
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
@@ -815,6 +856,20 @@ export default function PainelChatPage() {
     },
     [input, slashMenu, closeSlashMenu, focusInputAt],
   );
+
+  const askImagePreviewConfirm = useCallback(() => {
+    return new Promise((resolve) => {
+      imagePreviewConfirmResolverRef.current = resolve;
+      setImagePreviewConfirmOpen(true);
+    });
+  }, []);
+
+  const closeImagePreviewConfirm = useCallback((accepted) => {
+    setImagePreviewConfirmOpen(false);
+    const resolve = imagePreviewConfirmResolverRef.current;
+    imagePreviewConfirmResolverRef.current = null;
+    resolve?.(accepted);
+  }, []);
 
   const flushChatSession = useCallback(() => {
     const snap = sessionPersistRef.current;
@@ -1190,10 +1245,14 @@ export default function PainelChatPage() {
       const imageMidiaIds = Array.isArray(result.json?.image_midia_ids)
         ? result.json.image_midia_ids.filter((id) => typeof id === "string" && UUID_RE.test(id.trim()))
         : [];
+      const storagePaths = Array.isArray(result.json?.image_storage_paths)
+        ? result.json.image_storage_paths.filter((p) => typeof p === "string" && p.trim())
+        : [];
       return {
         ok: true,
         urls,
         imageMidiaIds,
+        storagePaths,
         model: result.json?.model,
         contexto: result.json?.contexto_geracao,
         imageGeneration:
@@ -1241,7 +1300,7 @@ export default function PainelChatPage() {
             (typeof prop.json?.error === "string" ? prop.json.error : formatAuthError(prop.json)) ||
             "Não foi possível preparar o resumo agora. Tente novamente em instantes.";
           const note = {
-            id: crypto.randomUUID(),
+            id: newMessageId(),
             role: "assistant",
             content: String(msg),
             sources: [],
@@ -1364,7 +1423,7 @@ export default function PainelChatPage() {
         });
       } catch (err) {
         const note = {
-          id: crypto.randomUUID(),
+          id: newMessageId(),
           role: "assistant",
           content: err instanceof Error ? err.message : "Erro ao carregar confirmação de contexto.",
           sources: [],
@@ -1565,6 +1624,18 @@ export default function PainelChatPage() {
 
       const captionMsg = msgs.find((m) => m.id === captionMessageId);
       const captionText = typeof captionMsg?.content === "string" ? captionMsg.content.trim() : "";
+      if (!captionText) {
+        showErr("Legenda vazia — gere a legenda antes de publicar.");
+        return false;
+      }
+
+      const imageStoragePath = findLatestImageStoragePathInMessages(msgs);
+      const imageUrl = findLatestImageUrlInMessages(msgs);
+      if (!imageStoragePath && !imageUrl) {
+        showErr("Não encontrei a imagem do post. Gere a arte antes de publicar.");
+        return false;
+      }
+
       let msgsWithUser = msgs;
       if (fromButton) {
         const userLine = quickReplyUserLineForAction("publish_instagram");
@@ -1576,38 +1647,67 @@ export default function PainelChatPage() {
         );
       }
       setMessages(msgsWithUser);
+      setActionBusy(`${captionMessageId}:publish_instagram`);
 
-      let copied = false;
-      if (captionText && typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(captionText);
-          copied = true;
-        } catch {
-          /* ignore */
-        }
-      }
-      const hasImage = Boolean(findLatestImageUrlInMessages(msgsWithUser));
-      const assistMsg = {
-        id: crypto.randomUUID(),
+      const pendingMsg = {
+        id: newMessageId(),
         role: "assistant",
-        content: copied
-          ? hasImage
-            ? "Legenda copiada! Abra o Instagram, selecione a imagem gerada e cole o texto para publicar."
-            : "Legenda copiada! Abra o Instagram e cole o texto para publicar."
-          : hasImage
-            ? "Abra o Instagram, use a imagem gerada e cole a legenda acima para publicar."
-            : "Abra o Instagram e cole a legenda acima para publicar.",
+        content: "Publicando no Instagram…",
         sources: [],
       };
-      const finalMsgs = [...msgsWithUser, assistMsg];
+      const msgsPending = [...msgsWithUser, pendingMsg];
+      setMessages(msgsPending);
+      await syncMensagens(idChat, msgsPending);
+
+      const result = await authApiFetchWithToken("/ia/publish-instagram", {
+        method: "POST",
+        body: JSON.stringify({
+          id_empresa: empresaId,
+          caption: captionText,
+          ...(imageStoragePath ? { image_storage_path: imageStoragePath } : {}),
+          ...(!imageStoragePath && imageUrl ? { image_url: imageUrl } : {}),
+        }),
+        timeoutMs: 120_000,
+        timeoutLabel: "publish-instagram",
+      });
+
+      const withoutPending = msgsPending.filter((m) => m.id !== pendingMsg.id);
+      if (!result.ok || result.networkError) {
+        const errText =
+          result.networkError?.message ||
+          (typeof result.json?.error === "string" ? result.json.error : null) ||
+          formatAuthError(result.json) ||
+          "Não foi possível publicar no Instagram agora.";
+        const errBubble = {
+          id: newMessageId(),
+          role: "assistant",
+          content: String(errText),
+          sources: [],
+          ui_actions: POST_CAPTION_UI,
+        };
+        const comErro = [...withoutPending, errBubble];
+        setMessages(comErro);
+        await syncMensagens(idChat, comErro);
+        setActionBusy(null);
+        return false;
+      }
+
+      const successText =
+        (typeof result.json?.message === "string" && result.json.message.trim()) ||
+        "Post publicado no Instagram com sucesso!";
+      const assistMsg = {
+        id: newMessageId(),
+        role: "assistant",
+        content: successText,
+        sources: [],
+      };
+      const finalMsgs = [...withoutPending, assistMsg];
       setMessages(finalMsgs);
       await syncMensagens(idChat, finalMsgs);
-      if (typeof window !== "undefined") {
-        window.open("https://www.instagram.com/", "_blank", "noopener,noreferrer");
-      }
+      setActionBusy(null);
       return true;
     },
-    [conversaId, empresaId, syncMensagens],
+    [conversaId, empresaId, syncMensagens, showErr],
   );
 
   const cancelCaptionEdit = useCallback(() => {
@@ -1688,12 +1788,7 @@ export default function PainelChatPage() {
         return;
       }
 
-      if (
-        typeof window !== "undefined" &&
-        !window.confirm("Gerar a imagem? Pode consumir créditos do seu plano.")
-      ) {
-        return;
-      }
+      if (!(await askImagePreviewConfirm())) return;
 
       setActionBusy(`${fromAssistantMessageId}:${actionId}`);
       setImageGeneratingAfterId(fromAssistantMessageId);
@@ -1702,7 +1797,7 @@ export default function PainelChatPage() {
       const cleared = prev.map((m) =>
         m.id === fromAssistantMessageId ? { ...m, ui_actions: undefined } : m,
       );
-      const userMsg = { id: crypto.randomUUID(), role: "user", content: CONFIRM_IMAGE_USER_LINE, hidden: true };
+      const userMsg = { id: newMessageId(), role: "user", content: CONFIRM_IMAGE_USER_LINE, hidden: true };
       const msgsWithUser = [...cleared, userMsg];
       setMessages(msgsWithUser);
 
@@ -1731,10 +1826,11 @@ export default function PainelChatPage() {
           proposal,
           supplementLinks,
           focusContextoId,
+          conversaId: idChat,
         });
         if (!out.ok) {
           const errBubble = {
-            id: crypto.randomUUID(),
+            id: newMessageId(),
             role: "assistant",
             content: out.error || "Não foi possível gerar a imagem agora.",
             sources: [],
@@ -1751,7 +1847,7 @@ export default function PainelChatPage() {
         await syncMensagens(idChat, finalMsgs);
       } catch (err) {
         const errBubble = {
-          id: crypto.randomUUID(),
+          id: newMessageId(),
           role: "assistant",
           content: err instanceof Error ? err.message : "Erro inesperado ao gerar a imagem.",
           sources: [],
@@ -1765,7 +1861,7 @@ export default function PainelChatPage() {
         setSending(false);
       }
     },
-    [conversaId, empresaId, sending, actionBusy, syncMensagens, invokeImagePreview, showErr, runGenerateCaptionForImage, runPublishInstagramForCaption, startCaptionEdit],
+    [conversaId, empresaId, sending, actionBusy, syncMensagens, invokeImagePreview, showErr, runGenerateCaptionForImage, runPublishInstagramForCaption, startCaptionEdit, askImagePreviewConfirm],
   );
 
   const onSubmit = useCallback(
@@ -1777,7 +1873,7 @@ export default function PainelChatPage() {
       if (!question || sending || !empresaId) return;
 
       const picksAtSend = slashChipsToApiPicks(live.chips);
-      const userMsg = { id: crypto.randomUUID(), role: "user", content: question };
+      const userMsg = { id: newMessageId(), role: "user", content: question };
       const msgsComUsuario = [...messages, userMsg];
       setInput("");
       setSlashChips(emptySlashChips());
@@ -1958,10 +2054,7 @@ export default function PainelChatPage() {
       const confirmAnchor = findLatestConfirmedProposalAnchor(msgsComUsuario, arteBriefDraftRef.current);
       if (shouldGenerateImagePreviewDirectly(question) && confirmAnchor) {
         const latestProposal = confirmAnchor.proposal;
-        if (
-          typeof window !== "undefined" &&
-          !window.confirm("Gerar a imagem? Pode consumir créditos do seu plano.")
-        ) {
+        if (!(await askImagePreviewConfirm())) {
           setSending(false);
           return;
         }
@@ -1976,10 +2069,11 @@ export default function PainelChatPage() {
           focusContextoId:
             confirmAnchor.selected_contexto_id ||
             latestProposal?.matched_contexto?.id_contexto_empresa,
+          conversaId: idChat,
         });
         if (!out.ok) {
           const errBubble = {
-            id: crypto.randomUUID(),
+            id: newMessageId(),
             role: "assistant",
             content: out.error || "Não foi possível gerar a imagem agora.",
             sources: [],
@@ -2020,7 +2114,7 @@ export default function PainelChatPage() {
           result.json?.error ||
           "Não foi possível responder agora. Tente novamente.";
         const errText = typeof msg === "string" ? msg : formatAuthError(result.json) || "Erro desconhecido.";
-        const errBubble = { id: crypto.randomUUID(), role: "assistant", content: String(errText), sources: [] };
+        const errBubble = { id: newMessageId(), role: "assistant", content: String(errText), sources: [] };
         const comErro = [...msgsComUsuario, errBubble];
         setMessages(comErro);
         await syncMensagens(idChat, comErro);
@@ -2094,7 +2188,7 @@ export default function PainelChatPage() {
         : answer;
 
       const assistantMsg = {
-        id: crypto.randomUUID(),
+        id: newMessageId(),
         role: "assistant",
         content: assistantContent,
         sources,
@@ -2121,6 +2215,7 @@ export default function PainelChatPage() {
       syncMensagens,
       attachPostContextSupplement,
       invokeImagePreview,
+      askImagePreviewConfirm,
       showErr,
       runGenerateCaptionForImage,
       runRegenerateCaption,
@@ -2148,15 +2243,21 @@ export default function PainelChatPage() {
     clearChatSession(empresaId);
   }
 
-  async function onDeleteChat() {
+  function requestDeleteChat() {
     if (sending || deleting) return;
     if (!conversaId) {
       setMessages([]);
       return;
     }
-    if (!window.confirm("Apagar esta conversa?")) return;
+    setDeleteConfirmOpen(true);
+  }
+
+  async function confirmDeleteChat() {
+    if (sending || deleting || !conversaId) return;
+    setDeleteConfirmOpen(false);
     setDeleting(true);
-    const r = await authApiFetchWithToken(`/chat/conversas/${encodeURIComponent(conversaId)}`, {
+    const idApagar = conversaId;
+    const r = await authApiFetchWithToken(`/chat/conversas/${encodeURIComponent(idApagar)}`, {
       method: "DELETE",
     });
     setDeleting(false);
@@ -2283,6 +2384,27 @@ export default function PainelChatPage() {
         </div>
       </Modal>
 
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        title="Apagar conversa"
+        description="Deseja apagar esta conversa? As mensagens serão removidas e não dá para desfazer."
+        confirmLabel={deleting ? "Apagando…" : "Apagar conversa"}
+        onConfirm={confirmDeleteChat}
+        busy={deleting}
+        variant="danger"
+      />
+
+      <ConfirmModal
+        open={imagePreviewConfirmOpen}
+        onClose={() => closeImagePreviewConfirm(false)}
+        title="Gerar prévia da imagem"
+        description="Gerar a prévia da imagem? Pode consumir créditos do seu plano."
+        confirmLabel="Gerar prévia"
+        onConfirm={() => closeImagePreviewConfirm(true)}
+        variant="primary"
+      />
+
       <section className="flex min-h-0 flex-1 flex-col p-3 md:p-4">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-background">
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-2">
@@ -2393,7 +2515,7 @@ export default function PainelChatPage() {
             </button>
             <button
               type="button"
-              onClick={() => void onDeleteChat()}
+              onClick={requestDeleteChat}
               disabled={sending || deleting}
               className="ml-auto rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-sm font-medium text-red-800 disabled:opacity-50"
             >

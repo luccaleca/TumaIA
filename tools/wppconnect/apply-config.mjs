@@ -26,6 +26,21 @@ src = src.replace(/secretKey:\s*'[^']*'/, `secretKey: '${TUMAIA.secretKey}'`);
 src = src.replace(/deviceName:\s*'[^']*'/, `deviceName: '${TUMAIA.deviceName}'`);
 src = src.replace(/url:\s*null/, `url: '${TUMAIA.webhookUrl}'`);
 
+if (!/autoClose:/.test(src)) {
+  src = src.replace(
+    /createOptions:\s*\{/,
+    `createOptions: {\n    /** 0 = não fecha o browser enquanto aguarda QR */\n    autoClose: 0,\n    /** 0 = não fecha o browser após login (padrão da lib: 180s) */\n    deviceSyncTimeout: 0,`,
+  );
+} else {
+  src = src.replace(/autoClose:\s*\d+/, "autoClose: 0");
+}
+
+if (!/deviceSyncTimeout:/.test(src)) {
+  src = src.replace(/autoClose:\s*0,/, "autoClose: 0,\n    deviceSyncTimeout: 0,");
+} else {
+  src = src.replace(/deviceSyncTimeout:\s*\d+/, "deviceSyncTimeout: 0");
+}
+
 fs.writeFileSync(configPath, src, "utf8");
 
 const metaPath = path.join(__dirname, "tumaia.meta.json");

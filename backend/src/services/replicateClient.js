@@ -86,6 +86,33 @@ export async function createPrediction(token, { version, input }) {
 }
 
 /**
+ * POST /models/{owner}/{name}/predictions (sem precisar do version id).
+ * @param {string} token
+ * @param {string} owner
+ * @param {string} name
+ * @param {Record<string, unknown>} input
+ */
+export async function createModelPrediction(token, owner, name, input) {
+  const res = await replicateFetch(
+    `${BASE}/models/${owner}/${name}/predictions`,
+    {
+      method: "POST",
+      headers: replicateHeaders(token),
+      body: JSON.stringify({ input }),
+    },
+    45_000,
+  );
+  const raw = await res.text();
+  if (!res.ok) {
+    const err = new Error(`Replicate POST models/${owner}/${name}/predictions: ${res.status} ${raw}`);
+    err.status = res.status;
+    err.body = raw;
+    throw err;
+  }
+  return JSON.parse(raw);
+}
+
+/**
  * @param {string} token
  * @param {string} getUrl urls.get da prediction criada
  * @param {{ maxWaitMs?: number, stepMs?: number }} [opts]

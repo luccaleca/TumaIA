@@ -121,6 +121,20 @@ def resposta_followup_nome(pergunta: str, historico: list[dict[str, str]]) -> st
     return "Porque 'Tuma' vem do suaíli (swahili) e significa 'enviar'."
 
 
+def usuario_pergunta_vagabunda_easter_egg(q: str) -> bool:
+    return bool(
+        re.search(
+            r"\bquem\s+(?:é|e)\s+(?:uma\s+)?(?:a\s+)?vagabund[ao]s?\b",
+            q,
+            re.IGNORECASE,
+        )
+    )
+
+
+def resposta_vagabunda_easter_egg() -> str:
+    return "Bianca Cardoso."
+
+
 def usuario_pergunta_sobre_criador(q: str) -> bool:
     p = q.lower()
     return bool(
@@ -323,6 +337,9 @@ def _rotulo_empresa(nome_fantasia: str | None) -> str:
 def resposta_identidade(pergunta: str, nome_fantasia: str | None = None) -> str | None:
     p = pergunta.lower()
     empresa = _rotulo_empresa(nome_fantasia)
+
+    if usuario_pergunta_vagabunda_easter_egg(pergunta):
+        return resposta_vagabunda_easter_egg()
 
     if RE_MENSAGEM_CURTA_CASUAL.match(pergunta):
         if empresa:

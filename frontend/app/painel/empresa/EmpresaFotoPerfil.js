@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import EmpresaLogoAvatar from "./EmpresaLogoAvatar";
+import ConfirmModal from "../../components/ConfirmModal";
 
 function toBase64WithoutPrefix(file) {
   return new Promise((resolve, reject) => {
@@ -33,6 +34,7 @@ export default function EmpresaFotoPerfil({
 }) {
   const inputRef = useRef(null);
   const [busy, setBusy] = useState(false);
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
   const notify = useCallback(
     (text, kind) => {
@@ -75,10 +77,9 @@ export default function EmpresaFotoPerfil({
     }
   }
 
-  async function onRemove() {
+  async function confirmRemove() {
     if (!empresaId || !canEdit || busy) return;
-    if (typeof window !== "undefined" && !window.confirm("Remover o ícone desta empresa?")) return;
-
+    setRemoveConfirmOpen(false);
     setBusy(true);
     const result = await authApiFetchWithToken(`/empresas/${empresaId}/foto-perfil`, {
       method: "DELETE",
@@ -129,7 +130,7 @@ export default function EmpresaFotoPerfil({
             <button
               type="button"
               disabled={busy}
-              onClick={() => void onRemove()}
+              onClick={() => setRemoveConfirmOpen(true)}
               className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
             >
               Remover
@@ -137,6 +138,16 @@ export default function EmpresaFotoPerfil({
           ) : null}
         </>
       ) : null}
+      <ConfirmModal
+        open={removeConfirmOpen}
+        onClose={() => !busy && setRemoveConfirmOpen(false)}
+        title="Remover ícone"
+        description="Remover o ícone desta empresa?"
+        confirmLabel="Remover"
+        onConfirm={confirmRemove}
+        busy={busy}
+        variant="danger"
+      />
     </div>
   );
 }

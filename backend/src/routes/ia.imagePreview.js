@@ -53,6 +53,10 @@ import {
   CHAT_API_HISTORY_MAX,
   trimChatHistoryForApi,
 } from "../services/chatHistoryLimit.js";
+import {
+  conversaPertenceAoUsuario,
+  persistChatGeneratedImages,
+} from "../services/chatGeneratedImageStorage.js";
 
 const aspectRatioSchema = z.enum(["1:1", "16:9", "9:16", "3:2", "2:3"]).optional();
 
@@ -81,6 +85,7 @@ export const imagePreviewSchema = z.object({
     .optional(),
   reference_midia_ids: z.array(z.string().uuid()).max(3).optional(),
   focus_contexto_id: z.string().uuid().optional(),
+  /** Conversa em sessão: salva prévias em `{empresa}/_chat/{conversa}/` no Storage. */
   id_conversa: z.string().uuid().optional(),
   /** Edição incremental: prévia anterior + o que mudar (GPT Image 2 images/edits). */
   revision_source_url: z.string().url().max(4000).optional(),
@@ -656,12 +661,39 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     }
   }
 
+  let image_storage_paths = [];
+  const idConversa = parsed.data.id_conversa?.trim() || "";
+  if (idConversa && image_urls.length) {
+    try {
+      const owns = await conversaPertenceAoUsuario(
+        db,
+        parsed.data.id_empresa,
+        idConversa,
+        req.usuario.id_usuario,
+      );
+      if (owns) {
+        const persisted = await persistChatGeneratedImages(
+          db,
+          parsed.data.id_empresa,
+          idConversa,
+          image_urls,
+        );
+        image_storage_paths = persisted.storage_paths;
+        if (persisted.image_urls.length) image_urls = persisted.image_urls;
+      }
+    } catch (err) {
+      console.warn(
+        "[ia/image-preview] falha ao persistir prévia no storage:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   console.info(
-    `[ia/image-preview] ok em ${Date.now() - startedAt}ms urls=${image_urls.length} review=${qualityReview?.approved ?? "n/a"}`,
+    `[ia/image-preview] ok em ${Date.now() - startedAt}ms urls=${image_urls.length} stored=${image_storage_paths.length} review=${qualityReview?.approved ?? "n/a"}`,
   );
 
   let image_midia_ids = [];
-  const idConversa = String(parsed.data.id_conversa || "").trim();
   const idUsuario = req.usuario?.id_usuario;
   if (idConversa && idUsuario && image_urls.length) {
     try {
@@ -688,6 +720,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     model: out.model,
     image_urls,
     ...(image_midia_ids.length ? { image_midia_ids } : {}),
+    ...(image_storage_paths.length ? { image_storage_paths } : {}),
     contexto_geracao,
     ...(referenceMeta
       ? {
