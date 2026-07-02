@@ -1,43 +1,57 @@
 # TumaIA Frontend
 
-Painel web do TumaIA construído em Next.js. Este frontend funciona como retaguarda operacional do produto: nele a empresa configura contexto, identidade da marca, mídias, dados cadastrais e partes do fluxo que alimentam a automação no WhatsApp e a publicação no Instagram.
+Painel web do TumaIA — retaguarda operacional do produto WhatsApp-first.
 
-## Papel no produto
-
-O TumaIA é um sistema "WhatsApp-first": o usuário final pode pedir posts pelo WhatsApp, enquanto o painel serve para preparar e manter o contexto necessário para que a IA gere materiais coerentes com a marca.
-
-Na prática, o frontend é usado para:
-
-- cadastrar e editar dados da empresa;
-- manter identidade de marca, estilo visual e referências;
-- subir contextos e mídias de apoio;
-- revisar partes do fluxo de geração;
-- operar áreas do produto que exigem interface administrativa.
+**Stack e estado do projeto:** [`../docs/stack-e-estado-atual.md`](../docs/stack-e-estado-atual.md)
 
 ## Stack
 
-- Next.js
-- React
-- App Router
+- **Next.js 16** (App Router)
+- **React 19**
+- **Tailwind CSS 4**
+- ES modules (`"type": "module"`)
+
+Regras específicas da versão Next: [`AGENTS.md`](./AGENTS.md)
+
+## Papel no produto
+
+O usuário final pode pedir posts pelo **WhatsApp**. O painel serve para:
+
+- cadastro, login e escolha de **workspace** (empresa ativa)
+- identidade de marca, contextos de campanha e **mídias** (acervo)
+- **chat** com a Tuma (conversas no Supabase)
+- fluxo de **arte**: briefing → proposta → prévia → legenda → publicar no Instagram
+
+Sem workspace ativo no painel, o bot WhatsApp não sabe qual marca atender.
 
 ## Desenvolvimento
 
+Na raiz do monorepo (recomendado):
+
 ```bash
-cd frontend
 npm install
-npm run dev
+npm run dev          # backend + frontend
 ```
 
-Aplicação local: [http://localhost:3000](http://localhost:3000)
+Só o frontend:
 
-## Relação com o restante do sistema
+```bash
+npm run dev:frontend
+# ou
+cd frontend && npm run dev
+```
 
-- `frontend/` entrega o painel da empresa.
-- `backend/` expõe autenticação, dados multi-tenant, rotas de IA e integrações.
-- `Supabase` persiste empresas, contextos, mídias e demais dados operacionais.
-- `n8n` e integrações externas cuidam do fluxo automatizado entre WhatsApp, IA e Instagram.
+App: [http://localhost:3000](http://localhost:3000) — API em `http://localhost:4000`
+
+## Espelho backend ↔ frontend
+
+Arquivos que devem permanecer alinhados (comentário `Espelha` no código):
+
+- `frontend/lib/tumaInterpretation.js` ↔ `backend/src/services/tumaInterpretation.js`
+- Outros: buscar `Espelha` em `frontend/lib/`
 
 ## Leitura complementar
 
-- Visão geral do produto: [`../docs/contexto-produto.md`](../docs/contexto-produto.md)
-- README raiz: [`../README.md`](../README.md)
+- [`../docs/contexto-produto.md`](../docs/contexto-produto.md)
+- [`../README.md`](../README.md)
+- [`../backend/README.md`](../backend/README.md)

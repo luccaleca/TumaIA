@@ -1,36 +1,38 @@
 # Documentação do TumaIA
 
-Este diretório concentra **documentação de produto, acadêmica e diagramas**. Instruções de ambiente e API ficam nos READMEs de cada pacote do monorepo.
+Documentação de produto, arquitetura e IA. Setup de ambiente fica nos READMEs de cada pacote.
 
-## Leitura recomendada para entender o produto
+## Comece aqui
 
-- [`contexto-produto.md`](./contexto-produto.md): visão de negócio, fluxo ponta a ponta, principais atores e papel de cada parte do sistema.
-- [`arquitetura/arquitetura-repositorio.md`](./arquitetura/arquitetura-repositorio.md): visão técnica dos serviços, rotas e integrações do repositório.
+| Documento | Para quê |
+|-----------|----------|
+| [**stack-e-estado-atual.md**](./stack-e-estado-atual.md) | Stack, o que já funciona, como rodar — **referência para IAs** |
+| [contexto-produto.md](./contexto-produto.md) | Visão de negócio e fluxo WhatsApp → Instagram |
+| [arquitetura/arquitetura-repositorio.md](./arquitetura/arquitetura-repositorio.md) | Diagramas Mermaid e rotas |
 
-## Como costuma ser organizado (referência)
+## IA Tuma
 
-Em projetos de software é comum ter **uma pasta `docs/` na raiz** com subpastas por tipo de conteúdo, por exemplo:
+| Documento | Conteúdo |
+|-----------|----------|
+| [ia/regras-tuma-ia.md](./ia/regras-tuma-ia.md) | Regras de comportamento (prompt canônico em `.txt`) |
+| [ia/padroes-erro-llm-tuma.md](./ia/padroes-erro-llm-tuma.md) | Sanitização, guardrails, erros comuns |
+| [ia/repertorio-1000-README.md](./ia/repertorio-1000-README.md) | Treino de diálogo em escala |
+| [ia/bateria-treino-dialogo-README.md](./ia/bateria-treino-dialogo-README.md) | Bateria de treino |
 
-| Pasta / arquivo | Uso típico |
-|-----------------|------------|
-| `README.md` (raiz do repo) | Visão geral, como rodar, link para `docs/` |
-| `docs/` | Textos longos, PDFs, imagens de arquitetura, artigos |
-| `docs/adrs/` | *Architecture Decision Records* — decisões técnicas datadas (opcional) |
-| `backend/README.md`, `frontend/README.md` | Setup, scripts, convenções **desse** repositório |
+Código canônico de prompt: `backend/ia/python/conversa/instrucoes/`
 
-Evite duas pastas com o mesmo papel (por exemplo `docs/` e `documentacao/`): isso confunde busca e versionamento.
-
-## Estrutura deste repositório
+## Outros
 
 | Caminho | Conteúdo |
 |---------|----------|
-| [`contexto-produto.md`](./contexto-produto.md) | Contexto de negócio e fluxo principal do produto |
-| [`academico/`](./academico/) | Artigo científico (`.docx`) e resumos em texto |
-| [`arquitetura/`](./arquitetura/) | Diagrama de arquitetura (PNG) e diagrama de sequência (SVG) |
-| [`diagramas/`](./diagramas/) | Diagramas do modelo de dados / banco (PNG) |
+| [academico/](./academico/) | Artigo e resumos |
+| [arquitetura/](./arquitetura/) | Diagramas PNG/SVG |
+| [diagramas/](./diagramas/) | Modelo de dados |
+| [../AGENTS.md](../AGENTS.md) | Guia para agentes Cursor |
 
 ## Desenvolvimento
 
-- Backend: [`../backend/README.md`](../backend/README.md)
-- Frontend: [`../frontend/README.md`](../frontend/README.md)
-- Worker Python (IA): [`../backend/ia/python/README.md`](../backend/ia/python/README.md)
+- Raiz: [../README.md](../README.md)
+- Backend: [../backend/README.md](../backend/README.md)
+- Frontend: [../frontend/README.md](../frontend/README.md)
+- Worker Python: [../backend/ia/python/README.md](../backend/ia/python/README.md)

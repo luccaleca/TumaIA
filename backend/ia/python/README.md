@@ -1,55 +1,74 @@
-# IA Python (base trazida do TumaCore)
+# IA Python (chat RAG)
 
-Esta pasta contém a base técnica de IA (RAG + roteamento de provedores) portada do TumaCore para o TumaIA:
+Worker de chat da Tuma: recuperação de contexto (Chroma), orquestração de prompt e chamada ao LLM.
 
-- Índice vetorial com Chroma em `conversa/indice_vetorial.py`
-- Recuperação de contexto em `conversa/recuperacao_contexto.py`
-- Orquestração de prompt + histórico em `conversa/orquestrador.py`
-- Provedores LLM/embeddings (Ollama / OpenRouter) em `conversa/provedores.py`
-- Leitura de schema SQL no Postgres em `schema_supabase.py`
+Integração com o backend Node via `backend/src/services/chatPythonWorker.js` (subprocesso `chat_worker.py`).
 
-## Importante
+**Stack e estado do produto:** [`../../../docs/stack-e-estado-atual.md`](../../../docs/stack-e-estado-atual.md)
 
-Os arquivos de instrução em `conversa/instrucoes/*.txt` foram deixados como **TODO** para você criar do zero no TumaIA (sem reaproveitar regras do TumaCore).
+## Módulos principais
+
+| Arquivo | Papel |
+|---------|--------|
+| `chat_worker.py` | Entrada JSON stdin/stdout para o Node |
+| `conversa/orquestrador.py` | Monta prompt, chama modelo, retorna resposta |
+| `conversa/indice_vetorial.py` | Chroma em `indice_contextos/` |
+| `conversa/recuperacao_contexto.py` | Busca semântica |
+| `conversa/provedores.py` | Ollama / OpenRouter |
+| `conversa/identidade.py` | Respostas rápidas (oi, quem é você, etc.) |
+| `conversa/instrucoes/*.txt` | **Regras canônicas** injetadas no prompt |
+| `schema_supabase.py` | Schema Postgres opcional no prompt |
+
+Documentação das regras: [`../../../docs/ia/regras-tuma-ia.md`](../../../docs/ia/regras-tuma-ia.md)
 
 ## Instalação
 
-No diretório `backend/ia/python`:
-
 ```bash
+cd backend/ia/python
 python -m venv .venv
-.venv\Scripts\activate
+.venv\Scripts\activate    # Windows
 pip install -r requirements.txt
 ```
 
-## Execução rápida (CLI)
+O backend Node sobe o worker automaticamente; não é obrigatório rodar o CLI manualmente.
+
+## CLI local (opcional)
 
 ```bash
 python -m conversa
 ```
 
-Isso inicia o loop de chat local com RAG.
+## Ollama (padrão do repositório)
 
-## Ollama (local)
-
-Defina no `.env` (raiz do projeto ou `config/.env`):
+No `backend/.env`:
 
 ```env
-OLLAMA_HOST=http://127.0.0.1:11434
-OLLAMA_CHAT_MODEL=qwen2.5:3b
+LLAMA_BASE_URL=http://127.0.0.1:11434/v1
 LLAMA_MODEL=qwen2.5:3b
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+OLLAMA_CHAT_MODEL=qwen2.5:3b
+LLAMA_API_KEY=ollama
 ```
 
-Padrão do repositório: **`qwen2.5:3b`** (cabe em ~4 GB VRAM). Instale com `ollama pull qwen2.5:3b`.
+```bash
+ollama pull qwen2.5:3b
+ollama pull nomic-embed-text   # embeddings RAG
+```
 
-Com `OLLAMA_CHAT_MODEL` ou `LLAMA_MODEL` preenchido, o fluxo prioriza Ollama para chat.
+## Variáveis úteis (Python)
 
-## Latência (opcional)
+| Variável | Efeito |
+|----------|--------|
+| `TUMACORE_K_CONTEXTO` | Trechos RAG (padrão 4) |
+| `TUMACORE_SKIP_RAG_ON_SQL` | Pula Chroma em perguntas SQL |
+| `TUMACORE_FORCE_REINDEX` | Força reindexação Chroma |
+| `OLLAMA_EMBEDDING_MODEL` | Modelo de embedding (padrão `nomic-embed-text`) |
 
-- `TUMACORE_K_CONTEXTO` — quantos trechos o RAG busca no Chroma (padrão **4**; valores **2** ou **3** reduzem custo de embedding + prompt).
-- `TUMACORE_SKIP_RAG_ON_SQL=true` — em perguntas SQL/banco, pula a busca vetorial (menos latência nesse caso).
+## Índice Chroma
 
-## Índice Chroma e dimensão de embedding
+Se trocar de provedor de embedding (dimensão diferente), o índice em `indice_contextos/` pode ser recriado automaticamente. Em dúvida: apague `indice_contextos/` e reinicie o backend.
 
-Se você trocou de OpenRouter (ex.: vetores 3072) para Ollama `nomic-embed-text` (768), o Chroma antigo quebra com erro de dimensão. O carregador em `indice_vetorial.py` compara a dimensão atual com a gravada em `indice_contextos/.tumacore_embedding_dim` e **recria** a pasta quando não bate. Também pode usar `TUMACORE_FORCE_REINDEX=true` para forçar reindexação.
+## Após editar instruções
+
+Arquivos em `conversa/instrucoes/*.txt` são lidos na subida do worker.
+
+**Reinicie o backend** após qualquer alteração.

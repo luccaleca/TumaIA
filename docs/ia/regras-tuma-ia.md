@@ -1,12 +1,14 @@
-# Regras do Tuma (100 orientações)
+# Regras do Tuma (comportamento da IA)
 
-Documentação legível das regras de comportamento da IA. O arquivo **canônico** injetado no prompt do chat está em:
+Documentação legível das regras de comportamento. O arquivo **canônico** injetado no prompt:
 
 `backend/ia/python/conversa/instrucoes/regras_tuma_ia.txt`
 
-Treino dinâmico (empresa + mídias, tom de funcionário): [`treino-dinamico-tuma.md`](./treino-dinamico-tuma.md) e `papel_funcionario_empresa.txt`.
+**Stack e fluxo atual do produto:** [`../stack-e-estado-atual.md`](../stack-e-estado-atual.md)
 
-Após alterar as regras, reinicie o worker Python do chat para recarregar os `.txt`.
+Treino dinâmico (empresa + mídias): `papel_funcionario_empresa.txt` e treinos em `instrucoes/treino_*.txt`.
+
+Após alterar `.txt`: reiniciar o backend (worker Python recarrega na subida).
 
 ## Blocos
 

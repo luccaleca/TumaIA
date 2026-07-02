@@ -1,46 +1,67 @@
 # TumaIA
 
-TumaIA é um SaaS para pequenas e médias empresas que automatiza a criação e a publicação de posts para Instagram a partir de pedidos feitos principalmente pelo WhatsApp.
+SaaS **WhatsApp-first** para PMEs: pedido no WhatsApp (ou painel) → contexto da marca no Supabase → IA gera post (imagem + legenda) → aprovação → publicação no Instagram.
 
-## Visão rápida
+O painel Next.js é a **retaguarda**: cadastro da empresa, identidade, mídias, chat com a Tuma e fluxo completo de arte.
 
-No fluxo principal do produto:
+## Stack (resumo)
 
-1. o cliente pede um post no WhatsApp, descrevendo imagem, legenda e público-alvo;
-2. o `n8n` recebe o webhook da API de WhatsApp;
-3. o sistema busca no Supabase o contexto da marca daquela empresa, como catálogo, estilo visual, cores e referências;
-4. a camada de IA gera a proposta do post, incluindo imagem, descrição e hashtags;
-5. o usuário aprova ou pede ajustes;
-6. quando aprovado, o ativo é salvo no Supabase;
-7. o conteúdo volta para aprovação final no WhatsApp;
-8. se houver aprovação final, a publicação acontece automaticamente no Instagram via API.
+| Camada | Tech |
+|--------|------|
+| Painel | Next.js 16 · React 19 · Tailwind 4 |
+| API | Node.js · Express · Zod · ES modules |
+| Dados | Supabase (Postgres, Auth, Storage) |
+| Chat IA | Python + Chroma (RAG) · Ollama `qwen2.5:3b` |
+| Imagem | OpenAI gpt-image-2 ou Replicate (configurável) |
+| WhatsApp (dev) | WPPConnect → webhook no backend |
+| Instagram | n8n (webhook configurável) |
 
-O painel em Next.js é o backoffice do produto: nele a empresa gerencia contexto, identidade da marca, mídias e configurações operacionais. O backend em Express.js concentra autenticação, multi-tenant, integrações com Supabase e orquestração das rotas de IA e automação.
+Detalhes e **o que já está pronto no código**: [`docs/stack-e-estado-atual.md`](./docs/stack-e-estado-atual.md)
 
 ## Estrutura do monorepo
 
-- `frontend/`: painel web em Next.js para gestão da empresa e dos contextos.
-- `backend/`: API em Node.js/Express para autenticação, empresas, IA e integrações internas.
-- `docs/`: documentação de produto, arquitetura e materiais de apoio.
-
-## Documentação
-
-- Contexto de produto: [`docs/contexto-produto.md`](./docs/contexto-produto.md)
-- Documentação geral: [`docs/README.md`](./docs/README.md)
-- Backend: [`backend/README.md`](./backend/README.md)
-- Frontend: [`frontend/README.md`](./frontend/README.md)
+| Pasta | Papel |
+|-------|--------|
+| `frontend/` | Painel web (Next.js) |
+| `backend/` | API Express + worker Python em `backend/ia/python/` |
+| `testes/` | Testes `node --test` (fora de backend/frontend) |
+| `docs/` | Produto, arquitetura, IA |
+| `tools/wppconnect/` | WPPConnect local (clone em `setup`) |
+| `n8n-workflows/` | Automação externa (referência) |
 
 ## Desenvolvimento
 
-Em **dois terminais** na raiz do projeto:
-
 ```bash
-npm run dev    # backend (estável) + frontend
-npm run whats  # WPP Connect (WhatsApp)
+npm install
+cp backend/.env.example backend/.env   # preencher Supabase e secrets
 ```
 
-Na primeira conexão do WhatsApp: `npm run whats:session` (QR no terminal do `whats`).
+### Comandos principais
 
-- Backend com hot-reload: `npm run dev:watch`
-- Tudo em um terminal só: `npm run dev:mono`
-- Ajustes por pacote: veja os READMEs de `backend/` e `frontend/`
+| Comando | O que sobe |
+|---------|------------|
+| `npm run dev` | Backend + frontend |
+| `npm run whats` | Só WPPConnect (WhatsApp) |
+| `npm run dev:mono` | WhatsApp + backend + frontend |
+| `npm run dev:status` | Status das portas e Supabase |
+| `npm run test:all` | Testes |
+
+**Só WhatsApp:** em dois terminais — `npm run dev:backend` e `npm run whats`. O site não precisa ficar aberto depois de configurar conta e workspace.
+
+**Primeira vez no WhatsApp:** `npm run wppconnect:setup` → `npm run whats` → `npm run whats:session` (QR).
+
+**IA local:** [Ollama](https://ollama.com) com `ollama pull qwen2.5:3b`.
+
+URLs: frontend `http://localhost:3000` · backend `http://localhost:4000`
+
+## Documentação
+
+| Doc | Conteúdo |
+|-----|----------|
+| [`docs/stack-e-estado-atual.md`](./docs/stack-e-estado-atual.md) | Stack + funcionalidades implementadas |
+| [`docs/contexto-produto.md`](./docs/contexto-produto.md) | Visão de produto e fluxo |
+| [`docs/arquitetura/arquitetura-repositorio.md`](./docs/arquitetura/arquitetura-repositorio.md) | Diagramas e rotas |
+| [`docs/ia/regras-tuma-ia.md`](./docs/ia/regras-tuma-ia.md) | Comportamento da IA Tuma |
+| [`AGENTS.md`](./AGENTS.md) | Guia para agentes Cursor |
+| [`backend/README.md`](./backend/README.md) | API, env, rotas |
+| [`frontend/README.md`](./frontend/README.md) | Painel Next.js |
