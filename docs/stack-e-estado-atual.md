@@ -1,6 +1,6 @@
 # Stack e estado atual do TumaIA
 
-Documento de referência para humanos e IAs: **o que existe no código hoje** (março/2026). Para visão de produto, veja [`contexto-produto.md`](./contexto-produto.md).
+Documento de referência para humanos e IAs: **o que existe no código hoje** (março/2026). Para visão de produto, veja [`contexto-produto.md`](./contexto-produto.md). Para **arquitetura alvo** (TCC, VPS, monólito Node), veja [`tcc-arquitetura.md`](./tcc-arquitetura.md).
 
 ---
 
@@ -135,6 +135,7 @@ URLs: frontend `http://localhost:3000`, backend `http://localhost:4000` (ou `POR
 
 | Arquivo | Conteúdo |
 |---------|----------|
+| [`tcc-arquitetura.md`](./tcc-arquitetura.md) | Arquitetura alvo — TCC, VPS, sem RAG no WhatsApp |
 | [`contexto-produto.md`](./contexto-produto.md) | Visão de negócio e fluxo |
 | [`arquitetura/arquitetura-repositorio.md`](./arquitetura/arquitetura-repositorio.md) | Diagramas Mermaid |
 | [`ia/regras-tuma-ia.md`](./ia/regras-tuma-ia.md) | Comportamento da IA Tuma |

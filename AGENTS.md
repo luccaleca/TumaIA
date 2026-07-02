@@ -5,6 +5,7 @@ SaaS **WhatsApp-first** para PMEs: pedido no WhatsApp → n8n → contexto da ma
 Leia antes de codar:
 
 - [`docs/stack-e-estado-atual.md`](docs/stack-e-estado-atual.md) — stack e o que já está implementado
+- [`docs/tcc-arquitetura.md`](docs/tcc-arquitetura.md) — arquitetura alvo (TCC, VPS, monólito Node)
 - [`docs/contexto-produto.md`](docs/contexto-produto.md) — fluxo de negócio
 - [`docs/arquitetura/arquitetura-repositorio.md`](docs/arquitetura/arquitetura-repositorio.md) — containers e rotas
 - [`backend/README.md`](backend/README.md) — API, env, rotas `/ia` e `/internal`

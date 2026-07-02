@@ -7,6 +7,7 @@ Documentação de produto, arquitetura e IA. Setup de ambiente fica nos READMEs 
 | Documento | Para quê |
 |-----------|----------|
 | [**stack-e-estado-atual.md**](./stack-e-estado-atual.md) | Stack, o que já funciona, como rodar — **referência para IAs** |
+| [**tcc-arquitetura.md**](./tcc-arquitetura.md) | **Arquitetura alvo** — TCC, VPS, monólito Node, sem RAG no WhatsApp |
 | [contexto-produto.md](./contexto-produto.md) | Visão de negócio e fluxo WhatsApp → Instagram |
 | [arquitetura/arquitetura-repositorio.md](./arquitetura/arquitetura-repositorio.md) | Diagramas Mermaid e rotas |
 
