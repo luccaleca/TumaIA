@@ -41,6 +41,9 @@ function normalizeCachedMessages(raw) {
       ...(m.post_supplement && typeof m.post_supplement === "object" ? { post_supplement: m.post_supplement } : {}),
       ...(m.hidden ? { hidden: true } : {}),
       ...(typeof m.selected_contexto_id === "string" ? { selected_contexto_id: m.selected_contexto_id } : {}),
+      ...(typeof m.chat_route === "string" && m.chat_route.trim() ? { chat_route: m.chat_route.trim() } : {}),
+      ...(typeof m.chat_engine === "string" && m.chat_engine.trim() ? { chat_engine: m.chat_engine.trim() } : {}),
+      ...(typeof m.chat_source === "string" && m.chat_source.trim() ? { chat_source: m.chat_source.trim() } : {}),
     });
     if (out.length >= MAX_CACHED_MESSAGES) break;
   }

@@ -59,6 +59,35 @@ const envSchema = z.object({
     (v) => (v === "" || v === undefined ? 90_000 : Number(v)),
     z.number().int().min(15_000).max(300_000),
   ),
+  /**
+   * WhatsApp: interpretação no Node (regras + Ollama) — sem subprocesso Python / RAG.
+   * Recomendado para TCC, VPS e piloto (ver docs/tcc-arquitetura.md).
+   */
+  TUMAIA_WHATSAPP_FAST_PATH: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  /** Modelo Ollama para conversa no fast path (ex.: llama3.2:1b). Padrão: LLAMA_MODEL. */
+  OLLAMA_FAST_CHAT_MODEL: z.preprocess(empty, z.string().min(1).optional()),
+  /**
+   * Motor da camada conversacional (chat): `ollama` (padrão) ou `cursor` (teste A/B).
+   * Com `cursor`, o worker Python do chat fica inativo; use CURSOR_API_KEY.
+   */
+  CHAT_LLM_PROVIDER: z.preprocess((v) => {
+    const s = String(v ?? "ollama").trim().toLowerCase();
+    return s === "cursor" ? "cursor" : "ollama";
+  }, z.enum(["ollama", "cursor"])),
+  CURSOR_API_KEY: z.preprocess(empty, z.string().min(1).optional()),
+  CURSOR_CHAT_MODEL: z.preprocess(
+    (v) => (v === "" || v === undefined ? "composer-2.5-fast" : String(v).trim()),
+    z.string().min(1),
+  ),
+  CURSOR_CHAT_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 300_000 : Number(v)),
+    z.number().int().min(30_000).max(900_000),
+  ),
+  /** Reutiliza agente cloud na mesma conversa (menos cold start). Padrão 25 min. */
+  CURSOR_CHAT_SESSION_TTL_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 1_500_000 : Number(v)),
+    z.number().int().min(60_000).max(3_600_000),
+  ),
   /** Modelo multimodal para análise de imagem (ex. `llava:7b` no Ollama). */
   LLAMA_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   /** Vision só para identidade da marca (ex. `llava:13b` ou `llama3.2-vision:11b`). */

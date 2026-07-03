@@ -212,11 +212,12 @@ OPENAI_ALLOW_BILLING=false
 # n8n na VPS (não cloud Starter)
 N8N_INSTAGRAM_WEBHOOK_URL=https://sua-vps/webhook/instagram-post
 
-# WhatsApp (TCC)
+# WhatsApp (TCC) — arquitetura híbrida (regras + Ollama no Node, sem Python)
 WPPCONNECT_ENABLED=true
+TUMAIA_WHATSAPP_FAST_PATH=true
+# OLLAMA_FAST_CHAT_MODEL=llama3.2:1b
 
 # A implementar
-# TUMAIA_WHATSAPP_FAST_PATH=true
 # TUMAIA_DEMO_MODE=true
 ```
 
@@ -235,7 +236,7 @@ WPPCONNECT_ENABLED=true
 | Publicação Instagram | `instagramPublishService.js` | Implementado |
 | Bridge WPPConnect | `whatsappBridge.js` | Implementado |
 | RAG Python | `backend/ia/python/` | Legado — fora do hot path alvo |
-| `TUMAIA_WHATSAPP_FAST_PATH` | — | Pendente |
+| `TUMAIA_WHATSAPP_FAST_PATH` | `config.js` + `processChatMessage.js` | Implementado |
 | `TUMAIA_DEMO_MODE` | — | Pendente |
 
 ---
@@ -257,7 +258,7 @@ WPPCONNECT_ENABLED=true
 
 | # | Tarefa | Prioridade |
 |---|--------|------------|
-| 1 | Implementar `TUMAIA_WHATSAPP_FAST_PATH` | Alta |
+| 1 | ~~`TUMAIA_WHATSAPP_FAST_PATH`~~ | Feito |
 | 2 | Checklist deploy VPS (backend + n8n + WPPConnect) | Alta |
 | 3 | Painel sem Python (Node → Ollama para exceções) | Média |
 | 4 | `TUMAIA_DEMO_MODE` (roteiro + artes pré-geradas) | Média |

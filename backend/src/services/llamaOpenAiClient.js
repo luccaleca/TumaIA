@@ -23,6 +23,7 @@ function baseV1() {
  *   temperature?: number,
  *   model?: string,
  *   responseFormatJson?: boolean,
+ *   expectJson?: boolean,
  *   timeoutMs?: number,
  *   timeoutMessage?: string,
  * }} [options]
@@ -32,6 +33,7 @@ async function llamaChatCompletionFromMessages(messages, options = {}) {
     temperature = 0.35,
     model,
     responseFormatJson = true,
+    expectJson = responseFormatJson,
     timeoutMs = LLAMA_FETCH_TIMEOUT_MS,
     timeoutMessage = "Tempo esgotado aguardando o Llama (Ollama). Verifique se o Ollama está rodando e se o modelo está instalado.",
   } = options;
@@ -105,6 +107,10 @@ async function llamaChatCompletionFromMessages(messages, options = {}) {
   };
   const resolvedModel = payload?.model || m;
 
+  if (!expectJson) {
+    return { text: String(content).trim(), usage, model: resolvedModel, rawContent: content };
+  }
+
   const parseResult = parseJsonFromLlmContent(content);
   if (!parseResult.ok) {
     const e = new Error("O modelo retornou JSON inválido");
@@ -123,7 +129,24 @@ async function llamaChatCompletionFromMessages(messages, options = {}) {
  * @param {{ temperature?: number, model?: string, responseFormatJson?: boolean }} [options]
  */
 export async function llamaChatCompletionJson(promptUser, options = {}) {
-  return llamaChatCompletionFromMessages([{ role: "user", content: promptUser }], options);
+  return llamaChatCompletionFromMessages([{ role: "user", content: promptUser }], {
+    ...options,
+    responseFormatJson: options.responseFormatJson !== false,
+    expectJson: true,
+  });
+}
+
+/**
+ * Chat completion em texto livre (sem JSON).
+ * @param {string} promptUser
+ * @param {{ temperature?: number, model?: string, timeoutMs?: number }} [options]
+ */
+export async function llamaChatCompletionText(promptUser, options = {}) {
+  return llamaChatCompletionFromMessages([{ role: "user", content: promptUser }], {
+    ...options,
+    responseFormatJson: false,
+    expectJson: false,
+  });
 }
 
 /**
@@ -151,6 +174,7 @@ export async function llamaChatCompletionVisionJson(promptText, imageDataUrls, o
     ...options,
     model,
     responseFormatJson: false,
+    expectJson: true,
     timeoutMs: LLAMA_VISION_FETCH_TIMEOUT_MS,
     timeoutMessage:
       "Tempo esgotado na análise visual (Ollama). Confira se o modelo de visão está instalado (`ollama pull llava:7b`).",

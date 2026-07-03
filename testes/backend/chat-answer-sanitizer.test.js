@@ -93,6 +93,27 @@ describe("chatAnswerSanitizer", () => {
     assert.doesNotMatch(out, /hashtag/i);
   });
 
+  it("bloqueia eco da última frase da assistente", () => {
+    const out = sanitizeChatAnswer({
+      answer: "O que você precisa hoje?",
+      question: "o que é rag?",
+      history,
+      nomeFantasia: "FYT",
+    });
+    assert.match(out, /repetir|detalhe/i);
+  });
+
+  it("bloqueia eco «O que você precisa hoje?» fora de saudação", () => {
+    const out = sanitizeChatAnswer({
+      answer: "O que você precisa hoje?",
+      question: "me fala um pouco sobre o neymar",
+      history,
+      nomeFantasia: "FYT",
+    });
+    assert.doesNotMatch(out, /^o que você precisa hoje\??$/i);
+    assert.match(out, /repetir|detalhe/i);
+  });
+
   it("pergunta de utilidade após oi → resposta rica, sem «mudar o foco»", () => {
     const history = [
       { role: "user", content: "oi" },

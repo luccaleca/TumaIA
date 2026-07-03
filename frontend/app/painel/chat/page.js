@@ -22,6 +22,7 @@ import {
   loadChatSession,
   saveChatSession,
 } from "../../../lib/chatSessionPersistence";
+import { assistantBubbleSurfaceClass } from "../../../lib/chatResponseOrigin";
 import { IDENTIDADE_CONTEXTO_NOME, isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
 import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresaUltimaFromMinhasPayload } from "../../../lib/empresaAtiva";
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
@@ -559,6 +560,12 @@ function fromApiMensagem(m) {
     meta && typeof meta === "object" && typeof meta.selected_contexto_id === "string"
       ? meta.selected_contexto_id.trim()
       : null;
+  const chat_route =
+    meta && typeof meta === "object" && typeof meta.chat_route === "string" ? meta.chat_route.trim() : "";
+  const chat_engine =
+    meta && typeof meta === "object" && typeof meta.chat_engine === "string" ? meta.chat_engine.trim() : "";
+  const chat_source =
+    meta && typeof meta === "object" && typeof meta.chat_source === "string" ? meta.chat_source.trim() : "";
   const out = {
     id: typeof m.id_mensagem === "string" ? m.id_mensagem : newMessageId(),
     role: papel,
@@ -572,6 +579,9 @@ function fromApiMensagem(m) {
     ...(selected_contexto_id && UUID_RE.test(selected_contexto_id)
       ? { selected_contexto_id }
       : {}),
+    ...(chat_route ? { chat_route } : {}),
+    ...(chat_engine ? { chat_engine } : {}),
+    ...(chat_source ? { chat_source } : {}),
   };
   if (post_supplement) out.post_supplement = post_supplement;
   if (post_context_proposal && Object.keys(post_context_proposal).length > 0 && !post_supplement) {
@@ -619,6 +629,9 @@ function toApiMensagens(messages) {
     if (m.selected_contexto_id && UUID_RE.test(String(m.selected_contexto_id))) {
       meta.selected_contexto_id = String(m.selected_contexto_id);
     }
+    if (typeof m.chat_route === "string" && m.chat_route.trim()) meta.chat_route = m.chat_route.trim();
+    if (typeof m.chat_engine === "string" && m.chat_engine.trim()) meta.chat_engine = m.chat_engine.trim();
+    if (typeof m.chat_source === "string" && m.chat_source.trim()) meta.chat_source = m.chat_source.trim();
     return {
       papel: m.role,
       conteudo: messageConteudoForApi(m),
@@ -2099,6 +2112,7 @@ export default function PainelChatPage() {
         question,
         history: historyForApi,
         id_empresa: empresaId,
+        ...(idChat ? { chat_session_id: idChat } : {}),
       };
 
       const result = await authApiFetchWithToken("/ia/chat", {
@@ -2187,6 +2201,13 @@ export default function PainelChatPage() {
             : CHAT_PEDIDO_AGUARDE_MSG
         : answer;
 
+      const chat_route =
+        typeof result.json?.chat_route === "string" ? result.json.chat_route.trim() : "";
+      const chat_engine =
+        typeof result.json?.chat_engine === "string" ? result.json.chat_engine.trim() : "";
+      const chat_source =
+        typeof result.json?.chat_source === "string" ? result.json.chat_source.trim() : "";
+
       const assistantMsg = {
         id: newMessageId(),
         role: "assistant",
@@ -2194,6 +2215,9 @@ export default function PainelChatPage() {
         sources,
         post_supplement,
         ui_actions: ui_actions.length ? ui_actions : undefined,
+        ...(chat_route ? { chat_route } : {}),
+        ...(chat_engine ? { chat_engine } : {}),
+        ...(chat_source ? { chat_source } : {}),
       };
       const finalMsgs = [...msgsComUsuario, assistantMsg];
       setMessages(finalMsgs);
@@ -2567,6 +2591,7 @@ export default function PainelChatPage() {
                 const hasArteBrief =
                   message.post_supplement?.post_context_proposal?.arte_brief &&
                   typeof message.post_supplement.post_context_proposal.arte_brief === "object";
+                const bubbleSurface = assistantBubbleSurfaceClass(message);
                 return (
                   <article key={message.id} className="flex items-start gap-3">
                     <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full border border-border bg-background">
@@ -2578,7 +2603,9 @@ export default function PainelChatPage() {
                         sizes="40px"
                       />
                     </div>
-                    <div className="min-w-0 max-w-[85%] rounded-2xl border border-border bg-background px-4 py-3 text-foreground shadow-sm md:max-w-[70%]">
+                    <div
+                      className={`min-w-0 max-w-[85%] rounded-2xl border px-4 py-3 shadow-sm md:max-w-[70%] ${bubbleSurface}`}
+                    >
                       {!hasSupplement ? (
                         captionEditingId === message.id ? (
                           <div className="space-y-2">

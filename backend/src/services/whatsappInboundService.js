@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
+import { env } from "../config.js";
 import { detectImageGenerationIntentFromHistory } from "./chatDeliveryUi.js";
 import { parseTypedDeliveryCommand } from "./chatDeliveryCommands.js";
 import { processChatMessage } from "./processChatMessage.js";
@@ -339,6 +340,8 @@ export async function handleWhatsappInbound(input) {
     question: body,
     history,
     id_empresa: auth.id_empresa,
+    fast_path: env.TUMAIA_WHATSAPP_FAST_PATH,
+    chat_session_id: `wa-${auth.id_empresa}-${auth.phone}`,
   });
 
   if (!chat.ok) {

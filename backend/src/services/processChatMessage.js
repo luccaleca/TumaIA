@@ -13,6 +13,7 @@ import { buildPerfilGeralLlmPromptBlock } from "./chatPerfilGeralThemes.js";
 import { tryChatCompositeResponse } from "./chatCompositeResponse.js";
 import { formatEmpresaInfoAnswer, loadEmpresaChatFacts } from "./chatEmpresaResponse.js";
 import { formatContextosListAnswer } from "./chatContextosResponse.js";
+import { runNodeChatLlm, nodeChatLlmUnavailableFallback } from "./chatNodeLlmLight.js";
 
 function userFacingChatError(err) {
   const msg = err instanceof Error ? err.message : "Erro ao consultar IA";
@@ -88,15 +89,92 @@ function buildDirectTurnResponse(turn, postExtras) {
   return null;
 }
 
+const CURSOR_LLM_ROUTES = new Set(["llm_light", "llm_rag", "identity_llm"]);
+
+/**
+ * @param {{ ok?: boolean, cursor_session_mode?: string }} llm
+ * @param {{ route?: string }} [turn]
+ */
+function buildCursorResponseMeta(llm, turn = {}) {
+  const chatRoute = llm.ok
+    ? llm.cursor_session_mode === "session_reuse"
+      ? "cursor_agent_session"
+      : turn.route === "llm_rag"
+        ? "cursor_agent_raw"
+        : "cursor_agent_raw"
+    : "cursor_agent_fallback";
+  return {
+    chat_route: chatRoute,
+    chat_engine: "cursor_agent",
+    chat_source: "cursor",
+  };
+}
+
+/**
+ * Cursor: pula Supabase/acervo quando a resposta virá do agente (mais rápido).
+ * @param {{
+ *   question: string,
+ *   history: Array<{ role: string, content: string }>,
+ *   id_empresa?: string,
+ *   chat_session_id?: string,
+ * }} input
+ * @param {ReturnType<typeof analyzeChatTurn>} turn
+ * @param {Record<string, unknown>} postExtras
+ */
+async function tryCursorLlmFastPath(input, turn, postExtras) {
+  if (env.CHAT_LLM_PROVIDER !== "cursor" || !CURSOR_LLM_ROUTES.has(turn.route)) {
+    return null;
+  }
+
+  const t0 = Date.now();
+  const llm = await runNodeChatLlm({
+    question: input.question,
+    history: input.history,
+    chat_mode: turn.chat_mode,
+    nomeFantasia: null,
+    sessionKey: input.chat_session_id || input.id_empresa || null,
+  });
+  const elapsedMs = Date.now() - t0;
+  if (elapsedMs > 8_000) {
+    console.info(`[ia/chat] Cursor fast-path em ${Math.round(elapsedMs / 1000)}s`);
+  }
+
+  const answer = llm.ok
+    ? String(llm.text || "")
+    : nodeChatLlmUnavailableFallback(null);
+
+  const sanitized = sanitizeChatAnswer({
+    answer,
+    question: input.question,
+    history: input.history,
+    nomeFantasia: null,
+  });
+
+  const chatMeta = buildCursorResponseMeta(llm, turn);
+
+  return {
+    ok: true,
+    data: {
+      answer: sanitized,
+      source_documents: [],
+      ...chatMeta,
+      ...(turn.chat_mode ? { chat_mode: turn.chat_mode } : {}),
+      ...(turn.topics?.length ? { chat_topics: turn.topics } : {}),
+      ...postExtras,
+    },
+  };
+}
+
 /**
  * Mesma lógica de `POST /ia/chat`, sem auth HTTP.
- * @param {{ question: string, history?: Array<{ role: string, content: string }>, id_empresa?: string }} input
+ * @param {{ question: string, history?: Array<{ role: string, content: string }>, id_empresa?: string, chat_session_id?: string, fast_path?: boolean }} input
  * @returns {Promise<{ ok: true, data: Record<string, unknown> } | { ok: false, status: number, error: string }>}
  */
 export async function processChatMessage(input) {
   const question = String(input.question || "").trim();
   const history = Array.isArray(input.history) ? input.history : [];
   const id_empresa = input.id_empresa;
+  const fastPath = input.fast_path === true;
 
   if (!question) {
     return { ok: false, status: 400, error: "question obrigatória" };
@@ -146,18 +224,17 @@ export async function processChatMessage(input) {
     }
     if (directQuick) return directQuick;
 
-    try {
-      await ensureChatWorkerReady();
-    } catch (err) {
-      return {
-        ok: false,
-        status: 503,
-        error:
-          err instanceof Error
-            ? err.message
-            : "IA indisponível. Se mudou o modelo de embedding, apague backend/ia/indice_contextos e reinicie.",
-      };
-    }
+    const cursorFast = await tryCursorLlmFastPath(
+      {
+        question,
+        history,
+        id_empresa,
+        chat_session_id: input.chat_session_id,
+      },
+      turnQuick,
+      postExtrasQuick,
+    );
+    if (cursorFast) return cursorFast;
 
     let facts = null;
     if (id_empresa && db) {
@@ -276,6 +353,85 @@ export async function processChatMessage(input) {
     } else if (turn.chat_mode === "conversa_aberta") {
       const hint = buildConversaNaturalPromptHint(nomeFantasia);
       trainingBlock = [hint, trainingBlock].filter(Boolean).join("\n\n");
+    }
+
+    if (fastPath || env.CHAT_LLM_PROVIDER === "cursor") {
+      const t0 = Date.now();
+      const llm = await runNodeChatLlm({
+        question,
+        history,
+        trainingBlock,
+        chat_mode: turn.chat_mode,
+        nomeFantasia,
+        sessionKey: input.chat_session_id || id_empresa || null,
+      });
+      const elapsedMs = Date.now() - t0;
+      if (elapsedMs > 8_000) {
+        const label = env.CHAT_LLM_PROVIDER === "cursor" ? "Cursor Agent" : "fast-path Ollama";
+        console.info(`[ia/chat] ${label} em ${Math.round(elapsedMs / 1000)}s`);
+      }
+
+      let answer = llm.ok
+        ? String(llm.text || "")
+        : nodeChatLlmUnavailableFallback(acervoBundle?.nomeFantasia ?? nomeFantasia);
+
+      if (llm.ok && acervoBundle?.midias?.length && turn.needsProductGuard) {
+        answer = guardChatProductAnswer(answer, acervoBundle.midias, acervoBundle.nomeFantasia, {
+          userQuestion: question,
+        });
+      }
+      answer = sanitizeChatAnswer({
+        answer,
+        question,
+        history,
+        nomeFantasia: acervoBundle?.nomeFantasia ?? nomeFantasia,
+      });
+
+      const chatMeta =
+        env.CHAT_LLM_PROVIDER === "cursor"
+          ? buildCursorResponseMeta(llm, turn)
+          : {
+              chat_route:
+                turn.route === "llm_rag"
+                  ? "node_llm_context"
+                  : llm.ok
+                    ? "node_llm_light"
+                    : "node_llm_fallback",
+              chat_engine: "node_ollama",
+              chat_source: "ollama",
+            };
+
+      return {
+        ok: true,
+        data: {
+          answer,
+          source_documents: [],
+          ...chatMeta,
+          ...(turn.chat_mode ? { chat_mode: turn.chat_mode } : {}),
+          ...(turn.topics?.length ? { chat_topics: turn.topics } : {}),
+          ...(route_image_generation
+            ? {
+                route_image_generation: true,
+                offer_post_context: true,
+                image_provider: env.IMAGE_PROVIDER || "replicate",
+                image_pipeline: env.IMAGE_PIPELINE || "raw",
+              }
+            : {}),
+        },
+      };
+    }
+
+    try {
+      await ensureChatWorkerReady();
+    } catch (err) {
+      return {
+        ok: false,
+        status: 503,
+        error:
+          err instanceof Error
+            ? err.message
+            : "IA indisponível. Se mudou o modelo de embedding, apague backend/ia/indice_contextos e reinicie.",
+      };
     }
 
     const t0 = Date.now();

@@ -157,6 +157,42 @@ function recoverFromNonsenseOrRepeat(answer, question, nomeFantasia, history) {
   return "Me diz com mais detalhe o que você precisa — produtos, post ou informações da empresa.";
 }
 
+const RE_GREETING_TAIL_ONLY = /^o\s+que\s+voc[eê]\s+precisa\s+hoje\??$/i;
+
+const RETRY_OPEN_CHAT_MSG =
+  "Não consegui responder bem agora — pode repetir a pergunta com mais detalhe?";
+
+/**
+ * @param {string} text
+ */
+function lastSentence(text) {
+  const parts = String(text || "")
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts[parts.length - 1] || String(text || "").trim();
+}
+
+/**
+ * @param {string} text
+ * @param {string} question
+ * @param {Array<{ role: string, content: string }>} history
+ */
+function rejectHollowAnswer(text, question, history) {
+  const t = String(text || "").trim();
+  if (!t || isIdentityOrMetaQuestion(question)) return t;
+  if (RE_GREETING_TAIL_ONLY.test(t)) return RETRY_OPEN_CHAT_MSG;
+
+  const prev = lastAssistantText(history);
+  if (prev) {
+    const prevTail = lastSentence(prev);
+    if (prevTail && normalizeCompare(t) === normalizeCompare(prevTail) && t.length < 80) {
+      return RETRY_OPEN_CHAT_MSG;
+    }
+  }
+  return t;
+}
+
 /**
  * @param {{
  *   answer: string,
@@ -212,5 +248,6 @@ export function sanitizeChatAnswer(opts) {
   }
 
   text = recoverFromNonsenseOrRepeat(text, question, nomeFantasia, history);
+  text = rejectHollowAnswer(text, question, history);
   return text.trim() || String(answer || "").trim();
 }

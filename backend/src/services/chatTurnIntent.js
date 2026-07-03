@@ -26,7 +26,9 @@ import { tryChatOutOfScopeResponse } from "./chatOutOfScopeResponse.js";
 import {
   tryChatConversaNaturalResponse,
   isConversaNaturalQuestion,
+  shouldUseOpenConversation,
 } from "./chatConversaNatural.js";
+import { env } from "../config.js";
 
 
 
@@ -176,7 +178,11 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
     };
   }
 
-  const conversaNaturalAnswer = tryChatConversaNaturalResponse(q, nomeFantasia);
+  const useConversaScript =
+    ctx.useConversaNaturalScript ?? env.CHAT_LLM_PROVIDER !== "cursor";
+  const conversaNaturalAnswer = useConversaScript
+    ? tryChatConversaNaturalResponse(q, nomeFantasia)
+    : null;
   if (conversaNaturalAnswer) {
     return {
       route: "conversa_natural",
@@ -273,7 +279,7 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
 
   const skipAcervo = shouldSkipAcervoBlock(q);
 
-  const conversaAberta = isConversaNaturalQuestion(q);
+  let conversaAberta = isConversaNaturalQuestion(q) || shouldUseOpenConversation(q, history);
 
   let chat_mode = null;
 

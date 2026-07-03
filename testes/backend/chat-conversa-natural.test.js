@@ -9,6 +9,7 @@ import {
 describe("chatConversaNatural", () => {
   it("detecta receita de batata", () => {
     assert.equal(isConversaNaturalQuestion("como cozinhar batata"), true);
+    assert.equal(isConversaNaturalQuestion("me fala um pouco sobre o neymar"), true);
     assert.equal(isConversaNaturalQuestion("quais produtos temos"), false);
   });
 
@@ -18,15 +19,31 @@ describe("chatConversaNatural", () => {
     assert.doesNotMatch(ans || "", /foge|n[aã]o\s+entendi|n[aã]o\s+captei/i);
   });
 
-  it("rota conversa_natural antes do LLM", () => {
-    const t = analyzeChatTurn("receita de arroz simples", [], { nomeFantasia: "FYT" });
+  it("rota conversa_natural antes do LLM (script)", () => {
+    const t = analyzeChatTurn("receita de arroz simples", [], {
+      nomeFantasia: "FYT",
+      useConversaNaturalScript: true,
+    });
     assert.equal(t.route, "conversa_natural");
     assert.match(t.conversaNaturalAnswer || "", /arroz/i);
   });
 
+  it("com Cursor provider manda receita para LLM conversa_aberta", () => {
+    const t = analyzeChatTurn("receita de arroz simples", [], {
+      nomeFantasia: "FYT",
+      useConversaNaturalScript: false,
+    });
+    assert.equal(t.route, "llm_light");
+    assert.equal(t.chat_mode, "conversa_aberta");
+    assert.equal(t.conversaNaturalAnswer ?? null, null);
+  });
+
   it("batata sozinha responde na hora sem LLM pesado", () => {
     assert.equal(isConversaNaturalQuestion("batata"), true);
-    const t = analyzeChatTurn("batata", [], { nomeFantasia: "FYT" });
+    const t = analyzeChatTurn("batata", [], {
+      nomeFantasia: "FYT",
+      useConversaNaturalScript: true,
+    });
     assert.equal(t.route, "conversa_natural");
     assert.match(t.conversaNaturalAnswer || "", /batata/i);
     assert.doesNotMatch(t.conversaNaturalAnswer || "", /foge|n[aã]o\s+entendi/i);
@@ -38,6 +55,15 @@ describe("chatConversaNatural", () => {
     assert.equal(t.route, "llm_light");
     assert.equal(t.includeAcervoInPrompt, false);
     assert.equal(t.conversaNaturalAnswer ?? null, null);
+  });
+
+  it("pergunta aleatória fora do negócio usa conversa_aberta", () => {
+    for (const q of ["o que é rag?", "explique blockchain", "me fala sobre o neymar"]) {
+      const t = analyzeChatTurn(q, [], { nomeFantasia: "FYT", useConversaNaturalScript: false });
+      assert.equal(t.route, "llm_light", q);
+      assert.equal(t.chat_mode, "conversa_aberta", q);
+      assert.equal(t.includeAcervoInPrompt, false, q);
+    }
   });
 
   it("pergunta de produto não vai para conversa natural", () => {

@@ -27,12 +27,14 @@ const server = app.listen(env.PORT, () => {
   const baseUrl = `http://localhost:${env.PORT}`;
   console.log(`tumaia-backend ${baseUrl}`);
   // Primeira mensagem do chat não paga sozinha o boot do Python + Chroma.
-  ensureChatWorkerReady().catch((err) =>
-    console.warn(
-      "[chat-worker] warm-up (subirá na 1ª mensagem se falhar):",
-      err instanceof Error ? err.message : err,
-    ),
-  );
+  if (env.CHAT_LLM_PROVIDER !== "cursor") {
+    ensureChatWorkerReady().catch((err) =>
+      console.warn(
+        "[chat-worker] warm-up (subirá na 1ª mensagem se falhar):",
+        err instanceof Error ? err.message : err,
+      ),
+    );
+  }
   console.info(
     `[chat-worker] timeouts boot=${Math.round(env.CHAT_WORKER_BOOT_TIMEOUT_MS / 1000)}s request=${Math.round(env.CHAT_WORKER_REQUEST_TIMEOUT_MS / 1000)}s`,
   );
@@ -40,6 +42,11 @@ const server = app.listen(env.PORT, () => {
     console.info(
       `[wppconnect] ativo — webhook em http://localhost:${env.PORT}/wppconnect/webhook (sessão: ${env.WPPCONNECT_SESSION})`,
     );
+    if (env.TUMAIA_WHATSAPP_FAST_PATH) {
+      console.info(
+        "[whatsapp] TUMAIA_WHATSAPP_FAST_PATH=true — chat sem Python (regras + Ollama no Node)",
+      );
+    }
     console.info(
       "[wppconnect] configure webhook.url no wppconnect-server apontando para essa URL",
     );
@@ -47,6 +54,14 @@ const server = app.listen(env.PORT, () => {
       if (s.ok) console.info("[wppconnect] sessão WhatsApp conectada");
       else console.warn("[wppconnect] sessão WhatsApp inativa:", s.error || s.status);
     });
+  }
+  if (env.CHAT_LLM_PROVIDER === "cursor") {
+    console.info(
+      `[chat] CHAT_LLM_PROVIDER=cursor — conversa via Cursor Agent (${env.CURSOR_CHAT_MODEL}); Ollama/Python inativos no chat`,
+    );
+    if (!env.CURSOR_API_KEY) {
+      console.warn("[chat] CURSOR_API_KEY ausente — respostas conversacionais vão falhar.");
+    }
   }
 });
 

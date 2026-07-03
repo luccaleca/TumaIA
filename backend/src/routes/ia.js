@@ -47,6 +47,8 @@ const bodySchema = z.object({
     .transform((arr) => trimChatHistoryForApi(arr)),
   /** Empresa em sessão: validamos vínculo; a IA injeta o cadastro de ``public.empresa``. */
   id_empresa: z.string().uuid().optional(),
+  /** Reutiliza agente Cursor na mesma conversa (menos latência). */
+  chat_session_id: z.string().trim().min(8).max(80).optional(),
 });
 
 async function assertEmpresaVinculo(req, idEmpresa) {

@@ -11,7 +11,7 @@ import {
   normalizeSenhaClient,
   saveToken,
 } from "../../lib/auth";
-import AuthLayout, { AuthField, AuthMessage, AuthSubmitButton } from "../components/AuthLayout";
+import AuthLayout, { AuthField, AuthMessage, AuthPasswordField, AuthSubmitButton } from "../components/AuthLayout";
 
 function LoginForm() {
   const router = useRouter();
@@ -103,10 +103,9 @@ function LoginForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <AuthField
+        <AuthPasswordField
           id="senha"
           label="Senha"
-          type="password"
           value={senha}
           onChange={(e) => setSenha(e.target.value)}
           required

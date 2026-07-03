@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
 /**
  * Layout compartilhado login/cadastro — fundo com imagem + card vidro em duas colunas.
@@ -126,6 +127,70 @@ export function AuthField({ id, label, type = "text", value, onChange, required 
         className="auth-input"
         required={required}
       />
+    </div>
+  );
+}
+
+function AuthPasswordToggleIcon({ visible }) {
+  if (visible) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M3 3l18 18M10.58 10.58A2 2 0 0 0 12 15a2 2 0 0 0 1.42-.58M9.88 5.09A10.94 10.94 0 0 1 12 5c5 0 9.27 3.11 11 7.5a11.8 11.8 0 0 1-2.08 3.2M6.61 6.61A11.8 11.8 0 0 0 1 12.5C2.73 16.89 7 20 12 20a10.94 10.94 0 0 0 4.91-1.12"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M2 12.5C3.73 8.11 8 5 13 5s9.27 3.11 11 7.5c-1.73 4.39-6 7.5-11 7.5S3.73 16.89 2 12.5Z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="13" cy="12.5" r="3" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  );
+}
+
+export function AuthPasswordField({ id, label, value, onChange, required = false, autoComplete = "current-password" }) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div>
+      <label className="auth-label" htmlFor={id}>
+        {label}
+      </label>
+      <div className="auth-password-wrap">
+        <input
+          id={id}
+          type="text"
+          value={value}
+          onChange={onChange}
+          className={`auth-input auth-input--password${visible ? "" : " auth-input--masked"}`}
+          required={required}
+          autoComplete={autoComplete}
+          spellCheck={false}
+          autoCorrect="off"
+          autoCapitalize="off"
+        />
+        <button
+          type="button"
+          className="auth-password-toggle"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setVisible((prev) => !prev)}
+          aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
+          aria-pressed={visible}
+        >
+          <AuthPasswordToggleIcon visible={visible} />
+        </button>
+      </div>
     </div>
   );
 }

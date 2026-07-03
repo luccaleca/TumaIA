@@ -5,13 +5,42 @@
 
 import { isDateTimeQuestion } from "./chatOutOfScopeResponse.js";
 import { isPerfilGeralQuestion } from "./chatPerfilGeralThemes.js";
+import { classifyChatAcervoIntent } from "./chatIntent.js";
+import { detectImageGenerationIntentFromHistory } from "./chatDeliveryUi.js";
 
 /** Pergunta casual / conhecimento geral — não é pedido de acervo/arte/identidade. */
 export const CONVERSA_NATURAL_RE =
-  /\b(receita|cozinhar|cozinha|como\s+fazer|como\s+preparar|ingrediente|assar|fritar|refogar|ferver|modo\s+de\s+preparo)\b|\b(me\s+)?(?:ensina|explica)\s+(?:como|o\s+que)\b|\b(dica\s+de|passo\s+a\s+passo|tutorial)\b|\b(o\s+que\s+(?:é|e|significa)\s+(?!vc|você|voce|tuma|tuma\s*ia)\b)|\b(por\s+que\s+(?:o|a|os|as)\s+)\b|\b(piada|hist[oó]ria\s+curta|conta\s+uma)\b|\b(clima|previs[aã]o\s+do\s+tempo|vai\s+chover)\b|\b(futebol|jogo\s+do|campeonato)\b|\b(quem\s+(?:foi|é|e)\s+(?!vc|você|tuma))\b|\b(capital\s+de|quantos\s+habitantes)\b|\b(como\s+aprender|estudar\s+para)\b/i;
+  /\b(receita|cozinhar|cozinha|como\s+fazer|como\s+preparar|ingrediente|assar|fritar|refogar|ferver|modo\s+de\s+preparo)\b|\b(me\s+)?(?:ensina|explica)\s+(?:como|o\s+que)\b|\b(?:me\s+)?(?:fala|conta)(?:\s+um\s+pouco)?\s+sobre\b|\b(dica\s+de|passo\s+a\s+passo|tutorial)\b|\b(o\s+que\s+(?:é|e|significa)\s+(?!vc|você|voce|tuma|tuma\s*ia)\b)|\b(por\s+que\s+(?:o|a|os|as)\s+)\b|\b(piada|hist[oó]ria\s+curta|conta\s+uma)\b|\b(clima|previs[aã]o\s+do\s+tempo|vai\s+chover)\b|\b(futebol|jogo\s+do|campeonato)\b|\b(quem\s+(?:foi|é|e)\s+(?!vc|você|tuma))\b|\b(capital\s+de|quantos\s+habitantes)\b|\b(como\s+aprender|estudar\s+para)\b/i;
 
 const NEGOCIO_RE =
   /\b(post|arte|instagram|banner|stories|carrossel|m[ií]dia|mídias|acervo|produto|cadastr|monta|gera|cria\s+(?:um\s+)?post|contexto|black\s+friday|whey|monster|creatina|powerade|lista.*produto|quais\s+produtos)\b/i;
+
+/**
+ * Pergunta sobre marca/post/acervo — não é conversa aberta genérica.
+ * @param {string} question
+ * @param {Array<{ role: string, content: string }>} [history]
+ */
+export function isBusinessChatQuestion(question, history = []) {
+  const q = String(question || "").trim();
+  if (!q) return false;
+  if (NEGOCIO_RE.test(q)) return true;
+  if (detectImageGenerationIntentFromHistory(history, q)) return true;
+  if (classifyChatAcervoIntent(q, history).kind !== "NONE") return true;
+  return false;
+}
+
+/**
+ * Qualquer pergunta fora do escopo de negócio → LLM conversa aberta (não RAG/acervo).
+ * @param {string} question
+ * @param {Array<{ role: string, content: string }>} [history]
+ */
+export function shouldUseOpenConversation(question, history = []) {
+  const q = String(question || "").trim();
+  if (!q || isBusinessChatQuestion(q, history)) return false;
+  if (isDateTimeQuestion(q)) return false;
+  if (isPerfilGeralQuestion(q)) return false;
+  return true;
+}
 
 /**
  * Pergunta curta fora do fluxo de post/acervo — ex.: «batata», «receita de arroz».
