@@ -106,12 +106,15 @@ function formatHistoryForCursor(history) {
  *   history?: Array<{ role: string, content: string }>,
  *   nomeFantasia?: string | null,
  *   chat_mode?: string | null,
+ *   trainingBlock?: string | null,
+ *   agenteMarcaMarkdown?: string | null,
  * }} input
  */
 export function buildCursorChatPrompt(input) {
   const question = String(input.question || "").trim();
   const nomeFantasia = String(input.nomeFantasia || "").trim() || null;
   const chatMode = String(input.chat_mode || "").trim() || null;
+  const agente = String(input.agenteMarcaMarkdown || input.trainingBlock || "").trim();
   const emp = nomeFantasia ? ` da ${nomeFantasia}` : "";
   const hist = formatHistoryForCursor(input.history);
 
@@ -123,6 +126,13 @@ export function buildCursorChatPrompt(input) {
     "Se pedirem post ou arte, oriente a descrever produto e formato.",
   ];
 
+  if (agente) {
+    lines.push(
+      "OBRIGATÓRIO: obedeça o bloco «Agente da marca» abaixo com prioridade sobre hábitos genéricos de IA.",
+      "Em artes/briefings, não use poster genérico (logo só no rodapé, visual padrão ChatGPT).",
+    );
+  }
+
   if (chatMode === "conversa_aberta") {
     lines.push(buildConversaNaturalPromptHint(nomeFantasia));
   } else if (chatMode === "identidade") {
@@ -130,6 +140,7 @@ export function buildCursorChatPrompt(input) {
   }
 
   const parts = [lines.join("\n")];
+  if (agente) parts.push(agente.length > 3500 ? `${agente.slice(0, 3499)}…` : agente);
   if (hist) parts.push(`Histórico recente:\n${hist}`);
   parts.push(`Usuário: ${question}`);
   return parts.join("\n\n");
@@ -204,6 +215,8 @@ function storeWarmSession(sessionKey, agent) {
  *   sessionKey?: string | null,
  *   nomeFantasia?: string | null,
  *   chat_mode?: string | null,
+ *   trainingBlock?: string | null,
+ *   agenteMarcaMarkdown?: string | null,
  * }} input
  */
 export async function promptCursorChat(input) {
@@ -241,6 +254,8 @@ export async function promptCursorChat(input) {
     history: input.history,
     nomeFantasia: input.nomeFantasia,
     chat_mode: input.chat_mode,
+    trainingBlock: input.trainingBlock,
+    agenteMarcaMarkdown: input.agenteMarcaMarkdown,
   });
 
   const opts = buildAgentOptions();

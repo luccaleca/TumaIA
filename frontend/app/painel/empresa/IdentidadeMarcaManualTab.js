@@ -3,6 +3,7 @@
 import IdentidadeMarcaCamposImagem from "./IdentidadeMarcaCamposImagem";
 
 /**
+ * Compat — o fluxo principal usa CamposImagem direto em IdentidadeMarcaSection.
  * @param {{
  *   dados: Record<string, string>,
  *   canEdit: boolean,
@@ -15,9 +16,8 @@ export default function IdentidadeMarcaManualTab({ dados, canEdit, onFieldChange
       dados={dados}
       canEdit={canEdit}
       onFieldChange={onFieldChange}
-      showOpcional
       showLegenda
-      intro="Preencha à mão o que o Tuma vai usar nas artes. Se preferir, volte para a opção do Tuma para montar a base a partir das fotos."
+      intro="Preencha as leis da marca. O que salvar aqui é obrigatório em toda arte."
     />
   );
 }

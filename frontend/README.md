@@ -11,7 +11,9 @@ Painel web do TumaIA — retaguarda operacional do produto WhatsApp-first.
 - **Tailwind CSS 4**
 - ES modules (`"type": "module"`)
 
-Regras específicas da versão Next: [`AGENTS.md`](./AGENTS.md)
+Next.js 16 pode divergir de versões antigas — consulte a documentação da versão instalada em `node_modules/next/` antes de usar APIs novas.
+
+Guia do monorepo: [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 
 ## Papel no produto
 

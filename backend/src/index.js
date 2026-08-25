@@ -26,27 +26,28 @@ if (env.IMAGE_PIPELINE === "raw") {
 const server = app.listen(env.PORT, () => {
   const baseUrl = `http://localhost:${env.PORT}`;
   console.log(`tumaia-backend ${baseUrl}`);
-  // Primeira mensagem do chat não paga sozinha o boot do Python + Chroma.
-  if (env.CHAT_LLM_PROVIDER !== "cursor") {
+  const nodeChat =
+    env.TUMAIA_NODE_CHAT || env.TUMAIA_WHATSAPP_FAST_PATH || env.CHAT_LLM_PROVIDER === "cursor";
+  if (nodeChat) {
+    console.info(
+      "[chat] motor Node ativo — regras + estados; Python/RAG fora do caminho feliz (MVP)",
+    );
+  } else {
+    // Legado: primeira mensagem não deve pagar sozinha o boot do Python + Chroma.
     ensureChatWorkerReady().catch((err) =>
       console.warn(
         "[chat-worker] warm-up (subirá na 1ª mensagem se falhar):",
         err instanceof Error ? err.message : err,
       ),
     );
+    console.info(
+      `[chat-worker] timeouts boot=${Math.round(env.CHAT_WORKER_BOOT_TIMEOUT_MS / 1000)}s request=${Math.round(env.CHAT_WORKER_REQUEST_TIMEOUT_MS / 1000)}s`,
+    );
   }
-  console.info(
-    `[chat-worker] timeouts boot=${Math.round(env.CHAT_WORKER_BOOT_TIMEOUT_MS / 1000)}s request=${Math.round(env.CHAT_WORKER_REQUEST_TIMEOUT_MS / 1000)}s`,
-  );
   if (isWppconnectEnabled()) {
     console.info(
       `[wppconnect] ativo — webhook em http://localhost:${env.PORT}/wppconnect/webhook (sessão: ${env.WPPCONNECT_SESSION})`,
     );
-    if (env.TUMAIA_WHATSAPP_FAST_PATH) {
-      console.info(
-        "[whatsapp] TUMAIA_WHATSAPP_FAST_PATH=true — chat sem Python (regras + Ollama no Node)",
-      );
-    }
     console.info(
       "[wppconnect] configure webhook.url no wppconnect-server apontando para essa URL",
     );
@@ -57,11 +58,15 @@ const server = app.listen(env.PORT, () => {
   }
   if (env.CHAT_LLM_PROVIDER === "cursor") {
     console.info(
-      `[chat] CHAT_LLM_PROVIDER=cursor — conversa via Cursor Agent (${env.CURSOR_CHAT_MODEL}); Ollama/Python inativos no chat`,
+      `[chat] MVP: conversa só via Cursor Agent (${env.CURSOR_CHAT_MODEL}); Ollama fora do chat`,
     );
     if (!env.CURSOR_API_KEY) {
       console.warn("[chat] CURSOR_API_KEY ausente — respostas conversacionais vão falhar.");
     }
+  } else {
+    console.info(
+      `[chat] CHAT_LLM_PROVIDER=ollama (legado) — modelo ${env.OLLAMA_FAST_CHAT_MODEL || env.LLAMA_MODEL || "padrão"}`,
+    );
   }
 });
 

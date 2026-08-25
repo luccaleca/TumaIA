@@ -12,8 +12,12 @@ import { buildConversaNaturalPromptHint } from "./chatConversaNatural.js";
 import { buildPerfilGeralLlmPromptBlock } from "./chatPerfilGeralThemes.js";
 import { tryChatCompositeResponse } from "./chatCompositeResponse.js";
 import { formatEmpresaInfoAnswer, loadEmpresaChatFacts } from "./chatEmpresaResponse.js";
-import { formatContextosListAnswer } from "./chatContextosResponse.js";
 import { runNodeChatLlm, nodeChatLlmUnavailableFallback } from "./chatNodeLlmLight.js";
+import {
+  clipAgenteMarcaForPrompt,
+  renderAgenteMarcaMarkdown,
+} from "./brandAgentService.js";
+import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
 
 function userFacingChatError(err) {
   const msg = err instanceof Error ? err.message : "Erro ao consultar IA";
@@ -21,9 +25,19 @@ function userFacingChatError(err) {
     return "Não consegui falar com o banco de dados agora. Confira a conexão/Supabase no backend e tente de novo.";
   }
   if (/tempo esgotado|timed?\s*out/i.test(msg)) {
-    return "A IA demorou mais que o limite configurado. Na primeira mensagem após reiniciar o backend, o índice pode levar vários minutos — aguarde e tente de novo.";
+    return "A IA demorou mais que o limite configurado. Aguarde e tente de novo.";
   }
   return msg;
+}
+
+/** Protótipo: Node (regras + LLM leve). Python/RAG só se TUMAIA_NODE_CHAT=false. */
+export function shouldUseNodeChat(input = {}) {
+  return (
+    input.fast_path === true ||
+    env.TUMAIA_NODE_CHAT === true ||
+    env.TUMAIA_WHATSAPP_FAST_PATH === true ||
+    env.CHAT_LLM_PROVIDER === "cursor"
+  );
 }
 
 /**
@@ -174,7 +188,7 @@ export async function processChatMessage(input) {
   const question = String(input.question || "").trim();
   const history = Array.isArray(input.history) ? input.history : [];
   const id_empresa = input.id_empresa;
-  const fastPath = input.fast_path === true;
+  const fastPath = shouldUseNodeChat(input);
 
   if (!question) {
     return { ok: false, status: 400, error: "question obrigatória" };
@@ -300,19 +314,6 @@ export async function processChatMessage(input) {
       };
     }
 
-    if (id_empresa && db && facts && turn.route === "contextos") {
-      return {
-        ok: true,
-        data: {
-          answer: formatContextosListAnswer(facts.contextos),
-          source_documents: [],
-          chat_route: "contextos",
-          chat_topics: turn.topics,
-          ...postExtras,
-        },
-      };
-    }
-
     if (id_empresa && db && turn.route === "acervo" && turn.acervo && acervoBundle) {
       const acervoAnswer = await tryChatAcervoResponse({
         question,
@@ -347,6 +348,18 @@ export async function processChatMessage(input) {
             nomeFantasia,
           })
         : "";
+
+    if (facts?.contextos?.length) {
+      const { identidadeDados } = partitionContextosIdentidade(facts.contextos);
+      if (identidadeDados) {
+        const agenteMd = clipAgenteMarcaForPrompt(
+          renderAgenteMarcaMarkdown(identidadeDados, facts.empresa),
+        );
+        if (agenteMd) {
+          trainingBlock = [agenteMd, trainingBlock].filter(Boolean).join("\n\n");
+        }
+      }
+    }
 
     if (turn.chat_mode === "identidade") {
       trainingBlock = buildPerfilGeralLlmPromptBlock(nomeFantasia, turn.perfilGeralTheme ?? null);

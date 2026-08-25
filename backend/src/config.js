@@ -60,23 +60,28 @@ const envSchema = z.object({
     z.number().int().min(15_000).max(300_000),
   ),
   /**
-   * WhatsApp: interpretação no Node (regras + Ollama) — sem subprocesso Python / RAG.
-   * Recomendado para TCC, VPS e piloto (ver docs/tcc-arquitetura.md).
+   * Protótipo / TCC / VPS: chat no Node (regras + estados + LLM).
+   * MVP: com CHAT_LLM_PROVIDER=cursor (padrão). Sem worker Python/RAG no caminho feliz.
+   * Defina `false` só para depurar o legado `backend/ia/python/`.
+   */
+  TUMAIA_NODE_CHAT: z.preprocess((v) => parseEnvBool(v, true), z.boolean()),
+  /**
+   * Alias legado: força Node no WhatsApp. Com `TUMAIA_NODE_CHAT=true` (padrão) já cobre painel e WhatsApp.
    */
   TUMAIA_WHATSAPP_FAST_PATH: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
-  /** Modelo Ollama para conversa no fast path (ex.: llama3.2:1b). Padrão: LLAMA_MODEL. */
+  /** Modelo Ollama para conversa no Node (ex.: llama3.2:1b). Padrão: LLAMA_MODEL. */
   OLLAMA_FAST_CHAT_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   /**
-   * Motor da camada conversacional (chat): `ollama` (padrão) ou `cursor` (teste A/B).
-   * Com `cursor`, o worker Python do chat fica inativo; use CURSOR_API_KEY.
+   * Motor da camada conversacional (chat): `cursor` (padrão MVP) ou `ollama` (legado local).
+   * Com `cursor`, use CURSOR_API_KEY; Ollama/Python ficam fora do caminho feliz.
    */
   CHAT_LLM_PROVIDER: z.preprocess((v) => {
-    const s = String(v ?? "ollama").trim().toLowerCase();
-    return s === "cursor" ? "cursor" : "ollama";
+    const s = String(v ?? "cursor").trim().toLowerCase();
+    return s === "ollama" ? "ollama" : "cursor";
   }, z.enum(["ollama", "cursor"])),
   CURSOR_API_KEY: z.preprocess(empty, z.string().min(1).optional()),
   CURSOR_CHAT_MODEL: z.preprocess(
-    (v) => (v === "" || v === undefined ? "composer-2.5-fast" : String(v).trim()),
+    (v) => (v === "" || v === undefined ? "grok-4.6" : String(v).trim()),
     z.string().min(1),
   ),
   CURSOR_CHAT_TIMEOUT_MS: z.preprocess(

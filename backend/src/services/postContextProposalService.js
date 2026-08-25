@@ -39,9 +39,7 @@ import {
 } from "./productMentionMatch.js";
 import {
   extractPedidoCampanhaLabels,
-  inferPreferredPlaybookSlug,
 } from "./cadastroMeaningful.js";
-import { playbookSlugFromContextoRow } from "../modules/empresas/postModelosCatalog.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
 import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
 import { TUMA_IA_REGRAS_RESUMO_IMAGEM } from "./tumaIaRegrasResumo.js";
@@ -269,32 +267,6 @@ function scoreTokenOverlap(blob, tokens) {
   return score;
 }
 
-function resolveContextoPlaybookSlug(row) {
-  if (!row || typeof row !== "object") return null;
-  const fromPlaybook = playbookSlugFromContextoRow(row);
-  if (fromPlaybook) return fromPlaybook;
-  const schema = row.schema_json && typeof row.schema_json === "object" ? row.schema_json : {};
-  const slug = String(schema.playbook_slug ?? schema.tipo ?? "").trim();
-  return slug || null;
-}
-
-function findCampanhaRowBySlug(campanhaRows, slug) {
-  const target = String(slug ?? "").trim();
-  if (!target || !Array.isArray(campanhaRows)) return null;
-  const bySlug = campanhaRows.find((row) => resolveContextoPlaybookSlug(row) === target);
-  if (bySlug) return bySlug;
-
-  const nomePatterns = {
-    produto: /^produto$/i,
-    promocao: /^promo/i,
-    lancamento: /^lan[cç]amento$/i,
-    mensagens: /^mensagem/i,
-  };
-  const nomeRe = nomePatterns[target];
-  if (!nomeRe) return null;
-  return campanhaRows.find((row) => nomeRe.test(String(row?.nome ?? "").trim())) ?? null;
-}
-
 /**
  * Ajusta matched_contexto quando o pedido indica promoção/lançamento etc.
  * Não sobrescreve escolha explícita via focus_contexto_id (rodar antes de applyFocus).
@@ -303,54 +275,13 @@ function findCampanhaRowBySlug(campanhaRows, slug) {
  * @param {Array<Record<string, unknown>>} contextoRows
  * @param {string} [userHint]
  */
-export function reconcileMatchedContextoFromPedido(proposal, contextoRows, userHint = "") {
+export function reconcileMatchedContextoFromPedido(proposal, _contextoRows, _userHint = "") {
   if (!proposal || typeof proposal !== "object") return proposal;
-  const hint = String(userHint ?? proposal.intent_summary ?? "").trim();
-  const preferredSlug = inferPreferredPlaybookSlug(hint);
-  if (!preferredSlug) return proposal;
-
-  const { campanhaRows } = partitionContextosIdentidade(contextoRows);
-  const targetRow = findCampanhaRowBySlug(campanhaRows, preferredSlug);
-  if (!targetRow) return proposal;
-
-  const currentId = String(proposal.matched_contexto?.id_contexto_empresa ?? "").trim();
-  const currentRow = currentId
-    ? campanhaRows.find((r) => String(r.id_contexto_empresa ?? "").trim() === currentId)
-    : null;
-  const currentSlug = currentRow ? resolveContextoPlaybookSlug(currentRow) : null;
-  if (currentSlug === preferredSlug) return proposal;
-
-  return {
-    ...proposal,
-    matched_contexto: matchedContextoFromRow(targetRow, `pedido_${preferredSlug}`),
-  };
+  return { ...proposal, matched_contexto: null };
 }
 
-function pickBestCampaignContext(contextoRows, userHint = "") {
-  const { campanhaRows } = partitionContextosIdentidade(contextoRows);
-  if (!campanhaRows.length) return null;
-
-  const preferredSlug = inferPreferredPlaybookSlug(userHint);
-  if (preferredSlug) {
-    const byIntent = findCampanhaRowBySlug(campanhaRows, preferredSlug);
-    if (byIntent) return byIntent;
-  }
-
-  const tokens = tokenizeSearchText(userHint);
-  if (!tokens.length) return null;
-
-  let best = null;
-  let bestScore = -1;
-  for (const row of campanhaRows) {
-    const slug = resolveContextoPlaybookSlug(row) || "";
-    const blob = `${row?.nome ?? ""} ${row?.descricao ?? ""} ${slug}`;
-    const score = scoreTokenOverlap(blob, tokens);
-    if (score > bestScore) {
-      best = row;
-      bestScore = score;
-    }
-  }
-  return bestScore > 0 ? best : null;
+function pickBestCampaignContext(_contextoRows, _userHint = "") {
+  return null;
 }
 
 function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
@@ -545,10 +476,7 @@ function coerceProposalParsed(parsed, contextoRows, midiaRows) {
  * @param {Array<Record<string, unknown>>} contextoRows
  * @param {Array<Record<string, unknown>>} midiaRows
  */
-export function sanitizePostSupplementLinks(raw, contextoRows, midiaRows) {
-  const allowedCtx = new Set(
-    contextoRows.map((r) => String(r.id_contexto_empresa ?? "").trim()).filter(Boolean),
-  );
+export function sanitizePostSupplementLinks(raw, _contextoRows, midiaRows) {
   const allowedMid = new Set(midiaRows.map((r) => String(r.id_midia ?? "").trim()).filter(Boolean));
   const list = Array.isArray(raw) ? raw : [];
   const out = [];
@@ -557,17 +485,13 @@ export function sanitizePostSupplementLinks(raw, contextoRows, midiaRows) {
     const kind = item.kind === "midia" || item.kind === "contexto" ? item.kind : null;
     const id = typeof item.id === "string" ? item.id.trim() : "";
     const label = typeof item.label === "string" ? item.label.trim().slice(0, 160) : "";
-    if (!kind || !id || !label) continue;
-    if (kind === "contexto" && !allowedCtx.has(id)) continue;
+    if (!kind || kind === "contexto" || !id || !label) continue;
     if (kind === "midia" && !allowedMid.has(id)) continue;
     out.push({
       kind,
       id,
       label,
-      href:
-        kind === "contexto"
-          ? `/painel/contextos?contexto=${encodeURIComponent(id)}`
-          : `/painel/midias?midia=${encodeURIComponent(id)}`,
+      href: `/painel/midias?midia=${encodeURIComponent(id)}`,
     });
     if (out.length >= 8) break;
   }
@@ -587,19 +511,9 @@ function matchedContextoFromRow(row, reason = "escolhido_no_chat") {
   };
 }
 
-function applyFocusContextoToProposal(proposal, contextoRows, focusContextoId) {
-  const id = String(focusContextoId ?? "").trim();
-  if (!id || !proposal || typeof proposal !== "object") return proposal;
-  const row = (contextoRows || []).find(
-    (r) =>
-      String(r.id_contexto_empresa ?? "").trim() === id ||
-      String(r.id_empresa_modelo_post ?? "").trim() === id,
-  );
-  if (!row) return proposal;
-  return {
-    ...proposal,
-    matched_contexto: matchedContextoFromRow(row),
-  };
+function applyFocusContextoToProposal(proposal, _contextoRows, _focusContextoId) {
+  if (!proposal || typeof proposal !== "object") return proposal;
+  return { ...proposal, matched_contexto: null };
 }
 
 /**
@@ -614,38 +528,20 @@ function applyFocusContextoToProposal(proposal, contextoRows, focusContextoId) {
 export function resolvePostSupplementLinks(rawLinks, postContextProposal, contextoRows, midiaRows) {
   const proposal =
     postContextProposal && typeof postContextProposal === "object" ? postContextProposal : {};
-  const ctxById = new Map(
-    contextoRows.map((row) => [String(row.id_contexto_empresa ?? "").trim(), row]),
-  );
   const midById = new Map(midiaRows.map((row) => [String(row.id_midia ?? "").trim(), row]));
   const extra = sanitizePostSupplementLinks(rawLinks, contextoRows, midiaRows);
   const out = [];
   const seen = new Set();
 
   function push(kind, id, label) {
+    if (kind !== "midia") return;
     const cleanId = String(id || "").trim();
     if (!cleanId || seen.has(`${kind}:${cleanId}`)) return;
-    const href =
-      kind === "contexto"
-        ? `/painel/contextos?contexto=${encodeURIComponent(cleanId)}`
-        : `/painel/midias?midia=${encodeURIComponent(cleanId)}`;
-    const compact = compactSupplementLabel(label, kind === "contexto" ? "Contexto" : "Mídia");
+    const href = `/painel/midias?midia=${encodeURIComponent(cleanId)}`;
+    const compact = compactSupplementLabel(label, "Mídia");
     if (!compact) return;
     seen.add(`${kind}:${cleanId}`);
     out.push({ kind, id: cleanId, label: compact, href });
-  }
-
-  const matchedContexto =
-    proposal.matched_contexto && typeof proposal.matched_contexto === "object"
-      ? proposal.matched_contexto
-      : null;
-  const matchedContextoId =
-    matchedContexto && typeof matchedContexto.id_contexto_empresa === "string"
-      ? matchedContexto.id_contexto_empresa.trim()
-      : "";
-  if (matchedContextoId && ctxById.has(matchedContextoId)) {
-    const row = ctxById.get(matchedContextoId);
-    push("contexto", matchedContextoId, String(row?.nome ?? matchedContexto?.nome ?? "Contexto"));
   }
 
   const refs = Array.isArray(proposal.midias_referenced) ? proposal.midias_referenced : [];
@@ -830,19 +726,9 @@ function formatIdentidadeForLlm(rows) {
   return formatBrandIdentityBlockForFlux(identidadeDados, 640);
 }
 
-/** Campanhas só para escolher matched_contexto / links — sem JSON pesado. */
-function formatCampanhaResumoForLlm(rows) {
-  const { campanhaRows } = partitionContextosIdentidade(rows);
-  if (!campanhaRows.length) return "(nenhuma campanha ativa)";
-  return campanhaRows
-    .slice(0, 8)
-    .map((r, i) => {
-      const id = r.id_contexto_empresa ?? `idx-${i}`;
-      const nome = String(r.nome ?? "").trim() || "(sem nome)";
-      const desc = String(r.descricao ?? "").trim();
-      return `### contexto_id=${id}\nnome: ${nome}\ndescricao: ${desc.slice(0, 400)}`;
-    })
-    .join("\n\n");
+/** Campanhas/modelos de post removidos. */
+function formatCampanhaResumoForLlm(_rows) {
+  return "(modelos de post removidos — use identidade da marca e mídias do acervo)";
 }
 
 function formatMidiasForLlm(rows) {

@@ -11,7 +11,7 @@ import { isIdentidadeMarcaContexto } from "../modules/empresas/identidadeMarca.j
 export function formatContextosListAnswer(rows) {
   const list = (rows || []).filter((r) => !isIdentidadeMarcaContexto(r));
   if (!list.length) {
-    return "Nenhum modelo de post está ativo — você pode ativar em Modelos de post no painel (Promoção, Lançamento, Produto, Mensagens).";
+    return "Modelos de post foram descontinuados. Descreva o pedido no chat — uso identidade da marca, mídias do acervo e o briefing visual.";
   }
 
   const names = list

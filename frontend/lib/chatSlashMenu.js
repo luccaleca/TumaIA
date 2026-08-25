@@ -229,11 +229,8 @@ export function formatSlashInputForSend(text, chips) {
  * @param {SlashChip[]} chips
  */
 export function slashChipsToApiPicks(chips) {
-  const modelo = (chips || []).find((c) => c.type === "modelo");
   return {
-    modelo: modelo
-      ? { id: modelo.id, nome: modelo.nome || modelo.slug, slug: modelo.slug }
-      : null,
+    modelo: null,
     midias: (chips || [])
       .filter((c) => c.type === "midia")
       .map((m) => ({ id: m.id, label: m.label })),

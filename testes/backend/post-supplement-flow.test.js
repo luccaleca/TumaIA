@@ -23,7 +23,7 @@ describe("post supplement — sanitizePostSupplementLinks", () => {
   const contextoRows = [{ id_contexto_empresa: CTX_ID, nome: "Marco 500k" }];
   const midiaRows = [{ id_midia: MID_ID, nome_exibicao: "Logo marca" }];
 
-  it("mantém só ids que existem no Supabase e monta href do painel", () => {
+  it("mantém só ids de mídia que existem no Supabase e monta href do painel", () => {
     const raw = [
       { kind: "contexto", id: CTX_ID, label: "Ver contexto comemorativo" },
       { kind: "midia", id: MID_ID, label: "Ver mídia de referência" },
@@ -31,13 +31,10 @@ describe("post supplement — sanitizePostSupplementLinks", () => {
       { kind: "midia", id: FAKE, label: "Também inventado" },
     ];
     const out = sanitizePostSupplementLinks(raw, contextoRows, midiaRows);
-    assert.equal(out.length, 2);
-    assert.equal(out[0].kind, "contexto");
-    assert.equal(out[0].id, CTX_ID);
-    assert.match(out[0].href, new RegExp(`contexto=${CTX_ID}`));
-    assert.equal(out[1].kind, "midia");
-    assert.equal(out[1].id, MID_ID);
-    assert.match(out[1].href, new RegExp(`midia=${MID_ID}`));
+    assert.equal(out.length, 1);
+    assert.equal(out[0].kind, "midia");
+    assert.equal(out[0].id, MID_ID);
+    assert.match(out[0].href, new RegExp(`midia=${MID_ID}`));
   });
 
   it("ignora kind inválido ou label vazio", () => {
@@ -52,7 +49,7 @@ describe("post supplement — sanitizePostSupplementLinks", () => {
     assert.equal(out.length, 0);
   });
 
-  it("resolve links finais com contexto e mídias referenciadas", () => {
+  it("resolve links finais só com mídias referenciadas", () => {
     const contextoRows = [{ id_contexto_empresa: CTX_ID, nome: "Dia dos Namorados" }];
     const midiaRows = [
       { id_midia: MID_ID, nome_exibicao: "Whey Baunilha Refil" },
@@ -78,15 +75,14 @@ describe("post supplement — sanitizePostSupplementLinks", () => {
       midiaRows,
     );
 
-    assert.equal(out.length, 4);
+    assert.equal(out.length, 3);
     assert.deepEqual(
       out.map((item) => item.id),
-      [CTX_ID, MID_ID, MID2_ID, MID3_ID],
+      [MID_ID, MID2_ID, MID3_ID],
     );
-    assert.equal(out[0].kind, "contexto");
-    assert.equal(out[1].label, "Whey Baunilha Refil");
-    assert.match(out[0].href, new RegExp(`contexto=${CTX_ID}`));
-    assert.match(out[1].href, new RegExp(`midia=${MID_ID}`));
+    assert.equal(out[0].kind, "midia");
+    assert.equal(out[0].label, "Whey Baunilha Refil");
+    assert.match(out[0].href, new RegExp(`midia=${MID_ID}`));
   });
 });
 
@@ -131,7 +127,7 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
     });
     assert.match(prompt, /500\s*mil\s+seguidores|comemorando/i);
     assert.match(prompt, /Direção visual da arte/i);
-    assert.match(prompt, /Identidade da marca/i);
+    assert.match(prompt, /Visual da marca|LEIS INQUESTIONÁVEIS/i);
     assert.match(prompt, /#00B341/);
     assert.match(prompt, /limpo, premium/i);
     assert.doesNotMatch(prompt, /Brand identity|Client request/i);
@@ -149,8 +145,8 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
     );
     assert.match(p, /Post planos TumaIA/);
     assert.match(p, /Direção visual da arte/i);
-    assert.match(p, /Identidade da marca/i);
     assert.match(p, /#6B2D9E/);
+    assert.match(p, /LEIS DA MARCA|OBRIGAT.RIO.*paleta/i);
   });
 
   it("buildRawImagePrompt monta pedido + resumo visual sem identidade", () => {
@@ -160,7 +156,7 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
     );
     assert.match(p, /^Post planos TumaIA/m);
     assert.match(p, /Direção visual da arte/i);
-    assert.doesNotMatch(p, /Identidade da marca/i);
+    assert.doesNotMatch(p, /LEIS DA MARCA/i);
   });
 
   it("buildRawImagePrompt reforça fidelidade ao produto quando há referência do acervo", () => {

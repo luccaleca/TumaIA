@@ -1,6 +1,6 @@
 "use client";
 
-import { PILARES_COMPLETUDE, PILAR_LOGO } from "../../../lib/identidadeMarcaUi";
+import { PILARES_COMPLETUDE } from "../../../lib/identidadeMarcaUi";
 
 export default function IdentidadeMarcaProgressBar({
   percentual,
@@ -20,9 +20,7 @@ export default function IdentidadeMarcaProgressBar({
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className={`font-medium text-foreground ${compact ? "text-xs" : "text-sm"}`}>
-            Progresso da identidade
-          </p>
+          <p className={`font-medium text-foreground ${compact ? "text-xs" : "text-sm"}`}>Progresso</p>
           {batchLabel ? (
             <p className={`mt-0.5 text-muted-foreground ${compact ? "text-[11px] leading-snug" : "text-xs"}`}>
               {batchLabel}
@@ -40,7 +38,7 @@ export default function IdentidadeMarcaProgressBar({
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label="Progresso da identidade da marca"
+        aria-label="Progresso do visual da marca"
       >
         <div
           className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
@@ -56,7 +54,14 @@ export default function IdentidadeMarcaProgressBar({
 
       <ul className={`flex flex-wrap gap-2 ${compact ? "mt-2" : "mt-3"}`}>
         {PILARES_COMPLETUDE.map(({ key, label }) => {
-          const ok = Boolean(String(dados[key] ?? "").trim());
+          const ok =
+            key === "estilo_visual"
+              ? Boolean(String(dados.estilo_visual || "").trim()) ||
+                Boolean(String(dados.assinatura_visual || "").trim()) ||
+                String(dados.papel_agente || "").trim().length >= 40
+              : key === "papel_agente"
+                ? String(dados.papel_agente || "").trim().length >= 40
+                : Boolean(String(dados[key] ?? "").trim());
           return (
             <li
               key={key}
@@ -71,23 +76,6 @@ export default function IdentidadeMarcaProgressBar({
             </li>
           );
         })}
-        {(() => {
-          const { key, label } = PILAR_LOGO;
-          const ok = Boolean(String(dados[key] ?? "").trim());
-          return (
-            <li
-              key={key}
-              className={`rounded-full px-2.5 py-0.5 text-xs ${
-                ok
-                  ? "bg-accent/15 text-foreground ring-1 ring-accent/25"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              {ok ? "✓ " : ""}
-              {label}
-            </li>
-          );
-        })()}
       </ul>
     </div>
   );

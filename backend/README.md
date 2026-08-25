@@ -135,4 +135,4 @@ npm run dev:status
 
 - [`../docs/arquitetura/arquitetura-repositorio.md`](../docs/arquitetura/arquitetura-repositorio.md)
 - [`../docs/ia/regras-tuma-ia.md`](../docs/ia/regras-tuma-ia.md)
-- [`../AGENTS.md`](../AGENTS.md)
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md)

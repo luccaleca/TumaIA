@@ -12,8 +12,10 @@ Documento de referência para humanos e IAs: **o que existe no código hoje** (m
 | Painel | **Next.js 16** · React 19 · Tailwind 4 | App Router — `frontend/` |
 | API | **Node.js** · Express 4 · **ES modules** · Zod | `backend/src/` |
 | Banco / auth | **Supabase** (Postgres + Auth + Storage) | Multi-tenant por `id_empresa` |
-| Chat IA (RAG) | **Python 3** subprocesso · Chroma · LangChain-style | `backend/ia/python/` |
-| LLM local (padrão) | **Ollama** · `qwen2.5:3b` | API OpenAI-compatible (`LLAMA_*`) |
+| Chat IA (legado) | **Python 3** · Chroma | `backend/ia/python/` — **fora do caminho feliz** |
+| Chat IA (MVP) | **Node** · regras + estados + **Cursor Agent** | `CHAT_LLM_PROVIDER=cursor` (padrão) |
+| LLM chat (MVP) | **Cursor** · Grok / Composer | `CURSOR_API_KEY` + `CURSOR_CHAT_MODEL` |
+| LLM local (legado / opcional) | **Ollama** · `qwen2.5:3b` | Só se `CHAT_LLM_PROVIDER=ollama` |
 | LLM nuvem (opcional) | OpenRouter | Via env no worker Python |
 | Texto estruturado (Node) | Ollama / Replicate / OpenAI | Proposta de post, legenda (`TEXT_PROVIDER`) |
 | Imagem | **OpenAI gpt-image-2** ou **Replicate** (mesmo modelo) | `IMAGE_PROVIDER`; billing com flag explícita |
@@ -50,8 +52,9 @@ Documento de referência para humanos e IAs: **o que existe no código hoje** (m
 | Função | Onde |
 |--------|------|
 | Regras de prompt (canônico) | `backend/ia/python/conversa/instrucoes/*.txt` |
-| Chat RAG + orquestração | `backend/ia/python/conversa/orquestrador.py` |
-| Worker Node ↔ Python | `backend/src/services/chatPythonWorker.js` |
+| Chat Node (protótipo) | `processChatMessage.js` + `chatNodeLlmLight.js` (`TUMAIA_NODE_CHAT`) |
+| Chat RAG Python (legado) | `backend/ia/python/conversa/orquestrador.py` |
+| Worker Node ↔ Python (legado) | `backend/src/services/chatPythonWorker.js` |
 | Roteamento chat vs arte | `processChatMessage.js`, `chatTurnIntent.js`, `tumaInterpretation.js` |
 | Proposta de post / briefing | `postContextProposalService.js` |
 | Legenda e hashtags | `postCaptionService.js` |
@@ -140,6 +143,6 @@ URLs: frontend `http://localhost:3000`, backend `http://localhost:4000` (ou `POR
 | [`arquitetura/arquitetura-repositorio.md`](./arquitetura/arquitetura-repositorio.md) | Diagramas Mermaid |
 | [`ia/regras-tuma-ia.md`](./ia/regras-tuma-ia.md) | Comportamento da IA Tuma |
 | [`ia/padroes-erro-llm-tuma.md`](./ia/padroes-erro-llm-tuma.md) | Mitigação de erros de LLM |
-| [`../AGENTS.md`](../AGENTS.md) | Guia para agentes Cursor |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Como contribuir (time / revisão / segurança) |
 | [`../backend/README.md`](../backend/README.md) | API, env vars, rotas |
 | [`../backend/ia/python/README.md`](../backend/ia/python/README.md) | Worker Python / RAG |

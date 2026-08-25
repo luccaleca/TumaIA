@@ -109,6 +109,8 @@ export async function runNodeChatLlm(input) {
         sessionKey: input.sessionKey,
         nomeFantasia: input.nomeFantasia,
         chat_mode: chatMode,
+        trainingBlock: input.trainingBlock,
+        agenteMarcaMarkdown: input.agenteMarcaMarkdown ?? input.trainingBlock,
       });
       const elapsedMs = Date.now() - t0;
       if (elapsedMs > 5_000) {

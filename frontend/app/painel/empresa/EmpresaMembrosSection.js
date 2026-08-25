@@ -20,9 +20,8 @@ export default function EmpresaMembrosSection({
 }) {
   return (
     <EmpresaSectionPanel
-      step={3}
       id="membros-empresa"
-      title="Membros da empresa"
+      title="Equipe"
       description="Quem tem acesso a este workspace."
       actions={
         canManageMembros ? (

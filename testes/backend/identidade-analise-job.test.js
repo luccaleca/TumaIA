@@ -60,7 +60,7 @@ describe("identidadeAnaliseJobService", () => {
     assert.equal(out.progress.fotoTotal, 3);
     assert.equal(out.progress.incluiSite, true);
     assert.equal(out.progress.items.length, 1);
-    assert.equal(out.completude.percentual, 100);
-    assert.equal(out.completude.pronto_para_imagem, true);
+    assert.equal(out.completude.percentual, 60);
+    assert.equal(out.completude.pronto_para_imagem, false);
   });
 });

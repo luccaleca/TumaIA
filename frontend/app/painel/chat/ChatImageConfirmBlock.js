@@ -12,13 +12,10 @@ const CHIP_CLASS =
   "inline-flex items-center rounded-md border border-border bg-background/80 px-2 py-0.5 text-xs font-medium text-foreground transition hover:border-accent/35 hover:text-accent";
 
 /**
- * Resumo antes de gerar a imagem: confirmação + troca de contexto + links.
+ * Resumo antes de gerar a imagem: confirmação + links de mídia.
  */
 export default function ChatImageConfirmBlock({
   supplement,
-  contextosCampanha,
-  selectedContextoId,
-  onContextoChange,
   disabled,
   collecting = false,
   hasArteBrief = false,
@@ -33,7 +30,6 @@ export default function ChatImageConfirmBlock({
   const links = Array.isArray(supplement?.links) ? supplement.links : [];
   const confirmation =
     typeof supplement?.confirmation_message === "string" ? supplement.confirmation_message.trim() : "";
-  const contextLinks = links.filter((item) => item?.kind === "contexto");
   const itemLinks = midiaItemsFromProposal(proposal, links);
   const showConfirmation =
     confirmation && !/^clique nos itens que vou usar na arte\.?$/i.test(confirmation);
@@ -90,19 +86,6 @@ export default function ChatImageConfirmBlock({
         </div>
       ) : null}
 
-      {contextLinks.length > 0 ? (
-        <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
-          <p className={ROW_LABEL_CLASS}>Modelo de post</p>
-          <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-            {contextLinks.map((l) => (
-              <Link key={`${l.kind}-${l.id}`} href={l.href} className={CHIP_CLASS}>
-                {l.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
       {itemLinks.length > 0 ? (
         <div className="flex flex-col gap-1 sm:flex-row sm:gap-3">
           <p className={ROW_LABEL_CLASS}>
@@ -131,27 +114,6 @@ export default function ChatImageConfirmBlock({
       )}
 
       {showConfirmation ? <p className="text-xs text-muted-foreground">{confirmation}</p> : null}
-
-      {!hasArteBrief && contextosCampanha.length > 0 ? (
-        <label className="block">
-          <span className="text-xs font-medium text-muted-foreground">Modelo de post</span>
-          <select
-            className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
-            value={selectedContextoId || ""}
-            disabled={disabled}
-            onChange={(e) => onContextoChange(e.target.value)}
-          >
-            {contextosCampanha.map((c) => (
-              <option key={c.id_contexto_empresa} value={c.id_contexto_empresa}>
-                {c.nome || "Modelo"}
-              </option>
-            ))}
-          </select>
-          <span className="mt-1 block text-xs text-muted-foreground">
-            Layout visual usado nesta arte (Promoção, Lançamento, etc.).
-          </span>
-        </label>
-      ) : null}
     </div>
   );
 }

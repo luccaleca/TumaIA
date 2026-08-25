@@ -52,6 +52,7 @@ export const emptyDados = {
   id_midia_referencia_analise: null,
   id_midia_logo: null,
   legenda_referencia: "",
+  papel_agente: "",
 };
 
 const HEX_RE = /^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/;
@@ -72,15 +73,16 @@ export function normalizeHexColor(v) {
   return s.toUpperCase();
 }
 
-/** Campos usados na barra de progresso (espelha o backend — foco em artes). */
+/** Checklist leve — o que a arte precisa. */
 export const PILARES_COMPLETUDE = [
-  { key: "cor_primaria", label: "Cores" },
-  { key: "estilo_visual", label: "Estilo visual" },
-  { key: "evitar", label: "Evitar" },
-  { key: "tom_voz", label: "Mood" },
+  { key: "id_midia_logo", label: "Logo", obrigatorio: true },
+  { key: "cor_primaria", label: "Cores", obrigatorio: true },
+  { key: "estilo_visual", label: "Estilo", obrigatorio: true },
+  { key: "papel_agente", label: "Papel", obrigatorio: false },
+  { key: "evitar", label: "Evitar", obrigatorio: false },
 ];
 
-/** Exibido na barra; não entra no % dos 4 pilares principais. */
+/** @deprecated */
 export const PILAR_LOGO = { key: "id_midia_logo", label: "Logo" };
 
 const MERGE_KEYS = [
@@ -136,6 +138,7 @@ export function dadosFromApi(raw) {
     id_midia_referencia_analise: raw.id_midia_referencia_analise || null,
     id_midia_logo: raw.id_midia_logo || null,
     legenda_referencia: raw.legenda_referencia || "",
+    papel_agente: String(raw.papel_agente || raw.texto_livre || "").trim(),
   };
 }
 
@@ -146,7 +149,8 @@ export function dadosFromApi(raw) {
 export function temConteudoIdentidade(dados) {
   if (!dados || typeof dados !== "object") return false;
   return Boolean(
-    String(dados.sobre_empresa ?? "").trim() ||
+    String(dados.papel_agente ?? "").trim() ||
+      String(dados.sobre_empresa ?? "").trim() ||
       String(dados.tom_voz ?? "").trim() ||
       String(dados.estilo_visual ?? "").trim() ||
       String(dados.assinatura_visual ?? "").trim() ||
@@ -162,19 +166,60 @@ export function temConteudoIdentidade(dados) {
 }
 
 export function calcCompletudeLocal(dados) {
-  const checks = PILARES_COMPLETUDE.map(({ key }) => ({
-    key,
-    ok: Boolean(String(dados[key] ?? "").trim()),
-  }));
+  const d = dados || {};
+  const temPapel = String(d.papel_agente ?? "").trim().length >= 40;
+  const temJeito =
+    Boolean(String(d.estilo_visual ?? "").trim()) ||
+    Boolean(String(d.assinatura_visual ?? "").trim()) ||
+    temPapel;
+  const checks = PILARES_COMPLETUDE.map(({ key }) => {
+    if (key === "estilo_visual") return { key, ok: temJeito };
+    if (key === "papel_agente") return { key, ok: temPapel };
+    return { key, ok: Boolean(String(d[key] ?? "").trim()) };
+  });
   const done = checks.filter((c) => c.ok).length;
-  const temLogo = Boolean(String(dados.id_midia_logo ?? "").trim());
   return {
     percentual: Math.round((done / checks.length) * 100),
     pronto_para_imagem:
-      Boolean(dados.cor_primaria?.trim()) &&
-      Boolean(dados.estilo_visual?.trim()) &&
-      (Boolean(dados.evitar?.trim()) || temLogo),
+      Boolean(String(d.id_midia_logo ?? "").trim()) &&
+      Boolean(String(d.cor_primaria ?? "").trim()) &&
+      temJeito,
     faltando: checks.filter((c) => !c.ok).map((c) => c.key),
+  };
+}
+
+/**
+ * Preview amigável do que a arte vai usar.
+ * @param {Record<string, unknown>} dados
+ * @param {{ nome_fantasia?: string } | null} [empresa]
+ */
+export function buildLeisMarcaPreview(dados, empresa = null) {
+  const d = dados || {};
+  const nome = String(empresa?.nome_fantasia || "").trim() || "sua marca";
+  const cores = [
+    d.cor_primaria,
+    d.cor_secundaria,
+    ...(Array.isArray(d.cores_adicionais) ? d.cores_adicionais : []),
+  ]
+    .map((c) => String(c || "").trim())
+    .filter(Boolean);
+  const leis = [];
+  if (String(d.id_midia_logo || "").trim()) leis.push("Logo oficial");
+  if (cores.length) leis.push(`Cores: ${cores.join(" · ")}`);
+  if (String(d.estilo_visual || "").trim()) leis.push(`Estilo: ${String(d.estilo_visual).trim()}`);
+  if (String(d.evitar || "").trim()) leis.push(`Evitar: ${String(d.evitar).trim()}`);
+  const papel = String(d.papel_agente || "").trim();
+  if (papel) {
+    const snippet = papel.length > 160 ? `${papel.slice(0, 159)}…` : papel;
+    leis.push(`Papel: ${snippet}`);
+  } else {
+    leis.push("Papel em branco ainda vazio — escreva como a marca fala e se apresenta");
+  }
+  leis.push("Produto: PNG do acervo, sem redesenhar");
+  return {
+    titulo: nome,
+    leis,
+    pronto: calcCompletudeLocal(d).pronto_para_imagem,
   };
 }
 

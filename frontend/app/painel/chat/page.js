@@ -23,7 +23,7 @@ import {
   saveChatSession,
 } from "../../../lib/chatSessionPersistence";
 import { assistantBubbleSurfaceClass } from "../../../lib/chatResponseOrigin";
-import { IDENTIDADE_CONTEXTO_NOME, isIdentidadeMarcaContextoRow } from "../../../lib/identidadeMarcaUi";
+import { IDENTIDADE_CONTEXTO_NOME } from "../../../lib/identidadeMarcaUi";
 import { resolveEmpresaAtivaId, setEmpresaAtiva, empresaRowFromMinhas, idEmpresaUltimaFromMinhasPayload } from "../../../lib/empresaAtiva";
 import ChatImageConfirmBlock from "./ChatImageConfirmBlock";
 import ChatFormatoBar from "./ChatFormatoBar";
@@ -37,7 +37,6 @@ import {
   insertChipCharAtSlash,
   listSlashChipMidiaIds,
   reconcileSlashChipsWithText,
-  removeModeloChipFromState,
   slashChipsToApiPicks,
   SLASH_MENU_MAX_MIDIAS,
   parseSlashTrigger,
@@ -48,7 +47,6 @@ import {
   CHAT_PEDIDO_AGUARDE_MSG,
   CHAT_PEDIDO_COLETANDO_INTRO,
   CHAT_PEDIDO_RESUMO_MSG,
-  patchMessageContextoSelection,
 } from "./chatImageConfirmUtils";
 
 /** Alinhado a REPLICATE_GPT_IMAGE_TIMEOUT_MS no backend (300s) + margem. */
@@ -84,25 +82,6 @@ const WEAK_ARTE_THEME_RE =
 function isWeakArteTheme(value) {
   const t = String(value || "").trim();
   return !t || t.length < 6 || WEAK_ARTE_THEME_RE.test(t);
-}
-
-function modeloSlugFromContextoRow(row) {
-  if (!row) return "";
-  if (
-    row.schema_json &&
-    typeof row.schema_json === "object" &&
-    typeof row.schema_json.playbook_slug === "string"
-  ) {
-    return row.schema_json.playbook_slug.trim();
-  }
-  if (
-    row.dados_json &&
-    typeof row.dados_json === "object" &&
-    typeof row.dados_json.playbook_slug === "string"
-  ) {
-    return row.dados_json.playbook_slug.trim();
-  }
-  return "";
 }
 
 /** ID de mensagem local; fallback quando `crypto.randomUUID` não existe (ex.: HTTP, Safari antigo). */
@@ -194,7 +173,6 @@ function findLatestConfirmedProposalAnchor(msgs, arteDraft) {
         proposal: proposalWithArteDraft(proposal, arteDraft),
         supplement: sup,
         messageId: m.id,
-        selected_contexto_id: m.selected_contexto_id,
       };
     }
   }
@@ -203,7 +181,6 @@ function findLatestConfirmedProposalAnchor(msgs, arteDraft) {
       proposal: proposalWithArteDraft({}, arteDraft),
       supplement: null,
       messageId: null,
-      selected_contexto_id: null,
     };
   }
   return null;
@@ -214,13 +191,11 @@ function normalizeSupplementLink(l) {
   const kind = l.kind === "midia" || l.kind === "contexto" ? l.kind : null;
   const id = typeof l.id === "string" ? l.id.trim() : "";
   const label = typeof l.label === "string" ? l.label.trim() : "";
-  if (!kind || !id || !label) return null;
+  if (!kind || kind === "contexto" || !id || !label) return null;
   const href =
     typeof l.href === "string" && l.href.startsWith("/")
       ? l.href
-      : kind === "contexto"
-        ? `/painel/contextos?contexto=${encodeURIComponent(id)}`
-        : `/painel/midias?midia=${encodeURIComponent(id)}`;
+      : `/painel/midias?midia=${encodeURIComponent(id)}`;
   return { kind, id, label, href };
 }
 
@@ -369,7 +344,6 @@ function buildImagePreviewRequestBody({
   conversaId,
   proposal,
   supplementLinks,
-  focusContextoId,
   arteDraft,
   revisionSourceUrl,
   revisionInstructions,
@@ -377,14 +351,10 @@ function buildImagePreviewRequestBody({
   const reference_midia_ids = referenceMidiaIdsFromProposal(proposal, supplementLinks);
   const linksForApi = Array.isArray(supplementLinks)
     ? supplementLinks
-        .filter((l) => l && (l.kind === "midia" || l.kind === "contexto") && typeof l.id === "string")
+        .filter((l) => l && l.kind === "midia" && typeof l.id === "string")
         .map((l) => ({ kind: l.kind, id: l.id.trim() }))
         .filter((l) => UUID_RE.test(l.id))
     : [];
-  const focus =
-    focusContextoId && UUID_RE.test(String(focusContextoId).trim())
-      ? String(focusContextoId).trim()
-      : null;
   const prop =
     proposal && typeof proposal === "object" && Object.keys(proposal).length
       ? proposalWithArteDraft(proposal, arteDraft)
@@ -402,7 +372,6 @@ function buildImagePreviewRequestBody({
     ...(aspect ? { aspect_ratio: aspect } : {}),
     ...(linksForApi.length ? { post_supplement_links: linksForApi } : {}),
     ...(reference_midia_ids.length ? { reference_midia_ids } : {}),
-    ...(focus ? { focus_contexto_id: focus } : {}),
     ...(revisionSourceUrl && revisionInstructions
       ? {
           revision_source_url: revisionSourceUrl,
@@ -711,7 +680,6 @@ export default function PainelChatPage() {
   const [postContextLoadingId, setPostContextLoadingId] = useState(null);
   /** Resposta do Llama após a qual a Replicate está gerando a imagem (pipeline raw). */
   const [imageGeneratingAfterId, setImageGeneratingAfterId] = useState(null);
-  const [contextosCampanha, setContextosCampanha] = useState([]);
   const [slashMenu, setSlashMenu] = useState({
     open: false,
     query: "",
@@ -758,19 +726,6 @@ export default function PainelChatPage() {
   }, [empresaId, conversaId, input, messages]);
 
   const selectedSlashMidiaIds = useMemo(() => listSlashChipMidiaIds(slashChips), [slashChips]);
-
-  const modelosAtivos = useMemo(
-    () =>
-      contextosCampanha
-        .map((row) => {
-          const id = String(row.id_contexto_empresa ?? row.id_empresa_modelo_post ?? "").trim();
-          const nome = String(row.nome ?? "").trim() || "Modelo";
-          const slug = modeloSlugFromContextoRow(row);
-          return id ? { id, nome, slug } : null;
-        })
-        .filter(Boolean),
-    [contextosCampanha],
-  );
 
   const closeSlashMenu = useCallback(() => {
     setSlashMenu({ open: false, query: "", tokenStart: -1, tokenEnd: -1 });
@@ -821,29 +776,6 @@ export default function PainelChatPage() {
     }
     return { text: stripLegacyChatInputMarkers(input), chips: slashChipsRef.current };
   }, [input]);
-
-  const handlePickSlashModelo = useCallback(
-    (modelo) => {
-      const slug = modelo.slug || String(modelo.nome ?? "modelo").toLowerCase().replace(/\s+/g, "-");
-      const chip = { type: "modelo", id: modelo.id, nome: modelo.nome, slug };
-      const cleaned = removeModeloChipFromState(
-        stripLegacyChatInputMarkers(input),
-        slashChipsRef.current,
-      );
-      const inserted = insertChipCharAtSlash(cleaned.text, slashMenu);
-      const chipAt = countChipsBefore(
-        cleaned.text,
-        Math.min(slashMenu.tokenStart, cleaned.text.length),
-      );
-      const nextChips = [...cleaned.chips];
-      nextChips.splice(chipAt, 0, chip);
-      setInput(inserted.text);
-      setSlashChips(nextChips);
-      focusInputAt(inserted.cursor);
-      closeSlashMenu();
-    },
-    [input, slashMenu, closeSlashMenu, focusInputAt],
-  );
 
   const handlePickSlashMidia = useCallback(
     (midia) => {
@@ -995,26 +927,6 @@ export default function PainelChatPage() {
       active = false;
     };
   }, []);
-
-  useEffect(() => {
-    if (!empresaId) {
-      setContextosCampanha([]);
-      return;
-    }
-    let active = true;
-    authApiFetchWithToken(`/empresas/${encodeURIComponent(empresaId)}/contextos`).then((r) => {
-      if (!active) return;
-      if (!r.ok || r.networkError) {
-        setContextosCampanha([]);
-        return;
-      }
-      const rows = Array.isArray(r.json?.contextos) ? r.json.contextos : [];
-      setContextosCampanha(rows.filter((c) => !isIdentidadeMarcaContextoRow(c)));
-    });
-    return () => {
-      active = false;
-    };
-  }, [empresaId]);
 
   const loadArteBriefDefaults = useCallback(async () => {
     if (!empresaId) return;
@@ -1199,7 +1111,6 @@ export default function PainelChatPage() {
       msgs,
       proposal,
       supplementLinks,
-      focusContextoId,
       conversaId: conversaIdOverride,
       revisionSourceUrl,
       revisionInstructions,
@@ -1226,7 +1137,6 @@ export default function PainelChatPage() {
             conversaId: idConversa,
             proposal: prop,
             supplementLinks: supplementLinks || [],
-            focusContextoId,
             arteDraft: arteBriefDraftRef.current,
             revisionSourceUrl,
             revisionInstructions,
@@ -1286,10 +1196,6 @@ export default function PainelChatPage() {
     ) {
       if (!empresaId || !chatId) return;
       const picks = slashPicksAtSend || slashChipsToApiPicks(slashChipsRef.current);
-      const userLast =
-        [...historyForProposal].reverse().find((h) => h.role === "user")?.content || "";
-      const detailedRequest = String(userLast).trim().length >= 24;
-      const slashModeloId = picks.modelo?.id ? String(picks.modelo.id).trim() : null;
       setPostContextLoadingId(assistantMessageId);
       try {
         const proposalBody = {
@@ -1297,7 +1203,6 @@ export default function PainelChatPage() {
           id_empresa: empresaId,
           arte_brief: arteBriefDraftRef.current,
         };
-        if (slashModeloId) proposalBody.focus_contexto_id = slashModeloId;
         if (picks.midias?.length) {
           proposalBody.reference_midia_ids = picks.midias.map((m) => m.id).filter(Boolean);
         }
@@ -1373,30 +1278,6 @@ export default function PainelChatPage() {
         if (!collecting && !ui_actions.length && post_supplement) {
           ui_actions = [{ id: "confirm_generate_image", label: "Gerar imagem" }];
         }
-        const proposalObj =
-          post_supplement?.post_context_proposal && typeof post_supplement.post_context_proposal === "object"
-            ? post_supplement.post_context_proposal
-            : {};
-        let selectedId =
-          proposalObj?.matched_contexto &&
-          typeof proposalObj.matched_contexto === "object" &&
-          typeof proposalObj.matched_contexto.id_contexto_empresa === "string"
-            ? proposalObj.matched_contexto.id_contexto_empresa.trim()
-            : null;
-        if (slashModeloId) {
-          selectedId = slashModeloId;
-        } else if (
-          selectedId &&
-          contextosCampanha.length &&
-          !contextosCampanha.some((c) => String(c.id_contexto_empresa) === selectedId)
-        ) {
-          selectedId = detailedRequest
-            ? null
-            : String(contextosCampanha[0]?.id_contexto_empresa ?? "") || null;
-        } else if (!selectedId && !detailedRequest && contextosCampanha.length) {
-          selectedId = String(contextosCampanha[0]?.id_contexto_empresa ?? "") || null;
-        }
-
         setMessages((prev) => {
           const anchorPrev = prev.find((m) => m.id === assistantMessageId);
           const currentContent =
@@ -1410,27 +1291,16 @@ export default function PainelChatPage() {
               : collecting
                 ? CHAT_PEDIDO_COLETANDO_INTRO
                 : CHAT_PEDIDO_RESUMO_MSG;
-          let next = prev.map((m) =>
+          const next = prev.map((m) =>
             m.id === assistantMessageId
               ? {
                   ...m,
                   content: collecting ? CHAT_PEDIDO_COLETANDO_INTRO : keepContent,
                   post_supplement,
                   ui_actions: collecting ? undefined : ui_actions.length ? ui_actions : undefined,
-                  ...(selectedId && UUID_RE.test(selectedId) ? { selected_contexto_id: selectedId } : {}),
                 }
               : m,
           );
-          if (selectedId && contextosCampanha.length) {
-            const anchor = next.find((m) => m.id === assistantMessageId);
-            if (anchor) {
-              next = next.map((m) =>
-                m.id === assistantMessageId
-                  ? patchMessageContextoSelection(anchor, selectedId, contextosCampanha)
-                  : m,
-              );
-            }
-          }
           void syncMensagens(chatId, next);
           return next;
         });
@@ -1448,21 +1318,7 @@ export default function PainelChatPage() {
         setPostContextLoadingId(null);
       }
     },
-    [empresaId, syncMensagens, contextosCampanha, brandColors],
-  );
-
-  const onConfirmContextoChange = useCallback(
-    (messageId, ctxId) => {
-      if (!ctxId || !UUID_RE.test(ctxId)) return;
-      setMessages((prev) => {
-        const next = prev.map((m) =>
-          m.id === messageId ? patchMessageContextoSelection(m, ctxId, contextosCampanha) : m,
-        );
-        if (conversaId) void syncMensagens(conversaId, next);
-        return next;
-      });
-    },
-    [contextosCampanha, conversaId, syncMensagens],
+    [empresaId, syncMensagens, brandColors],
   );
 
   const runGenerateCaptionForImage = useCallback(
@@ -1830,15 +1686,10 @@ export default function PainelChatPage() {
           findLatestImageProposalObject(msgsWithUser) ||
           {};
         const supplementLinks = Array.isArray(supplement?.links) ? supplement.links : [];
-        const focusContextoId =
-          anchor?.selected_contexto_id ||
-          proposal?.matched_contexto?.id_contexto_empresa ||
-          null;
         const out = await invokeImagePreview({
           msgs: msgsWithUser,
           proposal,
           supplementLinks,
-          focusContextoId,
           conversaId: idChat,
         });
         if (!out.ok) {
@@ -2036,7 +1887,6 @@ export default function PainelChatPage() {
             msgs: msgsComUsuario,
             proposal: latestProposal,
             supplementLinks: latestLinks,
-            focusContextoId: confirmAnchor?.selected_contexto_id,
             revisionSourceUrl: sourceUrl,
             revisionInstructions: typedCmd.instructions,
           });
@@ -2079,9 +1929,6 @@ export default function PainelChatPage() {
           msgs: msgsComUsuario,
           proposal: latestProposal,
           supplementLinks: latestLinks,
-          focusContextoId:
-            confirmAnchor.selected_contexto_id ||
-            latestProposal?.matched_contexto?.id_contexto_empresa,
           conversaId: idChat,
         });
         if (!out.ok) {
@@ -2669,14 +2516,6 @@ export default function PainelChatPage() {
                           supplement={message.post_supplement}
                           collecting={message.post_supplement?.briefing_status === "collecting"}
                           hasArteBrief={Boolean(hasArteBrief)}
-                          contextosCampanha={contextosCampanha}
-                          selectedContextoId={
-                            message.selected_contexto_id ||
-                            message.post_supplement?.post_context_proposal?.matched_contexto
-                              ?.id_contexto_empresa ||
-                            ""
-                          }
-                          onContextoChange={(ctxId) => onConfirmContextoChange(message.id, ctxId)}
                           disabled={!!actionBusy || sending}
                         />
                       ) : null}
@@ -2770,9 +2609,7 @@ export default function PainelChatPage() {
                   open={slashMenu.open && !chatBusy && !!empresaId}
                   query={slashMenu.query}
                   empresaId={empresaId}
-                  modelosAtivos={modelosAtivos}
                   selectedMidiaIds={selectedSlashMidiaIds}
-                  onPickModelo={handlePickSlashModelo}
                   onPickMidia={handlePickSlashMidia}
                   onClose={closeSlashMenu}
                 />

@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildConfirmedImageIntent } from "../../backend/src/services/imageIntent.js";
-import { buildImagePreviewContextMeta, buildIntegratedProductImagePrompt } from "../../backend/src/services/imagePreviewPrompt.js";
-import { getPostModeloBySlug } from "../../backend/src/modules/empresas/postModelosCatalog.js";
+import { buildImagePreviewContextMeta } from "../../backend/src/services/imagePreviewPrompt.js";
 
 const CTX_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const CTX_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 describe("imageIntent", () => {
-  it("prioriza o contexto selecionado no painel sobre o contexto antigo da proposta", () => {
+  it("não usa matched_contexto (modelos de post removidos)", () => {
     const history = [
       {
         role: "user",
@@ -17,7 +15,6 @@ describe("imageIntent", () => {
     ];
     const contextoRows = [
       { id_contexto_empresa: CTX_A, nome: "Black Friday", schema_json: { tipo: "promocao" } },
-      { id_contexto_empresa: CTX_B, nome: "Academia", schema_json: { tipo: "campanha" } },
     ];
     const proposal = {
       intent_summary: "arte promocional de creatina",
@@ -34,101 +31,64 @@ describe("imageIntent", () => {
       history,
       postContextProposal: proposal,
       contextoRows,
-      focusContextoId: CTX_B,
+      focusContextoId: CTX_A,
     });
 
-    assert.equal(intent.matchedContexto?.id_contexto_empresa, CTX_B);
-    assert.equal(intent.matchedContexto?.nome, "Academia");
-    assert.match(intent.selectionHint, /Academia/);
+    assert.equal(intent.matchedContexto, null);
     assert.equal(intent.fraseNaImagem, "Até 30% OFF");
   });
 
-  it("expõe frase e contexto prioritário no meta da prévia", () => {
+  it("expõe frase no meta da prévia sem contexto de campanha", () => {
     const history = [{ role: "user", content: "quero promoção com até 30% off" }];
-    const contextoRows = [{ id_contexto_empresa: CTX_A, nome: "Black Friday", schema_json: { tipo: "promocao" } }];
     const proposal = {
       intent_summary: "arte promocional",
       frase_na_imagem: "Até 30% OFF",
-      matched_contexto: {
-        id_contexto_empresa: CTX_A,
-        nome: "Black Friday",
-        tipo_schema: "promocao",
-        reason: "llm",
-      },
     };
 
     const meta = buildImagePreviewContextMeta(
-      "empresa-1",
-      { nome_fantasia: "Tuma" },
-      contextoRows,
+      "empresa-test",
+      { nome_fantasia: "FYT" },
+      [],
       proposal,
       history,
-      CTX_A,
     );
 
+    assert.equal(meta.contexto_prioritario, null);
     assert.equal(meta.frase_na_imagem, "Até 30% OFF");
-    assert.equal(meta.contexto_prioritario, "Black Friday");
-    assert.match(meta.pedido_resumo || "", /promo/i);
   });
 
-  it("normaliza hero_product para usar a referência confirmada do proposal", () => {
-    const history = [{ role: "user", content: "deixe a creatina integral como foco principal" }];
-    const proposal = {
-      intent_summary: "arte promocional de creatina",
-      midias_referenced: [
-        {
-          id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-          nome_exibicao: "creatina integral",
-        },
-        {
-          id_midia: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
-          nome_exibicao: "creatina growth",
-        },
-      ],
-      hero_product: {
-        id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-        nome_exibicao: "creatina integral",
-        reason: "pedido_destacou_item",
-      },
-    };
-
-    const intent = buildConfirmedImageIntent({
-      history,
-      postContextProposal: proposal,
-      contextoRows: [],
-    });
-
-    assert.equal(intent.heroProduct?.id_midia, "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
-    assert.equal(intent.heroProduct?.nome_exibicao, "creatina integral");
-    assert.match(intent.selectionHint, /hero: creatina integral/i);
-  });
-
-  it("ignora PNG de creatina no proposal quando o pedido atual é monster", () => {
+  it("prioriza hero_product e poda midias_referenced pelo pedido", () => {
     const history = [
-      { role: "user", content: "post da creatina integral" },
-      { role: "assistant", content: "ok" },
-      { role: "user", content: "quero promoção dos monster de 15 para 9 reais" },
+      {
+        role: "user",
+        content: "post do naked wafer dark chocolate na mesa de casa",
+      },
     ];
     const midiaRows = [
       {
         id_midia: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-        nome_exibicao: "Monster Energy 473ml",
-        nome_arquivo: "monster.png",
+        nome_exibicao: "naked wafer dark chocolate",
       },
       {
         id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         nome_exibicao: "creatina integral",
-        nome_arquivo: "creatina.png",
       },
     ];
     const proposal = {
+      intent_summary: "post do naked wafer dark chocolate na mesa de casa",
       midias_referenced: [
-        { id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", nome_exibicao: "creatina integral" },
-        { id_midia: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", nome_exibicao: "Monster Energy 473ml" },
+        {
+          id_midia: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          nome_exibicao: "naked wafer dark chocolate",
+        },
+        {
+          id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          nome_exibicao: "creatina integral",
+        },
       ],
       hero_product: {
-        id_midia: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-        nome_exibicao: "creatina integral",
+        id_midia: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        nome_exibicao: "naked wafer dark chocolate",
       },
     };
 
@@ -142,52 +102,5 @@ describe("imageIntent", () => {
     assert.equal(intent.heroProduct?.id_midia, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
     assert.equal(intent.postContextProposal.midias_referenced.length, 1);
     assert.doesNotMatch(intent.pedido, /creatina integral/i);
-  });
-
-  it("injeta playbook do modelo Promoção no prompt GPT Image 2", () => {
-    const promoModelo = getPostModeloBySlug("promocao");
-    const history = [
-      { role: "user", content: "post de promoção do whey growth, 2 por 149, válido até domingo" },
-    ];
-    const contextoRows = [
-      {
-        id_contexto_empresa: CTX_A,
-        nome: "Promoção",
-        schema_json: { tipo: "promocao", playbook_slug: "promocao" },
-        dados_json: {
-          playbook: true,
-          playbook_slug: "promocao",
-          tipo: "promocao",
-          prompt_base: promoModelo.prompt_base,
-        },
-      },
-    ];
-    const proposal = {
-      matched_contexto: {
-        id_contexto_empresa: CTX_A,
-        nome: "Promoção",
-        tipo_schema: "promocao",
-        reason: "escolhido_no_painel",
-      },
-      midias_referenced: [
-        { id_midia: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", nome_exibicao: "whey growth" },
-      ],
-    };
-
-    const intent = buildConfirmedImageIntent({
-      history,
-      postContextProposal: proposal,
-      contextoRows,
-      focusContextoId: CTX_A,
-    });
-
-    assert.match(intent.playbookPromptBase || "", /Modelo PROMOÇÃO/i);
-    const prompt = buildIntegratedProductImagePrompt(history, intent.postContextProposal, null, {
-      imageIntent: intent,
-      productNames: ["whey growth"],
-    });
-    assert.match(prompt, /Post layout playbook \(Promoção\)/i);
-    assert.match(prompt, /produto herói no centro/i);
-    assert.match(prompt, /2 por 149/i);
   });
 });

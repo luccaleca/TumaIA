@@ -110,12 +110,12 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
 
   if (isPostModelosQuestion(q)) {
     return {
-      route: "contextos",
+      route: "llm_light",
       topics: [...new Set([...topics, "CONTEXTOS"])],
       identityAnswer: null,
       acervo: null,
-      chat_mode: null,
-      includeAcervoInPrompt: false,
+      chat_mode: "conversa_aberta",
+      includeAcervoInPrompt: true,
       needsProductGuard: false,
       wantsImageRoute,
     };
@@ -224,27 +224,16 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
 
 
   if (topics.includes("CONTEXTOS") && topics.length === 1) {
-
     return {
-
-      route: "contextos",
-
+      route: "llm_light",
       topics,
-
       identityAnswer: null,
-
       acervo: null,
-
-      chat_mode: null,
-
-      includeAcervoInPrompt: false,
-
+      chat_mode: "conversa_aberta",
+      includeAcervoInPrompt: true,
       needsProductGuard: false,
-
       wantsImageRoute,
-
     };
-
   }
 
 

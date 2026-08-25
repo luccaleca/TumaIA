@@ -100,6 +100,15 @@ export function isIdentidadeMarcaContexto(row) {
   return nome === IDENTIDADE_CONTEXTO_NOME.toLowerCase();
 }
 
+function normalizePapelAgente(v, maxLen = 12000) {
+  return String(v ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{4,}/g, "\n\n\n")
+    .trim()
+    .slice(0, maxLen);
+}
+
 /**
  * @param {Record<string, unknown>} raw
  */
@@ -132,6 +141,8 @@ export function normalizeIdentidadeDados(raw) {
     id_midia_referencia_analise: String(src.id_midia_referencia_analise ?? "").trim() || null,
     id_midia_logo: String(src.id_midia_logo ?? "").trim() || null,
     legenda_referencia: String(src.legenda_referencia ?? "").trim().slice(0, 2000),
+    /** Texto livre — “papel em branco” que o agente lê quase cru. */
+    papel_agente: normalizePapelAgente(src.papel_agente ?? src.texto_livre ?? ""),
   };
 }
 
@@ -216,17 +227,19 @@ export function mergeIdentidadePaletteFields(current, incoming) {
  */
 export function identidadeCompletude(dados) {
   const d = normalizeIdentidadeDados(dados);
+  const temPapel = String(d.papel_agente || "").trim().length >= 40;
+  const temJeito = Boolean(d.estilo_visual) || Boolean(d.assinatura_visual) || temPapel;
   const checks = [
+    { key: "id_midia_logo", ok: Boolean(d.id_midia_logo) },
     { key: "cor_primaria", ok: Boolean(d.cor_primaria) },
-    { key: "estilo_visual", ok: Boolean(d.estilo_visual) },
+    { key: "estilo_visual", ok: temJeito },
+    { key: "papel_agente", ok: temPapel },
     { key: "evitar", ok: Boolean(d.evitar) },
-    { key: "tom_voz", ok: Boolean(d.tom_voz) },
   ];
   const done = checks.filter((c) => c.ok).length;
-  const temLogo = Boolean(d.id_midia_logo);
   return {
     percentual: Math.round((done / checks.length) * 100),
-    pronto_para_imagem: Boolean(d.cor_primaria && d.estilo_visual && (d.evitar || temLogo)),
+    pronto_para_imagem: Boolean(d.id_midia_logo && d.cor_primaria && temJeito),
     faltando: checks.filter((c) => !c.ok).map((c) => c.key),
   };
 }
@@ -298,43 +311,61 @@ export function formatBrandIdentityCompact(dados, maxLen = 140) {
 }
 
 /**
- * Bloco em português para GPT Image 2 (pipeline raw): identidade além do pedido do cliente.
+ * Bloco em português para GPT Image 2 (pipeline raw): leis da marca (inquestionáveis).
  * @param {Record<string, unknown> | null} dados
  * @param {number} maxLen
  */
 export function formatBrandIdentityForRawPrompt(dados, maxLen = 900) {
   const d = normalizeIdentidadeDados(dados || {});
-  const lines = [];
+  const lines = [
+    "LEIS DA MARCA (inquestionáveis — se o pedido conflitar, a marca vence):",
+  ];
   const cores = allBrandColorsFromIdentidade(d);
-  if (cores.length) lines.push(`Cores da marca (obrigatório usar na paleta): ${cores.join(", ")}.`);
-  if (d.estilo_visual) lines.push(`Estilo visual: ${d.estilo_visual}.`);
+  if (cores.length) {
+    lines.push(`OBRIGATÓRIO — paleta: ${cores.join(", ")}. Proibido cores fora desta paleta.`);
+  }
+  if (d.estilo_visual) {
+    lines.push(`OBRIGATÓRIO — estilo visual: ${d.estilo_visual}.`);
+  }
   if (d.assinatura_visual) {
-    lines.push(`Assinatura visual da marca: ${compactPromptText(d.assinatura_visual, 220)}.`);
+    lines.push(`OBRIGATÓRIO — assinatura visual: ${compactPromptText(d.assinatura_visual, 220)}.`);
+  }
+  const papel = String(d.papel_agente || "").trim();
+  if (papel) {
+    const clip = papel.length > 500 ? `${papel.slice(0, 499)}…` : papel;
+    lines.push(`Notas da marca (papel livre):\n${clip}`);
   }
   if (d.variacoes_campanha) {
-    lines.push(`Variações permitidas por campanha: ${compactPromptText(d.variacoes_campanha, 180)}.`);
+    lines.push(`Variações permitidas: ${compactPromptText(d.variacoes_campanha, 180)}.`);
   }
   if (d.regras_repeticao) {
-    lines.push(`Regras recorrentes de layout: ${compactPromptText(d.regras_repeticao, 180)}.`);
+    lines.push(`Regras de layout: ${compactPromptText(d.regras_repeticao, 180)}.`);
   }
   if (d.estrategia_cor_campanha) {
-    lines.push(`Estratégia de cor por campanha: ${compactPromptText(d.estrategia_cor_campanha, 190)}.`);
+    lines.push(`Estratégia de cor: ${compactPromptText(d.estrategia_cor_campanha, 190)}.`);
   }
   const evitar = String(d.evitar || "").trim() || EVITAR_PADRAO_IMAGEM;
-  lines.push(`Evitar nas artes: ${evitar}.`);
+  lines.push(`VETO ABSOLUTO — evitar: ${evitar}.`);
   if (d.tom_voz) lines.push(`Mood/atmosfera: ${d.tom_voz}.`);
   if (d.publico) lines.push(`Público-alvo (estética): ${d.publico}.`);
   if (d.id_midia_logo) {
     lines.push(
-      "Logo da marca: marca d'água discreta num canto livre (~7–9% da altura, semitransparente) — identifica a empresa sem ser o foco; não desenhar logo na arte gerada, salvo pedido explícito de logo em destaque.",
+      "OBRIGATÓRIO — logo oficial do acervo como marca d'água discreta (~7–9% da altura, canto livre). NUNCA inventar logotipo.",
+    );
+  } else {
+    lines.push("Sem logo cadastrado — NÃO inventar logotipo.");
+  }
+  lines.push(
+    "PRODUTO: se houver PNG do acervo, preservar embalagem/rótulo com fidelidade — NÃO redesenhar.",
+  );
+  if (d.segmento) lines.push(`Segmento: ${d.segmento}.`);
+  if (d.sobre_empresa) lines.push(`Contexto: ${String(d.sobre_empresa).slice(0, 200)}.`);
+  if (d.exemplo_frase_marca) {
+    lines.push(
+      `Estilo de headline (criar texto novo neste tom, não copiar literal): «${String(d.exemplo_frase_marca).slice(0, 80)}».`,
     );
   }
-  if (d.segmento) lines.push(`Segmento: ${d.segmento}.`);
-  if (d.sobre_empresa) lines.push(`Contexto da empresa: ${String(d.sobre_empresa).slice(0, 200)}.`);
-  if (d.exemplo_frase_marca) {
-    lines.push(`Estilo de headline: «${String(d.exemplo_frase_marca).slice(0, 80)}».`);
-  }
-  if (!lines.length) return "";
+  if (lines.length <= 1) return "";
   let s = lines.join("\n");
   if (s.length > maxLen) s = `${s.slice(0, maxLen - 1)}…`;
   return s.trim();

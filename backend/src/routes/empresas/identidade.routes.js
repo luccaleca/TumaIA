@@ -19,10 +19,12 @@ import {
   findIdentidadeContextoRow,
   upsertIdentidadeMarca,
 } from "../../services/identidadeMarcaService.js";
+import { getAgenteMarcaForEmpresa } from "../../services/brandAgentService.js";
 import {
   createIdentidadeAnaliseJob,
   findLatestIdentidadeAnaliseJob,
 } from "../../services/identidadeAnaliseJobService.js";
+import { syncEmpresaFotoPerfilFromLogoMidia } from "../../modules/empresas/empresaFotoPerfil.js";
 
 const identidadeDadosBody = z.object({
   sobre_empresa: z.string().max(2000).optional(),
@@ -42,6 +44,7 @@ const identidadeDadosBody = z.object({
   site_url: z.string().max(500).optional(),
   id_midia_referencia_analise: z.string().uuid().nullable().optional(),
   id_midia_logo: z.string().uuid().nullable().optional(),
+  papel_agente: z.string().max(12000).optional(),
   legenda_referencia: z.string().max(2000).optional(),
 });
 
@@ -60,6 +63,41 @@ const analisarBody = z
   });
 
 export function registerIdentidadeRoutes(r) {
+  r.get("/:idEmpresa/agente-marca", async (req, res) => {
+    try {
+      const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
+      if (!idEmpresa.success) {
+        res.status(400).json({ error: "id_empresa inválido" });
+        return;
+      }
+      const supabase = db();
+      if (!supabase) {
+        res.status(503).json({ error: "Supabase não configurado" });
+        return;
+      }
+      const { data: membro, error: ePerm } = await getMembroAtivoEmpresa(
+        supabase,
+        idEmpresa.data,
+        req.usuario.id_usuario,
+      );
+      if (ePerm) {
+        res.status(500).json({ error: ePerm.message });
+        return;
+      }
+      if (!membro) {
+        res.status(403).json({ error: "Sem vínculo com esta empresa" });
+        return;
+      }
+
+      const agente = await getAgenteMarcaForEmpresa(supabase, idEmpresa.data);
+      res.json({ agente });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Erro interno";
+      console.error("empresas.agenteMarca:", e);
+      if (!res.headersSent) res.status(500).json({ error: msg });
+    }
+  });
+
   r.get("/:idEmpresa/identidade", async (req, res) => {
     try {
       const idEmpresa = z.string().uuid().safeParse(req.params.idEmpresa);
@@ -278,6 +316,7 @@ export function registerIdentidadeRoutes(r) {
         req.usuario.id_usuario,
         merged,
       );
+      await syncEmpresaFotoPerfilFromLogoMidia(supabase, idEmpresa.data, merged.id_midia_logo);
       res.json({ identidade: identidadeFromContextoRow(saved) });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Erro interno";
@@ -336,6 +375,8 @@ export function registerIdentidadeRoutes(r) {
         res.status(500).json({ error: eMidia.message });
         return;
       }
+
+      await syncEmpresaFotoPerfilFromLogoMidia(supabase, idEmpresa.data, null);
 
       const dadosVazio = normalizeIdentidadeDados({});
       res.json({

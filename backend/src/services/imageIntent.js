@@ -5,7 +5,6 @@ import {
   resolvePedidoCliente,
 } from "./imageHeadline.js";
 import { pruneProposalMidiasToPedido } from "./productMentionMatch.js";
-import { resolvePlaybookPromptFromContextoRow } from "../modules/empresas/postModelosCatalog.js";
 
 function contextIdFromRow(row) {
   return String(row?.id_contexto_empresa ?? "").trim();
@@ -127,38 +126,22 @@ export function buildConfirmedImageIntent(opts = {}) {
     pedidoHint,
   );
 
-  const focusedRow = findContextRowById(contextoRows, opts.focusContextoId);
-  const proposalMatchedId =
-    baseProposal?.matched_contexto && typeof baseProposal.matched_contexto === "object"
-      ? String(baseProposal.matched_contexto.id_contexto_empresa ?? "").trim()
-      : "";
-  const proposalMatchedRow = focusedRow ? null : findContextRowById(contextoRows, proposalMatchedId);
-  const matchedRow = focusedRow || proposalMatchedRow || null;
-
-  const matchedContexto =
-    normalizeMatchedContext(
-      matchedRow,
-      focusedRow ? "escolhido_no_painel" : proposalMatchedRow ? "confirmado_no_fluxo" : "sem_contexto",
-    ) ||
-    (baseProposal?.matched_contexto && typeof baseProposal.matched_contexto === "object"
-      ? baseProposal.matched_contexto
-      : null);
+  const matchedContexto = null;
 
   const postContextProposal = {
     ...baseProposal,
-    ...(matchedContexto ? { matched_contexto: matchedContexto } : {}),
+    matched_contexto: null,
   };
   const heroProduct = normalizeHeroProduct(postContextProposal);
   if (heroProduct) {
     postContextProposal.hero_product = heroProduct;
   }
 
-  const prioritizedContextRows = uniqueContextRows(contextoRows, matchedRow);
+  const prioritizedContextRows = contextoRows;
   const pedido = pedidoHint || resolvePedidoCliente(postContextProposal, history, 2000) || "";
   const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, prioritizedContextRows) || "";
   const resumoVisual = buildResumoVisual(postContextProposal, history, pedido);
   const selectionHint = buildSelectionHint(postContextProposal, pedido, fraseNaImagem, matchedContexto);
-  const playbookPromptBase = matchedRow ? resolvePlaybookPromptFromContextoRow(matchedRow) : null;
 
   return {
     pedido,
@@ -166,8 +149,7 @@ export function buildConfirmedImageIntent(opts = {}) {
     resumoVisual,
     matchedContexto,
     heroProduct,
-    matchedContextRow: matchedRow,
-    playbookPromptBase,
+    matchedContextRow: null,
     contextoRows: prioritizedContextRows,
     selectionHint,
     postContextProposal,

@@ -20,7 +20,7 @@ import {
   isIdentidadeMarcaContexto,
   partitionContextosIdentidade,
 } from "../modules/empresas/identidadeMarca.js";
-import { loadActiveModeloContextoRowsForEmpresa } from "./postModelosService.js";
+import { clipAgenteMarcaForPrompt, renderAgenteMarcaMarkdown } from "./brandAgentService.js";
 
 /** Limite legado FLUX. */
 export const FLUX_IMAGE_PROMPT_MAX = 2000;
@@ -281,44 +281,44 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
   if (composeProductAssets) {
     base = `${base}\n\nReforce: nenhum objeto de produto no quadro — apenas cenário vazio nas zonas reservadas para os PNG do acervo.`;
   }
-  if (imageIntent?.playbookPromptBase) {
-    base = `${base}\n\nModelo de post (playbook visual):\n${imageIntent.playbookPromptBase}`;
-  } else if (imageIntent?.matchedContexto?.nome) {
-    base = `${base}\n\nContexto/campanha prioritário desta arte: ${imageIntent.matchedContexto.nome}.`;
+  if (imageIntent?.matchedContexto?.nome) {
+    base = `${base}\n\nContexto prioritário desta arte: ${imageIntent.matchedContexto.nome}.`;
   }
   if (identidadeDados?.id_midia_logo && !opts?.logoAsHero) {
     base = `${base}\n\nA logo real será aplicada depois como MARCA D'ÁGUA discreta num canto livre (~7–9% da altura, semitransparente): identifica a empresa, mas o foco é a campanha e os produtos. Não desenhe logo, wordmark nem lettering na arte gerada — deixe canto inferior livre de textos grandes.`;
   }
 
   const brand = identidadeDados ? formatBrandIdentityForRawPrompt(identidadeDados) : "";
-  if (brand) {
-    return `${base}\n\nIdentidade da marca (alinhar visual e cores):\n${brand}`.slice(0, 32_000);
+  const agente = identidadeDados
+    ? clipAgenteMarcaForPrompt(renderAgenteMarcaMarkdown(identidadeDados), 2200)
+    : "";
+  const brandBlock = [agente, brand ? `Identidade (resumo operacional):\n${brand}` : ""]
+    .filter(Boolean)
+    .join("\n\n");
+  if (brandBlock) {
+    return `${base}\n\n${brandBlock}`.slice(0, 32_000);
   }
   return base.slice(0, 32_000);
 }
 
 /**
- * Contextos ativos da empresa: modelos de post (boolean) + identidade da marca.
+ * Contextos ativos da empresa: apenas identidade da marca.
  *
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {string} idEmpresa
  */
 export async function loadContextosEmpresaAtivos(db, idEmpresa) {
-  const [modeloRows, identidadeResult] = await Promise.all([
-    loadActiveModeloContextoRowsForEmpresa(db, idEmpresa),
-    db
-      .from("contexto_empresa")
-      .select("id_contexto_empresa, nome, descricao, schema_json, dados_json, data_criacao")
-      .eq("id_empresa", idEmpresa)
-      .eq("ativo", true)
-      .order("data_criacao", { ascending: false })
-      .limit(8),
-  ]);
+  const identidadeResult = await db
+    .from("contexto_empresa")
+    .select("id_contexto_empresa, nome, descricao, schema_json, dados_json, data_criacao")
+    .eq("id_empresa", idEmpresa)
+    .eq("ativo", true)
+    .order("data_criacao", { ascending: false })
+    .limit(8);
   if (identidadeResult.error) throw new Error(identidadeResult.error.message);
-  const identidadeRows = (Array.isArray(identidadeResult.data) ? identidadeResult.data : []).filter(
-    (row) => isIdentidadeMarcaContexto(row),
+  return (Array.isArray(identidadeResult.data) ? identidadeResult.data : []).filter((row) =>
+    isIdentidadeMarcaContexto(row),
   );
-  return [...modeloRows, ...identidadeRows];
 }
 
 export async function loadEmpresaResumoParaImagem(db, idEmpresa) {

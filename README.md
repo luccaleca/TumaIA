@@ -11,25 +11,23 @@ O painel Next.js é a **retaguarda**: cadastro da empresa, identidade, mídias, 
 | Painel | Next.js 16 · React 19 · Tailwind 4 |
 | API | Node.js · Express · Zod · ES modules |
 | Dados | Supabase (Postgres, Auth, Storage) |
-| Chat IA | Python + Chroma (RAG) hoje · **alvo:** Node monólito + LLM só em exceções |
+| Chat IA | **Node** (regras + estados + Ollama em exceções) · Python/RAG legado fora do caminho feliz |
 | Imagem | OpenAI gpt-image-2 ou Replicate (configurável) |
 | WhatsApp (dev) | WPPConnect → webhook no backend |
 | Instagram | n8n self-hosted na VPS (só publicar; não no chat) |
 
 Detalhes do **código hoje**: [`docs/stack-e-estado-atual.md`](./docs/stack-e-estado-atual.md)  
-**Arquitetura alvo** (TCC, piloto 1 empresa, VPS): [`docs/tcc-arquitetura.md`](./docs/tcc-arquitetura.md)
+**Arquitetura do protótipo** (TCC, piloto 1 empresa, VPS): [`docs/tcc-arquitetura.md`](./docs/tcc-arquitetura.md)
 
 ### Por que `docs/tcc-arquitetura.md`?
 
-Fechamos o desenho do protótipo para TCC e piloto com ~10–20 pessoas no WhatsApp:
+O protótipo existe para **mostrar que funciona** com ~10–20 pessoas no WhatsApp:
 
 - **Site** = repositório da marca (Supabase); **WhatsApp** = canal do pedido, não chatbot genérico.
-- **Interpretação por regras + máquina de estados** no Node (briefing → arte → legenda → publicar), sem RAG no caminho crítico.
-- **LLM** reservada a perguntas complexas e legenda opcional — não a cada “oi”.
+- **Interpretação por regras + máquina de estados** no Node (briefing → arte → legenda → publicar), **sem RAG** no caminho crítico.
+- **LLM** só em conversa aberta / exceção — não a cada “oi”.
 - **n8n na VPS** só para publicar no Instagram (sem plano cloud Starter).
-- **Runtime alvo:** monólito Node na VPS; worker Python será removido do hot path em fases (`TUMAIA_WHATSAPP_FAST_PATH` pendente).
-
-O doc separa **estado atual** (`stack-e-estado-atual.md`) de **para onde vamos** (`tcc-arquitetura.md`) para orientar implementação e monografia sem misturar legado com alvo.
+- **Runtime:** monólito Node (`TUMAIA_NODE_CHAT=true`); `backend/ia/python/` fica legado até arquivar.
 
 ## Estrutura do monorepo
 
@@ -76,6 +74,6 @@ URLs: frontend `http://localhost:3000` · backend `http://localhost:4000`
 | [`docs/contexto-produto.md`](./docs/contexto-produto.md) | Visão de produto e fluxo |
 | [`docs/arquitetura/arquitetura-repositorio.md`](./docs/arquitetura/arquitetura-repositorio.md) | Diagramas e rotas |
 | [`docs/ia/regras-tuma-ia.md`](./docs/ia/regras-tuma-ia.md) | Comportamento da IA Tuma |
-| [`AGENTS.md`](./AGENTS.md) | Guia para agentes Cursor |
+| [`CONTRIBUTING.md`](./CONTRIBUTING.md) | Como contribuir (time / revisão / segurança) |
 | [`backend/README.md`](./backend/README.md) | API, env, rotas |
 | [`frontend/README.md`](./frontend/README.md) | Painel Next.js |

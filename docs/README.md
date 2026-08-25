@@ -6,7 +6,7 @@ Documentação de produto, arquitetura e IA. Setup de ambiente fica nos READMEs 
 
 | Documento | Para quê |
 |-----------|----------|
-| [**stack-e-estado-atual.md**](./stack-e-estado-atual.md) | Stack, o que já funciona, como rodar — **referência para IAs** |
+| [**stack-e-estado-atual.md**](./stack-e-estado-atual.md) | Stack, o que já funciona, como rodar |
 | [**tcc-arquitetura.md**](./tcc-arquitetura.md) | **Arquitetura alvo** — TCC, VPS, monólito Node, sem RAG no WhatsApp |
 | [contexto-produto.md](./contexto-produto.md) | Visão de negócio e fluxo WhatsApp → Instagram |
 | [arquitetura/arquitetura-repositorio.md](./arquitetura/arquitetura-repositorio.md) | Diagramas Mermaid e rotas |
@@ -29,11 +29,12 @@ Código canônico de prompt: `backend/ia/python/conversa/instrucoes/`
 | [academico/](./academico/) | Artigo e resumos |
 | [arquitetura/](./arquitetura/) | Diagramas PNG/SVG |
 | [diagramas/](./diagramas/) | Modelo de dados |
-| [../AGENTS.md](../AGENTS.md) | Guia para agentes Cursor |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Como contribuir no repositório |
 
 ## Desenvolvimento
 
 - Raiz: [../README.md](../README.md)
+- Contribuição: [../CONTRIBUTING.md](../CONTRIBUTING.md)
 - Backend: [../backend/README.md](../backend/README.md)
 - Frontend: [../frontend/README.md](../frontend/README.md)
 - Worker Python: [../backend/ia/python/README.md](../backend/ia/python/README.md)

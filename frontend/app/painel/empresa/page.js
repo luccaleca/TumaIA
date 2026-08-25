@@ -5,11 +5,11 @@ import { authApiFetchWithToken, formatAuthError } from "../../../lib/auth";
 import Modal from "../../components/Modal";
 import IdentidadeMarcaSection from "./IdentidadeMarcaSection";
 import EmpresaZonaPerigosa from "./EmpresaZonaPerigosa";
-import EmpresaFotoPerfil from "./EmpresaFotoPerfil";
 import EmpresaWorkspaceCard from "./EmpresaWorkspaceCard";
 import EmpresaUsoToggle from "./EmpresaUsoToggle";
 import EmpresaDadosSection from "./EmpresaDadosSection";
 import EmpresaMembrosSection from "./EmpresaMembrosSection";
+import EmpresaWorkspaceTabs from "./EmpresaWorkspaceTabs";
 import EmpresaAcoesInicio from "./EmpresaAcoesInicio";
 import EmpresaFormulario from "./EmpresaFormulario";
 import {
@@ -67,6 +67,7 @@ export default function EmpresaPage() {
   const [resgatandoConvite, setResgatandoConvite] = useState(false);
   const [entrandoComConvite, setEntrandoComConvite] = useState(false);
   const empresaIdRef = useRef(null);
+  const [empresaTab, setEmpresaTab] = useState(/** @type {'visao' | 'marca' | 'equipe'} */ ("visao"));
   const [empresaAtivaPainelId, setEmpresaAtivaPainelId] = useState(null);
 
   useEffect(() => {
@@ -207,6 +208,7 @@ export default function EmpresaPage() {
       setEmpresaAtiva(row.empresa);
     }
     aplicarLinhaSelecionada(empresasMinhas, id);
+    setEmpresaTab("visao");
     setEmpresaEditOpen(false);
     setCriandoNovaEmpresa(false);
     setEmpresaDetalhesOpen(false);
@@ -581,26 +583,13 @@ export default function EmpresaPage() {
                   </div>
                 ) : null}
                 {hasEmpresa && !criandoNovaEmpresa ? (
-                  <nav
-                    className="mt-2 flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground"
-                    aria-label="Seções da empresa"
-                  >
-                    <a href="#dados-empresa" className="font-medium text-accent hover:underline">
-                      Dados
-                    </a>
-                    <span aria-hidden className="text-border">
-                      ·
-                    </span>
-                    <a href="#identidade-marca" className="font-medium text-accent hover:underline">
-                      Identidade
-                    </a>
-                    <span aria-hidden className="text-border">
-                      ·
-                    </span>
-                    <a href="#membros-empresa" className="font-medium text-accent hover:underline">
-                      Membros
-                    </a>
-                  </nav>
+                  <EmpresaWorkspaceTabs
+                    value={empresaTab}
+                    onChange={(id) => {
+                      setEmpresaTab(id);
+                      setEmpresaEditOpen(false);
+                    }}
+                  />
                 ) : null}
               </div>
             </div>
@@ -613,48 +602,52 @@ export default function EmpresaPage() {
       ) : null}
       {hasEmpresa ? (
         <div className="mt-6 space-y-8">
-          <EmpresaDadosSection
-            empresaId={empresaId}
-            fotoPerfilUrl={fotoPerfilUrl}
-            dados={dadosResumoCard}
-            meuCargo={meuCargo}
-            cargoLabel={cargoLabel}
-            canEdit={canEditEmpresa}
-            detalhesOpen={empresaDetalhesOpen}
-            onToggleDetalhes={() => setEmpresaDetalhesOpen((v) => !v)}
-            onEditar={() => {
-              setCriandoNovaEmpresa(false);
-              setEmpresaEditOpen(true);
-            }}
-            onFotoUpdated={() => void refreshEmpresasLista()}
-            onMsg={(text, kind) => {
-              setMsg(text);
-              setMsgKind(kind === "err" ? "err" : "ok");
-            }}
-          />
+          {criandoNovaEmpresa || empresaTab === "visao" || empresaEditOpen ? (
+            <>
+              {!criandoNovaEmpresa && empresaTab === "visao" ? (
+                <EmpresaDadosSection
+                  fotoPerfilUrl={fotoPerfilUrl}
+                  dados={dadosResumoCard}
+                  meuCargo={meuCargo}
+                  cargoLabel={cargoLabel}
+                  canEdit={canEditEmpresa}
+                  detalhesOpen={empresaDetalhesOpen}
+                  onToggleDetalhes={() => setEmpresaDetalhesOpen((v) => !v)}
+                  onEditar={() => {
+                    setCriandoNovaEmpresa(false);
+                    setEmpresaEditOpen(true);
+                  }}
+                  onGoToMarca={() => setEmpresaTab("marca")}
+                />
+              ) : null}
 
-          {mostrarFormulario ? (
-            <EmpresaFormulario
-              form={form}
-              setForm={setForm}
+              {mostrarFormulario ? (
+                <EmpresaFormulario
+                  form={form}
+                  setForm={setForm}
+                  canEdit={canEditEmpresa}
+                  saving={saving}
+                  criandoNovaEmpresa={criandoNovaEmpresa}
+                  hasEmpresa={hasEmpresa}
+                  empresaEditOpen={empresaEditOpen}
+                  onSubmit={onSubmit}
+                  onCancelar={onCancelarFormulario}
+                />
+              ) : null}
+            </>
+          ) : null}
+
+          {!criandoNovaEmpresa && empresaTab === "marca" ? (
+            <IdentidadeMarcaSection
+              empresaId={empresaId}
               canEdit={canEditEmpresa}
-              saving={saving}
-              criandoNovaEmpresa={criandoNovaEmpresa}
-              hasEmpresa={hasEmpresa}
-              empresaEditOpen={empresaEditOpen}
-              onSubmit={onSubmit}
-              onCancelar={onCancelarFormulario}
+              siteEmpresa={String(form.site_empresa || empresaAtiva?.site_empresa || "").trim()}
+              onEmpresaLogoSynced={() => void refreshEmpresasLista()}
             />
           ) : null}
 
-          {!criandoNovaEmpresa ? (
+          {!criandoNovaEmpresa && empresaTab === "equipe" ? (
             <>
-              <IdentidadeMarcaSection
-                empresaId={empresaId}
-                canEdit={canEditEmpresa}
-                siteEmpresa={String(form.site_empresa || empresaAtiva?.site_empresa || "").trim()}
-              />
-
               <EmpresaMembrosSection
                 membros={membros}
                 canManageMembros={canManageMembros}

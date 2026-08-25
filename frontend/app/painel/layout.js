@@ -43,16 +43,6 @@ function IconEmpresa() {
   );
 }
 
-function IconContextos() {
-  return (
-    <NavIcon>
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="h-[18px] w-[18px]">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-      </svg>
-    </NavIcon>
-  );
-}
-
 function IconMidias() {
   return (
     <NavIcon>
@@ -84,6 +74,46 @@ function IconConta() {
   );
 }
 
+function IconTumaCore() {
+  return (
+    <NavIcon>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="h-[18px] w-[18px]">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6"
+        />
+      </svg>
+    </NavIcon>
+  );
+}
+
+function IconChevron({ open }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={2}
+      stroke="currentColor"
+      className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+      aria-hidden
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+    </svg>
+  );
+}
+
+const TUMACORE_NAV_STORAGE_KEY = "tumaia-tumacore-nav-open";
+const TUMACORE_BASE = "/painel/tumacore";
+
+const TUMACORE_NAV_ITEMS = [
+  { href: `${TUMACORE_BASE}/dashboard`, label: "Dashboard" },
+  { href: `${TUMACORE_BASE}/analytics`, label: "Analytics" },
+  { href: `${TUMACORE_BASE}/clientes`, label: "Gestão de clientes" },
+  { href: `${TUMACORE_BASE}/chat-sql`, label: "Chat SQL" },
+];
+
 function NavLink({ item, active }) {
   const Icon = item.icon;
   return (
@@ -99,6 +129,80 @@ function NavLink({ item, active }) {
       <Icon />
       <span>{item.label}</span>
     </Link>
+  );
+}
+
+function TumaCoreNavAccordion({ pathname, isActive }) {
+  const underTumaCore = pathname === TUMACORE_BASE || pathname.startsWith(`${TUMACORE_BASE}/`);
+  const [open, setOpen] = useState(underTumaCore);
+
+  useEffect(() => {
+    if (underTumaCore) {
+      setOpen(true);
+      try {
+        sessionStorage.setItem(TUMACORE_NAV_STORAGE_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    try {
+      if (sessionStorage.getItem(TUMACORE_NAV_STORAGE_KEY) === "1") {
+        setOpen(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [underTumaCore]);
+
+  function toggle() {
+    setOpen((prev) => {
+      const next = !prev;
+      try {
+        sessionStorage.setItem(TUMACORE_NAV_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={toggle}
+        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+          underTumaCore
+            ? "bg-muted font-semibold text-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
+        aria-expanded={open}
+        aria-controls="tumacore-nav-submenu"
+      >
+        <IconTumaCore />
+        <span className="flex-1">TumaCore</span>
+        <IconChevron open={open} />
+      </button>
+      {open ? (
+        <div id="tumacore-nav-submenu" className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2" role="group" aria-label="TumaCore">
+          {TUMACORE_NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+                isActive(item.href)
+                  ? "bg-accent font-semibold text-accent-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              aria-current={isActive(item.href) ? "page" : undefined}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -142,7 +246,6 @@ function PainelShell({ children }) {
     () => [
       { href: "/painel/chat", label: "Chat", icon: IconChat },
       { href: "/painel/empresa", label: "Empresa", icon: IconEmpresa },
-      { href: "/painel/contextos", label: "Modelos de post", icon: IconContextos },
       { href: "/painel/midias", label: "Mídias", icon: IconMidias },
     ],
     [],
@@ -201,6 +304,7 @@ function PainelShell({ children }) {
                 {mainNav.map((item) => (
                   <NavLink key={item.href} item={item} active={isActive(item.href)} />
                 ))}
+                <TumaCoreNavAccordion pathname={pathname} isActive={isActive} />
               </nav>
 
               <div className="my-2 border-t border-border" role="separator" />

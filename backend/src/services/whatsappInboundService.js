@@ -340,7 +340,7 @@ export async function handleWhatsappInbound(input) {
     question: body,
     history,
     id_empresa: auth.id_empresa,
-    fast_path: env.TUMAIA_WHATSAPP_FAST_PATH,
+    fast_path: env.TUMAIA_NODE_CHAT || env.TUMAIA_WHATSAPP_FAST_PATH,
     chat_session_id: `wa-${auth.id_empresa}-${auth.phone}`,
   });
 

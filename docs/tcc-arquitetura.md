@@ -103,8 +103,8 @@ A **LLM continua** onde fizer sentido; o que sai é o **subprocesso Python + RAG
 
 ### Migração em 3 passos
 
-1. **Fase 1** — `TUMAIA_WHATSAPP_FAST_PATH=true`: WhatsApp nunca chama Python (a implementar).
-2. **Fase 2** — Painel deixa de usar Python; perguntas abertas via Node → Ollama HTTP.
+1. **Fase 1** — WhatsApp nunca chama Python (`TUMAIA_WHATSAPP_FAST_PATH` / `TUMAIA_NODE_CHAT`).
+2. **Fase 2** — Painel no mesmo motor Node (`TUMAIA_NODE_CHAT=true`, padrão do protótipo).
 3. **Fase 3** — Remover ou arquivar `backend/ia/python/`; deploy VPS = Node + Ollama + n8n.
 
 Espelhos Node já existentes (não recomeçar do zero):
@@ -212,9 +212,9 @@ OPENAI_ALLOW_BILLING=false
 # n8n na VPS (não cloud Starter)
 N8N_INSTAGRAM_WEBHOOK_URL=https://sua-vps/webhook/instagram-post
 
-# WhatsApp (TCC) — arquitetura híbrida (regras + Ollama no Node, sem Python)
+# Protótipo funcional — Node only (painel + WhatsApp)
 WPPCONNECT_ENABLED=true
-TUMAIA_WHATSAPP_FAST_PATH=true
+TUMAIA_NODE_CHAT=true
 # OLLAMA_FAST_CHAT_MODEL=llama3.2:1b
 
 # A implementar
@@ -235,8 +235,9 @@ TUMAIA_WHATSAPP_FAST_PATH=true
 | Briefing sem Llama | `postContextProposalService.js` | Implementado |
 | Publicação Instagram | `instagramPublishService.js` | Implementado |
 | Bridge WPPConnect | `whatsappBridge.js` | Implementado |
-| RAG Python | `backend/ia/python/` | Legado — fora do hot path alvo |
-| `TUMAIA_WHATSAPP_FAST_PATH` | `config.js` + `processChatMessage.js` | Implementado |
+| LLM leve no Node | `chatNodeLlmLight.js` | Implementado |
+| Chat Node (sem RAG) | `TUMAIA_NODE_CHAT` (padrão `true`) | Implementado |
+| RAG Python | `backend/ia/python/` | Legado — fora do caminho feliz |
 | `TUMAIA_DEMO_MODE` | — | Pendente |
 
 ---
@@ -246,10 +247,10 @@ TUMAIA_WHATSAPP_FAST_PATH=true
 | Evitar | Motivo |
 |--------|--------|
 | n8n a cada mensagem | Gatilhos / latência |
-| RAG no WhatsApp | Lento e pesado na VPS |
+| RAG no WhatsApp / painel (protótipo) | Lento e pesado na VPS |
 | Disparo em massa | Ban |
 | Billing ao vivo na demo | Falha ou custo inesperado |
-| Ollama 3b como protagonista | Demo trava no notebook |
+| Ollama 3b como protagonista de toda mensagem | Demo trava no notebook |
 | n8n Starter com VPS própria | Custo desnecessário |
 
 ---
@@ -258,9 +259,9 @@ TUMAIA_WHATSAPP_FAST_PATH=true
 
 | # | Tarefa | Prioridade |
 |---|--------|------------|
-| 1 | ~~`TUMAIA_WHATSAPP_FAST_PATH`~~ | Feito |
+| 1 | ~~`TUMAIA_WHATSAPP_FAST_PATH` / `TUMAIA_NODE_CHAT`~~ | Feito |
 | 2 | Checklist deploy VPS (backend + n8n + WPPConnect) | Alta |
-| 3 | Painel sem Python (Node → Ollama para exceções) | Média |
+| 3 | ~~Painel sem Python (Node → Ollama para exceções)~~ | Feito (`TUMAIA_NODE_CHAT=true`) |
 | 4 | `TUMAIA_DEMO_MODE` (roteiro + artes pré-geradas) | Média |
 | 5 | Migrar piloto para WhatsApp Cloud API | Pós-TCC |
 | 6 | Remover `backend/ia/python/` após migração | Pós-TCC |

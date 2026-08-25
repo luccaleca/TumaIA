@@ -40,6 +40,7 @@ describe("imageGenerationIntent / interpretação", () => {
     assert.equal(detectImageGenerationIntent("dá pra fazer um post?"), false);
     assert.equal(detectImageGenerationIntent("posso pedir uma arte?"), false);
     assert.equal(detectImageGenerationIntent("como faço um post no instagram?"), false);
+    assert.equal(detectImageGenerationIntent("pode fazer um post?"), false);
   });
 
   it("não roteia por resposta genérica do assistente nem por pedido antigo no histórico", () => {

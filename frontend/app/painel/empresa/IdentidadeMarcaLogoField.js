@@ -75,10 +75,9 @@ export default function IdentidadeMarcaLogoField({
     <div className="rounded-xl border border-border bg-surface-elevated/50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground">Logo para usar nas artes</p>
+          <p className="text-sm font-medium text-foreground">Logo</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Nao entra na analise das fotos. Serve para o Tuma aplicar a marca nas artes. PNG sem fundo e ideal ate{" "}
-            {LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px no lado maior.
+            PNG sem fundo é o ideal (até {LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX} px). Não inventamos logo na arte.
           </p>
         </div>
         {idMidiaLogo ? (

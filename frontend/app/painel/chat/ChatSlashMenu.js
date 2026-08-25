@@ -29,9 +29,7 @@ function isImageMidia(row) {
  *   open: boolean,
  *   query: string,
  *   empresaId: string | null,
- *   modelosAtivos: Array<{ id: string, slug?: string, nome: string }>,
  *   selectedMidiaIds: string[],
- *   onPickModelo: (modelo: { id: string, slug?: string, nome: string }) => void,
  *   onPickMidia: (midia: { id: string, label: string }) => void,
  *   onClose: () => void,
  * }} props
@@ -40,13 +38,10 @@ export default function ChatSlashMenu({
   open,
   query,
   empresaId,
-  modelosAtivos,
   selectedMidiaIds,
-  onPickModelo,
   onPickMidia,
   onClose,
 }) {
-  const [view, setView] = useState("root");
   const [highlight, setHighlight] = useState(0);
   const [loadingMidias, setLoadingMidias] = useState(false);
   const [pastas, setPastas] = useState([]);
@@ -76,18 +71,17 @@ export default function ChatSlashMenu({
 
   useEffect(() => {
     if (!open) {
-      setView("root");
       setHighlight(0);
       return;
     }
     setHighlight(0);
-  }, [open, query, view]);
+  }, [open, query, pastaAtual]);
 
   useEffect(() => {
-    if (open && view === "midia" && empresaId && !pastas.length && !loadingMidias) {
+    if (open && empresaId && !pastas.length && !loadingMidias) {
       void loadMidiasTree();
     }
-  }, [open, view, empresaId, pastas.length, loadingMidias, loadMidiasTree]);
+  }, [open, empresaId, pastas.length, loadingMidias, loadMidiasTree]);
 
   const pastaAtivaId = resolveMidiasPastaAtivaId(pastaAtual, pastaUploadRaiz);
   const isAtDesktop = isMidiasDesktop(pastaAtual, pastaUploadRaiz);
@@ -113,33 +107,10 @@ export default function ChatSlashMenu({
     [pastas, pastaAtual, pastaUploadRaiz],
   );
 
-  const rootItems = useMemo(
-    () =>
-      [
-        { id: "nav-modelo", type: "nav", label: "Modelo de post", hint: "Layout (Promoção, Produto…)" },
-        { id: "nav-midia", type: "nav", label: "Mídia do acervo", hint: "PNG do produto nas pastas" },
-      ].filter((item) => slashMenuMatch(`${item.label} ${item.hint}`, query)),
-    [query],
-  );
-
-  const modeloItems = useMemo(
-    () =>
-      (modelosAtivos || [])
-        .filter((m) => m?.id && slashMenuMatch(m.nome, query))
-        .map((m) => ({
-          id: `modelo-${m.id}`,
-          type: "modelo",
-          label: m.nome,
-          hint: m.slug || "",
-          modelo: m,
-        })),
-    [modelosAtivos, query],
-  );
-
-  const midiaNavItems = useMemo(() => {
-    const items = [];
+  const items = useMemo(() => {
+    const nav = [];
     if (!isAtDesktop || breadcrumbs.length) {
-      items.push({
+      nav.push({
         id: "midia-up",
         type: "folder-up",
         label: breadcrumbs.length ? "← Voltar" : "← Suas mídias",
@@ -148,7 +119,7 @@ export default function ChatSlashMenu({
     }
     for (const p of pastasFilhas) {
       if (!slashMenuMatch(p.nome, query)) continue;
-      items.push({
+      nav.push({
         id: `folder-${p.id_pasta}`,
         type: "folder",
         label: p.nome || "Pasta",
@@ -161,7 +132,7 @@ export default function ChatSlashMenu({
       if (!slashMenuMatch(label, query)) continue;
       const id = String(m.id_midia ?? "").trim();
       if (!id || selectedMidiaIds.includes(id)) continue;
-      items.push({
+      nav.push({
         id: `midia-${id}`,
         type: "midia",
         label,
@@ -169,19 +140,15 @@ export default function ChatSlashMenu({
         midia: { id, label },
       });
     }
-    return items;
+    return nav;
   }, [breadcrumbs.length, isAtDesktop, pastasFilhas, midiasDaPasta, query, selectedMidiaIds]);
-
-  const items =
-    view === "root" ? rootItems : view === "modelo" ? modeloItems : midiaNavItems;
 
   useEffect(() => {
     if (!open) return;
     function onKeyDown(ev) {
       if (ev.key === "Escape") {
         ev.preventDefault();
-        if (view !== "root") setView("root");
-        else onClose();
+        onClose();
         return;
       }
       if (ev.key === "ArrowDown") {
@@ -202,19 +169,10 @@ export default function ChatSlashMenu({
     }
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [open, items, highlight, view, onClose]);
+  }, [open, items, highlight, onClose]);
 
   function activateItem(item) {
     if (!item) return;
-    if (item.type === "nav") {
-      setView(item.id === "nav-modelo" ? "modelo" : "midia");
-      setHighlight(0);
-      return;
-    }
-    if (item.type === "modelo" && item.modelo) {
-      onPickModelo(item.modelo);
-      return;
-    }
     if (item.type === "folder" && item.pastaId) {
       setPastaAtual(midiasPastaIdToUi(item.pastaId, pastaUploadRaiz));
       setHighlight(0);
@@ -238,33 +196,19 @@ export default function ChatSlashMenu({
 
   if (!open) return null;
 
-  const header =
-    view === "root"
-      ? "Inserir no post"
-      : view === "modelo"
-        ? "Modelo de post"
-        : "Mídia do acervo";
-
   return (
     <div
       className="absolute bottom-full left-0 right-0 z-20 mb-1 overflow-hidden rounded-lg border border-border bg-surface shadow-lg"
       role="listbox"
-      aria-label={header}
+      aria-label="Mídia do acervo"
     >
       <div className="flex items-center justify-between border-b border-border bg-surface-elevated/80 px-2.5 py-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{header}</span>
-        {view !== "root" ? (
-          <button
-            type="button"
-            className="text-[11px] text-accent hover:underline"
-            onClick={() => setView("root")}
-          >
-            Voltar
-          </button>
-        ) : null}
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Mídia do acervo
+        </span>
       </div>
 
-      {view === "midia" && breadcrumbs.length ? (
+      {breadcrumbs.length ? (
         <div className="flex flex-wrap gap-1 border-b border-border/60 px-2 py-1 text-[10px] text-muted-foreground">
           <button type="button" className="hover:text-foreground" onClick={() => setPastaAtual("")}>
             Suas mídias
@@ -285,17 +229,10 @@ export default function ChatSlashMenu({
       ) : null}
 
       <ul className="max-h-52 overflow-y-auto py-1">
-        {view === "modelo" && !modeloItems.length ? (
-          <li className="px-3 py-2 text-xs text-muted-foreground">
-            {modelosAtivos?.length
-              ? "Nenhum modelo combina com a busca."
-              : "Nenhum modelo ativo — ative em Modelos de post no painel."}
-          </li>
-        ) : null}
-        {view === "midia" && loadingMidias ? (
+        {loadingMidias ? (
           <li className="px-3 py-2 text-xs text-muted-foreground">Carregando acervo…</li>
         ) : null}
-        {view === "midia" && !loadingMidias && !midiaNavItems.length ? (
+        {!loadingMidias && !items.length ? (
           <li className="px-3 py-2 text-xs text-muted-foreground">
             {selectedMidiaIds.length >= SLASH_MENU_MAX_MIDIAS
               ? `Limite de ${SLASH_MENU_MAX_MIDIAS} mídias neste post.`

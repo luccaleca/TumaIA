@@ -120,7 +120,7 @@ describe("chat routing — composto e treino", () => {
     assert.equal(t.route, "empresa");
   });
 
-  it("modelos de post ativos → rota contextos (follow-up após acervo)", () => {
+  it("modelos de post ativos → conversa aberta (modelos removidos)", () => {
     const history = [
       { role: "user", content: "quais produtos temos?" },
       {
@@ -131,20 +131,13 @@ describe("chat routing — composto e treino", () => {
     const t = analyzeChatTurn("e os modelos de post, quais temos ativos?", history, {
       nomeFantasia: "FYT",
     });
-    assert.equal(t.route, "contextos");
+    assert.equal(t.route, "llm_light");
     assert.ok(t.topics.includes("CONTEXTOS"));
-    const ans = formatContextosListAnswer([
-      { nome: "Promoção", descricao: "Oferta" },
-      { nome: "Lançamento", descricao: "Novidade" },
-    ]);
-    assert.match(ans, /modelos de post ativos/i);
-    assert.match(ans, /Promoção/);
-    assert.match(ans, /Lançamento/);
   });
 
-  it("quais modelos → rota contextos (não LLM)", () => {
+  it("quais modelos → conversa aberta (modelos removidos)", () => {
     const t = analyzeChatTurn("quais modelos", [], { nomeFantasia: "FYT" });
-    assert.equal(t.route, "contextos");
+    assert.equal(t.route, "llm_light");
     assert.ok(t.topics.includes("CONTEXTOS"));
   });
 

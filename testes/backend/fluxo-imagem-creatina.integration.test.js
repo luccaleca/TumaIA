@@ -216,7 +216,7 @@ describe("fluxo completo — pedido creatina integral", () => {
     };
 
     assert.match(imageIntent.pedido, /creatina integral/i);
-    assert.equal(imageIntent.matchedContexto?.id_contexto_empresa, CTX_PROMO);
+    assert.equal(imageIntent.matchedContexto, null);
     assert.equal(imageIntent.heroProduct?.id_midia, MID_CREATINA_INTEGRAL);
 
     const { identidadeDados } = partitionContextosIdentidade(contextoRows);
@@ -231,7 +231,7 @@ describe("fluxo completo — pedido creatina integral", () => {
     steps.meta_geracao = meta;
 
     assert.match(meta.pedido_resumo || "", /creatina/i);
-    assert.equal(meta.contexto_prioritario, "Promo Academias");
+    assert.equal(meta.contexto_prioritario, null);
 
     // 3) Prompt enviado ao gerador (sem chamar Replicate)
     const prompt = buildFluxImagePrompt({

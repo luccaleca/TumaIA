@@ -44,18 +44,20 @@ describe("identidadeMarca — partition e prompt FLUX", () => {
     assert.equal(identidadeDados?.cor_primaria, "#6B2D9E");
   });
 
-  it("formatBrandIdentityForRawPrompt inclui cores e estilo", () => {
+  it("formatBrandIdentityForRawPrompt inclui leis e cores", () => {
     const block = formatBrandIdentityForRawPrompt({
       cor_primaria: "#6B2D9E",
       estilo_visual: "ótica premium",
       assinatura_visual: "tipografia condensada, headline dominante, produto central",
       estrategia_cor_campanha: "usar #FFFFFF como base neutra e variar a cor conforme o produto",
       tom_voz: "acolhedor",
+      id_midia_logo: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
-    assert.match(block, /Cores da marca/);
+    assert.match(block, /LEIS DA MARCA/i);
+    assert.match(block, /OBRIGATÓRIO — paleta/);
     assert.match(block, /#6B2D9E/);
-    assert.match(block, /Assinatura visual da marca/);
-    assert.match(block, /Estratégia de cor por campanha/);
+    assert.match(block, /Assinatura visual|assinatura visual/i);
+    assert.match(block, /VETO ABSOLUTO/i);
   });
 
   it("formatBrandIdentityBlockForFlux inclui cores", () => {
@@ -70,20 +72,26 @@ describe("identidadeMarca — partition e prompt FLUX", () => {
 });
 
 describe("identidadeMarca — completude", () => {
-  it("pronto para imagem com cor, estilo e evitar", () => {
-    const c = identidadeCompletude({
+  it("pronto com logo, paleta e estilo", () => {
+    const incompleto = identidadeCompletude({
       cor_primaria: "#111111",
       estilo_visual: "limpo",
-      evitar: "clipart",
     });
-    assert.equal(c.pronto_para_imagem, true);
-  });
+    assert.equal(incompleto.pronto_para_imagem, false);
 
-  it("pronto para imagem com cor, estilo e logo", () => {
     const c = identidadeCompletude({
       cor_primaria: "#111111",
       estilo_visual: "limpo",
       id_midia_logo: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+    });
+    assert.equal(c.pronto_para_imagem, true);
+  });
+
+  it("papel em branco conta como jeito da marca", () => {
+    const c = identidadeCompletude({
+      cor_primaria: "#111111",
+      id_midia_logo: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      papel_agente: "Somos uma marca direta. Produto no centro. Sem layout genérico de IA nas artes.",
     });
     assert.equal(c.pronto_para_imagem, true);
   });

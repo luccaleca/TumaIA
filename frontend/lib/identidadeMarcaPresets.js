@@ -1,6 +1,6 @@
-/** Texto padrão sugerido para geração de imagem no Tuma. */
+/** Texto padrão sugerido — veto absoluto nas artes (anti-IA). */
 export const EVITAR_PADRAO_IMAGEM =
-  "Clipart genérico; textos ilegíveis ou distorcidos; layout copiado de posts antigos; cores fora da paleta da marca.";
+  "Layout genérico de IA; clipart; tipografia genérica; logo só no rodapé; textos ilegíveis; cores fora da paleta; embalagem redesenhada.";
 
 export const PRESETS_ESTILO_VISUAL = [
   "Limpo e moderno, fundo claro, bastante respiro",
@@ -30,55 +30,81 @@ export const PRESETS_PUBLICO = [
 
 export const PRESETS_EVITAR = [
   EVITAR_PADRAO_IMAGEM,
-  "Fundo poluído; muitos ícones; sombras exageradas",
+  "Fundo poluído; muitos ícones; sombras exageradas; cara de banco de imagens",
   "Estilo infantil ou cartoon (salvo se pedido)",
-  "Imagens genéricas de banco de imagens",
+  "Composição sem hierarquia; produto pequeno demais; marca ilegível",
 ];
 
 export const PRESETS_ASSINATURA_VISUAL = [
-  "Tipografia condensada em caixa alta; headline dominante; produto central recortado; logo no topo; alto contraste",
-  "Visual premium com produto protagonista; composição forte; marca sempre legível; impacto visual acima de ornamento",
+  "Tipografia condensada em caixa alta; headline dominante; produto central recortado; logo no canto; alto contraste",
+  "Visual premium com produto protagonista; composição forte; marca sempre legível; impacto acima de ornamento",
 ];
 
 export const PRESETS_VARIACOES_CAMPANHA = [
-  "Cor principal muda por produto/categoria; fundo e props podem variar; CTA e selo entram quando fizer sentido comercial",
-  "Campanhas podem alternar entre clean e promocional, mantendo produto herói, contraste alto e assinatura da marca",
+  "Cor de destaque pode mudar por produto; fundo e props variam; CTA e selo só quando fizer sentido comercial",
+  "Alternar clean e promocional sem perder produto herói, contraste e assinatura da marca",
 ];
 
 export const PRESETS_REGRAS_REPETICAO = [
-  "Logo no topo; headline curta e dominante; produto ocupa boa parte da arte; texto de apoio só o necessário",
-  "Produto sempre como herói; composição promocional; evitar layout sem foco comercial ou sem hierarquia clara",
+  "Logo discreta no canto; headline curta e dominante; produto ocupa boa parte da arte; texto de apoio só o necessário",
+  "Produto sempre como herói; hierarquia clara; nunca layout genérico sem foco comercial",
 ];
 
 export const PRESETS_ESTRATEGIA_COR_CAMPANHA = [
-  "Seguir linha de cor variável por campanha usando #FFFFFF como base neutra e ajustar a cor dominante conforme o produto, mantendo alto contraste",
-  "Usar a paleta da marca como base fixa e trocar a cor de destaque conforme a categoria do produto, sem perder consistência visual",
+  "Paleta da marca fixa; cor de destaque pode acompanhar o produto, mantendo alto contraste",
+  "Base neutra (#FFFFFF ou fundo limpo) + cor dominante da marca; nunca inventar paleta nova",
 ];
 
-/** Campos principais — o que mais guia artes no Tuma. */
-export const CAMPOS_IMAGEM_PRINCIPAIS = [
+/** Lei 2–3 — jeito visual (obrigatório nas artes). */
+export const CAMPOS_JEITO_ARTE = [
   {
     key: "estilo_visual",
     label: "Estilo visual",
-    hint: "Como a arte deve parecer — sem nomes de cor (use a paleta acima).",
+    hint: "Obrigatório — como a arte deve parecer. Sem nomes de cor (use a paleta).",
     placeholder: "Ex.: limpo, moderno, fundo claro, tipografia bold",
     presets: PRESETS_ESTILO_VISUAL,
     multiline: true,
+    obrigatorio: true,
   },
   {
+    key: "assinatura_visual",
+    label: "Assinatura visual",
+    hint: "Obrigatório — o DNA que se repete: tipografia, produto, logo, contraste.",
+    placeholder:
+      "Ex.: tipografia condensada, headline dominante, produto central, logo no canto, alto contraste",
+    presets: PRESETS_ASSINATURA_VISUAL,
+    multiline: true,
+    obrigatorio: true,
+  },
+];
+
+/** Lei 4 — veto anti-IA. */
+export const CAMPOS_EVITAR = [
+  {
+    key: "evitar",
+    label: "Evitar nas artes (veto)",
+    hint: "Obrigatório — o Tuma trata isto como proibição, não como sugestão.",
+    placeholder: EVITAR_PADRAO_IMAGEM,
+    presets: PRESETS_EVITAR,
+    multiline: true,
+    obrigatorio: true,
+  },
+];
+
+/** Voz da marca — textos novos no estilo, não frase fixa. */
+export const CAMPOS_VOZ = [
+  {
     key: "tom_voz",
-    label: "Mood / atmosfera",
-    hint: "Vira clima visual na imagem, não texto de legenda.",
+    label: "Tom / mood",
+    hint: "Clima da arte e do texto. O Tuma cria frases novas neste tom.",
     placeholder: "Ex.: confiante, acolhedor, premium",
     presets: PRESETS_MOOD_IMAGEM,
   },
   {
-    key: "evitar",
-    label: "Evitar nas artes",
-    hint: "Reduz erros recorrentes da IA.",
-    placeholder: EVITAR_PADRAO_IMAGEM,
-    presets: PRESETS_EVITAR,
-    multiline: true,
+    key: "exemplo_frase_marca",
+    label: "Frase de exemplo (estilo)",
+    hint: "Referência de headline — não é texto fixo copiado em todo post.",
+    placeholder: "Ex.: «Seu olhar, nossa paixão»",
   },
   {
     key: "publico",
@@ -89,45 +115,36 @@ export const CAMPOS_IMAGEM_PRINCIPAIS = [
   },
 ];
 
-export const CAMPOS_PADROES_VISUAIS = [
-  {
-    key: "assinatura_visual",
-    label: "Assinatura visual",
-    hint: "O que se repete quase sempre na marca: tipografia, contraste, produto, logo e composição.",
-    placeholder:
-      "Ex.: tipografia condensada em caixa alta, headline dominante, produto central recortado, logo no topo, alto contraste",
-    presets: PRESETS_ASSINATURA_VISUAL,
-    multiline: true,
-  },
-  {
-    key: "variacoes_campanha",
-    label: "Variações por campanha",
-    hint: "O que pode mudar sem perder a identidade visual.",
-    placeholder: "Ex.: cor principal por produto, fundo temático, CTA e selo promocional ocasionais",
-    presets: PRESETS_VARIACOES_CAMPANHA,
-    multiline: true,
-  },
+/** Composição avançada — ainda entra no prompt, mas secundário. */
+export const CAMPOS_COMPOSICAO = [
   {
     key: "regras_repeticao",
-    label: "Regras de repetição",
-    hint: "Regras recorrentes de layout e hierarquia que o Tuma deve manter.",
-    placeholder: "Ex.: logo no topo, headline em até 2 linhas, produto herói ocupando 40–60% da arte",
+    label: "Regras de layout",
+    hint: "Hierarquia recorrente que o Tuma deve manter.",
+    placeholder: "Ex.: logo no canto, headline em até 2 linhas, produto herói 40–60%",
     presets: PRESETS_REGRAS_REPETICAO,
     multiline: true,
   },
   {
+    key: "variacoes_campanha",
+    label: "O que pode variar",
+    hint: "O que muda entre campanhas sem perder a identidade.",
+    placeholder: "Ex.: cor de destaque por produto, fundo temático, CTA ocasional",
+    presets: PRESETS_VARIACOES_CAMPANHA,
+    multiline: true,
+  },
+  {
     key: "estrategia_cor_campanha",
-    label: "Estratégia de cor da campanha",
-    hint: "Explique como a marca varia a cor por produto/campanha sem perder consistência.",
-    placeholder:
-      "Ex.: seguir linha de cor variável por campanha usando #FFFFFF como base neutra e ajustar a cor dominante conforme o produto",
+    label: "Estratégia de cor",
+    hint: "Como variar cor por campanha sem sair da paleta.",
+    placeholder: "Ex.: base neutra + cor dominante da marca conforme o produto",
     presets: PRESETS_ESTRATEGIA_COR_CAMPANHA,
     multiline: true,
   },
 ];
 
-/** Campos secundários — mais úteis no chat do que na imagem. */
-export const CAMPOS_IMAGEM_OPCIONAIS = [
+/** Contexto — mais chat do que pixels. */
+export const CAMPOS_CONTEXTO = [
   {
     key: "segmento",
     label: "Segmento",
@@ -136,14 +153,13 @@ export const CAMPOS_IMAGEM_OPCIONAIS = [
   {
     key: "sobre_empresa",
     label: "Sobre a empresa",
-    hint: "Contexto para o chat; na imagem vale só o que for visual.",
+    hint: "Contexto para o chat; na arte vale o que for visual.",
     placeholder: "Em 1–2 frases: o que a empresa faz e para quem.",
     multiline: true,
   },
-  {
-    key: "exemplo_frase_marca",
-    label: "Frase de exemplo (headline)",
-    hint: "Estilo de título nas artes, não legenda longa.",
-    placeholder: "Ex.: «Seu olhar, nossa paixão»",
-  },
 ];
+
+/** Compat: lista plana usada em merges/legado. */
+export const CAMPOS_IMAGEM_PRINCIPAIS = [...CAMPOS_JEITO_ARTE, ...CAMPOS_EVITAR, CAMPOS_VOZ[2]];
+export const CAMPOS_PADROES_VISUAIS = [CAMPOS_JEITO_ARTE[1], ...CAMPOS_COMPOSICAO];
+export const CAMPOS_IMAGEM_OPCIONAIS = CAMPOS_CONTEXTO;

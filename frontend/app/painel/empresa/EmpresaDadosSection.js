@@ -1,4 +1,4 @@
-import EmpresaFotoPerfil from "./EmpresaFotoPerfil";
+import EmpresaLogoAvatar from "./EmpresaLogoAvatar";
 import EmpresaSectionPanel from "./EmpresaSectionPanel";
 import { formatCnpj, formatTelefone, stripInstagramAt } from "../../../lib/empresaFormMasks";
 
@@ -24,7 +24,6 @@ const DETALHE_CAMPOS = [
 ];
 
 export default function EmpresaDadosSection({
-  empresaId,
   fotoPerfilUrl,
   dados,
   meuCargo,
@@ -33,15 +32,15 @@ export default function EmpresaDadosSection({
   detalhesOpen,
   onToggleDetalhes,
   onEditar,
-  onFotoUpdated,
-  onMsg,
+  onGoToMarca,
 }) {
+  const nome = String(dados?.nome_fantasia || "").trim() || "Empresa";
+
   return (
     <EmpresaSectionPanel
-      step={1}
       id="dados-empresa"
-      title="Dados da empresa"
-      description="Ícone, segmento, contato e informações cadastrais do workspace."
+      title="Visão geral"
+      description="Nome, segmento e contato. A logo é a mesma da aba Marca."
       actions={
         canEdit ? (
           <button
@@ -55,19 +54,22 @@ export default function EmpresaDadosSection({
       }
     >
       <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:gap-8 sm:p-5">
-        {empresaId ? (
-          <EmpresaFotoPerfil
-            empresaId={empresaId}
-            fotoUrl={fotoPerfilUrl}
-            nomeFantasia={dados?.nome_fantasia}
-            canEdit={canEdit}
-            onUpdated={onFotoUpdated}
-            onMsg={onMsg}
-          />
-        ) : null}
+        <div className="flex flex-col items-start gap-2">
+          <EmpresaLogoAvatar fotoUrl={fotoPerfilUrl} nome={nome} size="lg" />
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={onGoToMarca}
+              className="text-xs font-medium text-accent underline-offset-2 hover:underline"
+            >
+              {fotoPerfilUrl ? "Trocar logo na Marca" : "Definir logo na Marca"}
+            </button>
+          ) : null}
+        </div>
 
         <div className="min-w-0 flex-1 sm:pt-1">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-lg font-semibold tracking-tight text-foreground">{nome}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             {(dados?.segmento || "").trim() || "Sem segmento"}
             {" · "}
             {dados?.email_principal || "Sem e-mail principal"}

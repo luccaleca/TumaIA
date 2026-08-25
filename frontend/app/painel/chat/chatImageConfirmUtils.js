@@ -132,13 +132,6 @@ export function formatMontagemFromProposal(proposal) {
 
 /**
  * @param {Record<string, unknown>} msg
- * @param {string} ctxId
- * @param {Array<{ id_contexto_empresa: string, nome?: string, schema_json?: unknown }>} contextosCampanha
- */
-const FRASE_MAX = 56;
-
-/**
- * @param {Record<string, unknown>} msg
  * @param {string} frase
  */
 export function patchMessageFrase(msg, frase) {
