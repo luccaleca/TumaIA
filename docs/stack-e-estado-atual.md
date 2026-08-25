@@ -12,9 +12,9 @@ Documento de referência para humanos e IAs: **o que existe no código hoje** (m
 | Painel | **Next.js 16** · React 19 · Tailwind 4 | App Router — `frontend/` |
 | API | **Node.js** · Express 4 · **ES modules** · Zod | `backend/src/` |
 | Banco / auth | **Supabase** (Postgres + Auth + Storage) | Multi-tenant por `id_empresa` |
-| Chat IA (legado) | **Python 3** · Chroma | `backend/ia/python/` — **fora do caminho feliz** |
-| Chat IA (MVP) | **Node** · regras + estados + **Cursor Agent** | `CHAT_LLM_PROVIDER=cursor` (padrão) |
-| LLM chat (MVP) | **Cursor** · Grok / Composer | `CURSOR_API_KEY` + `CURSOR_CHAT_MODEL` |
+| Chat IA (legado) | **Python 3** · Chroma | `backend/ia/python/` — **fora do fluxo principal** |
+| Chat IA | **Node** · regras + estados + **agente cloud** | `CHAT_LLM_PROVIDER=cloud` (padrão) |
+| LLM chat | Agente cloud · modelo em `CHAT_CLOUD_MODEL` | `CHAT_CLOUD_API_KEY` + `CHAT_CLOUD_MODEL` |
 | LLM local (legado / opcional) | **Ollama** · `qwen2.5:3b` | Só se `CHAT_LLM_PROVIDER=ollama` |
 | LLM nuvem (opcional) | OpenRouter | Via env no worker Python |
 | Texto estruturado (Node) | Ollama / Replicate / OpenAI | Proposta de post, legenda (`TEXT_PROVIDER`) |
@@ -44,7 +44,7 @@ Documento de referência para humanos e IAs: **o que existe no código hoje** (m
 - **Chat** `/chat/*` — conversas e mensagens (JWT + vínculo empresa)
 - **IA** `/ia/*` — chat, proposta de post, legenda, prévia/publicação de imagem
 - **Internal** `/internal/*` — webhooks n8n, WhatsApp legado, Replicate, brand-context
-- **WPPConnect** `/wppconnect/webhook` — mensagens WhatsApp direto (sem n8n no caminho feliz)
+- **WPPConnect** `/wppconnect/webhook` — mensagens WhatsApp direto (sem n8n no turno a turno)
 - **Health** `/health` — status API, worker Python, Supabase, WPPConnect
 
 ### Camada de IA Tuma

@@ -1,40 +1,40 @@
 /**
- * Cursor Agent (cloud) para conversa — sessão reutilizada para reduzir latência.
+ * Chat cloud (sessão reutilizada) — motor conversacional externo ao Ollama.
  */
 
-import { Agent, CursorAgentError } from "@cursor/sdk";
+import { Agent } from "tuma-cloud-chat-sdk";
 import { env } from "../config.js";
 import { buildConversaNaturalPromptHint } from "./chatConversaNatural.js";
 
 const SESSION_TTL_MS_DEFAULT = 25 * 60 * 1000;
 const MAX_WARM_SESSIONS = 8;
 
-/** @type {Map<string, { agent: import("@cursor/sdk").SDKAgent, warm: boolean, lastUsed: number }>} */
+/** @type {Map<string, { agent: import("tuma-cloud-chat-sdk").SDKAgent, warm: boolean, lastUsed: number }>} */
 const warmSessions = new Map();
 
 function resolveApiKey() {
-  const apiKey = String(env.CURSOR_API_KEY || "").trim();
+  const apiKey = String(env.CHAT_CLOUD_API_KEY || "").trim();
   if (!apiKey) {
-    throw new Error("CURSOR_API_KEY não configurado no backend/.env");
+    throw new Error("CHAT_CLOUD_API_KEY não configurado no backend/.env");
   }
   return apiKey;
 }
 
 function resolveModelId() {
-  return String(env.CURSOR_CHAT_MODEL || "composer-2.5-fast").trim();
+  return String(env.CHAT_CLOUD_MODEL || "grok-4.6").trim();
 }
 
 function resolveTimeoutMs() {
-  return Number(env.CURSOR_CHAT_TIMEOUT_MS) || 300_000;
+  return Number(env.CHAT_CLOUD_TIMEOUT_MS) || 300_000;
 }
 
 function sessionTtlMs() {
-  const n = Number(env.CURSOR_CHAT_SESSION_TTL_MS);
+  const n = Number(env.CHAT_CLOUD_SESSION_TTL_MS);
   return Number.isFinite(n) && n >= 60_000 ? n : SESSION_TTL_MS_DEFAULT;
 }
 
 /**
- * @param {{ agent?: import("@cursor/sdk").SDKAgent }} entry
+ * @param {{ agent?: import("tuma-cloud-chat-sdk").SDKAgent }} entry
  */
 async function disposeSessionEntry(entry) {
   if (!entry?.agent) return;
@@ -66,10 +66,7 @@ function pruneWarmSessions() {
   }
 }
 
-const RE_IDENTITY_GREETING =
-  /^o[ií]!?\s+sou\s+o\s+tuma\s+ia\b/i;
-
-const RE_GREETING_TAIL_ONLY = /^o\s+que\s+voc[eê]\s+precisa\s+hoje\??$/i;
+const RE_IDENTITY_GREETING = /^o[ií]!?\s+sou\s+o\s+tuma\s+ia\b/i;
 
 /**
  * @param {string} content
@@ -84,10 +81,10 @@ function compressHistoryLine(content, role) {
 }
 
 /**
- * Só mensagens do usuário — evita o Cursor repetir a saudação da Tuma.
+ * Só mensagens do usuário — evita repetir a saudação da Tuma.
  * @param {Array<{ role: string, content: string }>} history
  */
-function formatHistoryForCursor(history) {
+function formatHistoryForCloud(history) {
   const users = (Array.isArray(history) ? history : [])
     .filter((h) => h?.role === "user")
     .slice(-3)
@@ -110,18 +107,18 @@ function formatHistoryForCursor(history) {
  *   agenteMarcaMarkdown?: string | null,
  * }} input
  */
-export function buildCursorChatPrompt(input) {
+export function buildCloudChatPrompt(input) {
   const question = String(input.question || "").trim();
   const nomeFantasia = String(input.nomeFantasia || "").trim() || null;
   const chatMode = String(input.chat_mode || "").trim() || null;
   const agente = String(input.agenteMarcaMarkdown || input.trainingBlock || "").trim();
   const emp = nomeFantasia ? ` da ${nomeFantasia}` : "";
-  const hist = formatHistoryForCursor(input.history);
+  const hist = formatHistoryForCloud(input.history);
 
   const lines = [
     "Você é a Tuma IA — assistente de marketing e criação de posts para Instagram.",
     `Responda em português do Brasil, tom de colega, em 2 a 4 frases curtas.`,
-    `Não invente produtos${emp}. Não mencione Cursor, mouse, APIs, Ollama ou ferramentas internas.`,
+    `Não invente produtos${emp}. Não mencione APIs, modelos internos ou ferramentas de infraestrutura.`,
     "Responda DIRETO o que o usuário perguntou. Não repita saudação nem «O que você precisa hoje?».",
     "Se pedirem post ou arte, oriente a descrever produto e formato.",
   ];
@@ -129,7 +126,7 @@ export function buildCursorChatPrompt(input) {
   if (agente) {
     lines.push(
       "OBRIGATÓRIO: obedeça o bloco «Agente da marca» abaixo com prioridade sobre hábitos genéricos de IA.",
-      "Em artes/briefings, não use poster genérico (logo só no rodapé, visual padrão ChatGPT).",
+      "Em artes/briefings, não use poster genérico (logo só no rodapé, visual padrão de IA).",
     );
   }
 
@@ -155,7 +152,7 @@ function buildAgentOptions() {
 }
 
 /**
- * @param {import("@cursor/sdk").Run} run
+ * @param {import("tuma-cloud-chat-sdk").Run} run
  */
 async function waitForRun(run) {
   const timeoutMs = resolveTimeoutMs();
@@ -165,7 +162,7 @@ async function waitForRun(run) {
       run.wait(),
       new Promise((_, reject) => {
         timer = setTimeout(
-          () => reject(new Error("Tempo esgotado aguardando o Cursor Agent.")),
+          () => reject(new Error("Tempo esgotado aguardando o agente de chat.")),
           timeoutMs,
         );
       }),
@@ -176,31 +173,31 @@ async function waitForRun(run) {
 }
 
 /**
- * @param {import("@cursor/sdk").RunResult} result
+ * @param {import("tuma-cloud-chat-sdk").RunResult} result
  * @param {string} modelId
  * @param {"session_reuse" | "session_new" | "one_shot"} mode
  */
 function normalizeRunResult(result, modelId, mode) {
   if (result.status === "error" || result.status === "cancelled") {
-    throw new Error(String(result.result || `Cursor Agent: ${result.status}`));
+    throw new Error(String(result.result || `Agente de chat: ${result.status}`));
   }
   const text = String(result.result || "").trim();
   if (!text) {
-    throw new Error("Cursor Agent retornou resposta vazia");
+    throw new Error("Agente de chat retornou resposta vazia");
   }
   return {
     ok: true,
     text,
     model: modelId,
     durationMs: result.durationMs,
-    provider: "cursor",
-    cursor_session_mode: mode,
+    provider: "cloud",
+    cloud_session_mode: mode,
   };
 }
 
 /**
  * @param {string | null | undefined} sessionKey
- * @param {import("@cursor/sdk").SDKAgent} agent
+ * @param {import("tuma-cloud-chat-sdk").SDKAgent} agent
  */
 function storeWarmSession(sessionKey, agent) {
   const key = String(sessionKey || "").trim();
@@ -219,7 +216,7 @@ function storeWarmSession(sessionKey, agent) {
  *   agenteMarcaMarkdown?: string | null,
  * }} input
  */
-export async function promptCursorChat(input) {
+export async function promptCloudChat(input) {
   const question = String(input.question || "").trim();
   if (!question) {
     throw new Error("Mensagem vazia");
@@ -240,7 +237,7 @@ export async function promptCursorChat(input) {
     } catch (err) {
       warmSessions.delete(sessionKey);
       await disposeSessionEntry(existing);
-      if (!(err instanceof CursorAgentError) || !err.isRetryable) {
+      if (!err?.isRetryable) {
         throw err;
       }
     }
@@ -249,7 +246,7 @@ export async function promptCursorChat(input) {
     await disposeSessionEntry(existing);
   }
 
-  const firstMessage = buildCursorChatPrompt({
+  const firstMessage = buildCloudChatPrompt({
     question,
     history: input.history,
     nomeFantasia: input.nomeFantasia,
@@ -273,16 +270,11 @@ export async function promptCursorChat(input) {
     return normalizeRunResult(result, modelId, "one_shot");
   } catch (err) {
     await disposeSessionEntry({ agent });
-    if (err instanceof CursorAgentError) {
-      const e = new Error(err.message || "Falha ao chamar Cursor Agent");
+    if (err && typeof err === "object" && "isRetryable" in err) {
+      const e = new Error(err.message || "Falha ao chamar o agente de chat");
       e.isRetryable = err.isRetryable;
       throw e;
     }
     throw err;
   }
-}
-
-/** @deprecated use promptCursorChat */
-export async function promptCursorChatRaw(userMessage) {
-  return promptCursorChat({ question: userMessage });
 }

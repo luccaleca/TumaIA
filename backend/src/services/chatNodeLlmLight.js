@@ -1,12 +1,12 @@
 /**
- * Camada 3 (fast path): LLM via Ollama no Node — sem worker Python / RAG.
+ * Camada 3: LLM no Node — cloud ou Ollama; sem worker Python / RAG.
  */
 
-import { env } from "../config.js";
+import { env, isCloudChatLlm } from "../config.js";
 import { DEFAULT_OLLAMA_CHAT_MODEL } from "../ollamaDefaults.js";
 import { buildConversaNaturalPromptHint } from "./chatConversaNatural.js";
 import { llamaChatCompletionText } from "./llamaOpenAiClient.js";
-import { promptCursorChat } from "./cursorChatService.js";
+import { promptCloudChat } from "./cloudChatService.js";
 
 /**
  * @param {Array<{ role: string, content: string }>} history
@@ -67,9 +67,9 @@ export function buildNodeChatLlmPrompt(input) {
  */
 export function nodeChatLlmUnavailableFallback(nomeFantasia = null) {
   const emp = nomeFantasia ? ` da ${nomeFantasia}` : "";
-  if (env.CHAT_LLM_PROVIDER === "cursor") {
+  if (isCloudChatLlm()) {
     return (
-      `Não consegui falar com o Cursor Agent agora (confira CURSOR_API_KEY no .env). ` +
+      `Não consegui falar com o agente de chat agora (confira CHAT_CLOUD_API_KEY no .env). ` +
       `Se quiser um post${emp}, descreva o produto e o que imagina na arte.`
     );
   }
@@ -95,15 +95,16 @@ function resolveFastChatModel() {
  *   chat_mode?: string | null,
  *   nomeFantasia?: string | null,
  *   sessionKey?: string | null,
+ *   agenteMarcaMarkdown?: string | null,
  * }} input
  */
 export async function runNodeChatLlm(input) {
   const chatMode = String(input.chat_mode || "").trim() || null;
 
-  if (env.CHAT_LLM_PROVIDER === "cursor") {
+  if (isCloudChatLlm()) {
     const t0 = Date.now();
     try {
-      const out = await promptCursorChat({
+      const out = await promptCloudChat({
         question: input.question,
         history: input.history,
         sessionKey: input.sessionKey,
@@ -114,18 +115,18 @@ export async function runNodeChatLlm(input) {
       });
       const elapsedMs = Date.now() - t0;
       if (elapsedMs > 5_000) {
-        const mode = out.cursor_session_mode === "session_reuse" ? "reuse" : "nova sessão";
-        console.info(`[ia/chat] Cursor Agent (${mode}) em ${Math.round(elapsedMs / 1000)}s`);
+        const mode = out.cloud_session_mode === "session_reuse" ? "reuse" : "nova sessão";
+        console.info(`[ia/chat] agente cloud (${mode}) em ${Math.round(elapsedMs / 1000)}s`);
       }
       return {
         ok: true,
         text: out.text,
         model: out.model,
-        provider: "cursor",
-        cursor_session_mode: out.cursor_session_mode,
+        provider: "cloud",
+        cloud_session_mode: out.cloud_session_mode,
       };
     } catch (err) {
-      return { ok: false, error: err, provider: "cursor" };
+      return { ok: false, error: err, provider: "cloud" };
     }
   }
 

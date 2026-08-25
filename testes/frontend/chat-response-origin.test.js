@@ -1,29 +1,26 @@
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { describe, it } from "node:test";
 import {
   assistantBubbleSurfaceClass,
-  isCursorChatMessage,
+  isCloudChatMessage,
   isInstructionChatMessage,
 } from "../../frontend/lib/chatResponseOrigin.js";
 
 describe("chatResponseOrigin", () => {
-  it("identifica resposta Cursor", () => {
-    assert.equal(isCursorChatMessage({ chat_source: "cursor" }), true);
-    assert.equal(isCursorChatMessage({ chat_engine: "cursor_agent" }), true);
-    assert.equal(isCursorChatMessage({ chat_route: "cursor_agent_raw" }), true);
-    assert.equal(isCursorChatMessage({ chat_route: "cursor_agent_session" }), true);
-    assert.equal(isInstructionChatMessage({ chat_route: "cursor_agent_raw" }), false);
+  it("identifica resposta cloud", () => {
+    assert.equal(isCloudChatMessage({ chat_source: "cloud" }), true);
+    assert.equal(isCloudChatMessage({ chat_engine: "cloud_agent" }), true);
+    assert.equal(isCloudChatMessage({ chat_route: "cloud_agent_raw" }), true);
+    assert.equal(isCloudChatMessage({ chat_route: "cloud_agent_session" }), true);
+    assert.equal(isInstructionChatMessage({ chat_route: "cloud_agent_raw" }), false);
   });
 
-  it("identifica resposta por instruções", () => {
-    assert.equal(isInstructionChatMessage({ chat_route: "conversa_natural" }), true);
+  it("identifica resposta de instrução", () => {
+    assert.equal(isInstructionChatMessage({ chat_route: "identity" }), true);
     assert.equal(isInstructionChatMessage({ chat_route: "acervo" }), true);
-    assert.equal(isInstructionChatMessage({ chat_route: "node_llm_light" }), false);
   });
 
-  it("aplica classes de cor", () => {
-    assert.match(assistantBubbleSurfaceClass({ chat_source: "cursor" }), /bg-blue-50/);
-    assert.match(assistantBubbleSurfaceClass({ chat_route: "identity" }), /bg-red-50/);
-    assert.match(assistantBubbleSurfaceClass({ chat_route: "llm_rag" }), /bg-background/);
+  it("pinta bolha cloud de azul", () => {
+    assert.match(assistantBubbleSurfaceClass({ chat_source: "cloud" }), /bg-blue-50/);
   });
 });

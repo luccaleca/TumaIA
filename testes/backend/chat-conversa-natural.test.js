@@ -28,7 +28,7 @@ describe("chatConversaNatural", () => {
     assert.match(t.conversaNaturalAnswer || "", /arroz/i);
   });
 
-  it("com Cursor provider manda receita para LLM conversa_aberta", () => {
+  it("com provider cloud manda receita para LLM conversa_aberta", () => {
     const t = analyzeChatTurn("receita de arroz simples", [], {
       nomeFantasia: "FYT",
       useConversaNaturalScript: false,

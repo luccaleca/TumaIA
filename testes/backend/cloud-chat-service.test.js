@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildCursorChatPrompt } from "../../backend/src/services/cursorChatService.js";
+import { buildCloudChatPrompt } from "../../backend/src/services/cloudChatService.js";
 
-describe("cursorChatService", () => {
+describe("cloudChatService", () => {
   it("monta prompt compacto com identidade Tuma", () => {
-    const prompt = buildCursorChatPrompt({
+    const prompt = buildCloudChatPrompt({
       question: "me ajuda com uma ideia?",
       history: [{ role: "user", content: "oi" }],
       nomeFantasia: "FYT",
@@ -13,12 +13,12 @@ describe("cursorChatService", () => {
     assert.match(prompt, /Tuma IA/i);
     assert.match(prompt, /FYT/);
     assert.match(prompt, /2 a 4 frases/i);
-    assert.match(prompt, /Não mencione Cursor/i);
+    assert.match(prompt, /Não mencione APIs/i);
     assert.match(prompt, /me ajuda com uma ideia/);
   });
 
-  it("comprime saudação no histórico do prompt Cursor", () => {
-    const prompt = buildCursorChatPrompt({
+  it("comprime saudação no histórico do prompt cloud", () => {
+    const prompt = buildCloudChatPrompt({
       question: "me fala um pouco sobre o neymar",
       history: [
         { role: "user", content: "oi" },

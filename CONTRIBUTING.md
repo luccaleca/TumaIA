@@ -68,12 +68,13 @@ Toda feature que toca dados de empresa isola por **`id_empresa`**.
 
 ## IA do produto (Tuma)
 
-**Caminho feliz do protótipo (sem RAG):**
+**Caminho do agente (protótipo / fase 2):**
 
 ```text
-mensagem → regras / estados (Node) → Supabase (marca, acervo, campanhas)
-         → LLM leve só se for conversa aberta
-         → briefing → arte → legenda → aprovação → Instagram (n8n)
+mensagem → regras / estados (Node) + agente da marca (identidade)
+         → Supabase (marca, acervo, campanhas)
+         → LLM na conversa / briefing
+         → arte → legenda → aprovação → Instagram (n8n)
 ```
 
 | Camada | Caminho |
@@ -83,7 +84,7 @@ mensagem → regras / estados (Node) → Supabase (marca, acervo, campanhas)
 | Docs | `docs/ia/regras-tuma-ia.md`, `docs/tcc-arquitetura.md` |
 | Roteamento | `processChatMessage.js`, `chatTurnIntent.js` |
 | Interpretação | `tumaInterpretation.js` (+ espelho em `frontend/lib/`) |
-| LLM leve | `chatNodeLlmLight.js` (Ollama HTTP; opcional Cursor A/B local) |
+| LLM leve | `chatNodeLlmLight.js` (Ollama HTTP; provider alternativo local conforme `.env`) |
 | Post / legenda / prévia | `postContextProposalService.js`, `postCaptionService.js`, `ia.imagePreview.js` |
 | Legado RAG | `backend/ia/python/` + `chatPythonWorker.js` — só com `TUMAIA_NODE_CHAT=false` |
 
@@ -110,11 +111,12 @@ Após editar `instrucoes/*.txt`, reiniciar o backend.
 
 ## Prioridade do produto (piloto / TCC)
 
-**Protótipo funcional (mensagem do projeto):** mostrar que o fluxo WhatsApp → briefing → arte → legenda → aprovação funciona **sem RAG no caminho crítico**.
+**Protótipo funcional (mensagem do projeto):** o Tuma é **um agente** da empresa — WhatsApp/chat → briefing → arte → legenda → aprovação → Instagram, alinhado à identidade da marca.
 
-1. Motor padrão: **Node** (`TUMAIA_NODE_CHAT=true`) — regras + estados + dados do Supabase; LLM só em conversa aberta / exceção
-2. `backend/ia/python/` (Chroma/RAG) é **legado** — não usar na demo nem no piloto
+1. Motor padrão: **Node** (`TUMAIA_NODE_CHAT=true`) — regras + estados + dados do Supabase + agente da marca
+2. `backend/ia/python/` (Chroma/RAG) é **legado** — não reativar sem pedido explícito
 3. Painel estável; sem regressão no chat e na prévia de imagem
 4. Arquitetura alvo: [`docs/tcc-arquitetura.md`](docs/tcc-arquitetura.md)
 
 Evitar sem alinhamento prévio: workflows n8n de produção, migrations destrutivas, billing pago, reativar worker Python, apagar sessão WhatsApp ou `.env`.
+Não versionar rastros de IDE/assistente de código; o repositório deve parecer escrito pela equipe.

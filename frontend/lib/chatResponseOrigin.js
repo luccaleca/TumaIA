@@ -1,4 +1,4 @@
-/** Rotas de repertório / instruções fixas (sem LLM Cursor). */
+/** Rotas de repertório / instruções fixas (sem LLM cloud). */
 const INSTRUCTION_ROUTES = new Set([
   "identity",
   "identity_llm",
@@ -12,22 +12,22 @@ const INSTRUCTION_ROUTES = new Set([
 ]);
 
 /**
- * @param {{ chat_engine?: string, chat_route?: string } | null | undefined} message
+ * @param {{ chat_engine?: string, chat_route?: string, chat_source?: string } | null | undefined} message
  */
-export function isCursorChatMessage(message) {
+export function isCloudChatMessage(message) {
   const source = typeof message?.chat_source === "string" ? message.chat_source.trim() : "";
-  if (source === "cursor") return true;
+  if (source === "cloud") return true;
   const engine = typeof message?.chat_engine === "string" ? message.chat_engine.trim() : "";
-  if (engine === "cursor_agent") return true;
+  if (engine === "cloud_agent") return true;
   const route = typeof message?.chat_route === "string" ? message.chat_route.trim() : "";
-  return route.startsWith("cursor_");
+  return route.startsWith("cloud_");
 }
 
 /**
  * @param {{ chat_engine?: string, chat_route?: string } | null | undefined} message
  */
 export function isInstructionChatMessage(message) {
-  if (isCursorChatMessage(message)) return false;
+  if (isCloudChatMessage(message)) return false;
   const route = typeof message?.chat_route === "string" ? message.chat_route.trim() : "";
   return Boolean(route && INSTRUCTION_ROUTES.has(route));
 }
@@ -37,7 +37,7 @@ export function isInstructionChatMessage(message) {
  * @param {{ chat_engine?: string, chat_route?: string } | null | undefined} message
  */
 export function assistantBubbleSurfaceClass(message) {
-  if (isCursorChatMessage(message)) {
+  if (isCloudChatMessage(message)) {
     return "border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-800 dark:bg-blue-950/45 dark:text-blue-50";
   }
   if (isInstructionChatMessage(message)) {

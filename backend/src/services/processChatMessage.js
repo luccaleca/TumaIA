@@ -1,4 +1,4 @@
-import { env } from "../config.js";
+import { env, isCloudChatLlm } from "../config.js";
 import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { ensureChatWorkerReady, runChatSerialized } from "./chatPythonWorker.js";
 import { detectImageGenerationIntentFromHistory } from "./chatDeliveryUi.js";
@@ -30,13 +30,13 @@ function userFacingChatError(err) {
   return msg;
 }
 
-/** Protótipo: Node (regras + LLM leve). Python/RAG só se TUMAIA_NODE_CHAT=false. */
+/** Chat no Node (regras + LLM). Python/RAG só se TUMAIA_NODE_CHAT=false. */
 export function shouldUseNodeChat(input = {}) {
   return (
     input.fast_path === true ||
     env.TUMAIA_NODE_CHAT === true ||
     env.TUMAIA_WHATSAPP_FAST_PATH === true ||
-    env.CHAT_LLM_PROVIDER === "cursor"
+    isCloudChatLlm()
   );
 }
 
@@ -103,29 +103,29 @@ function buildDirectTurnResponse(turn, postExtras) {
   return null;
 }
 
-const CURSOR_LLM_ROUTES = new Set(["llm_light", "llm_rag", "identity_llm"]);
+const CLOUD_LLM_ROUTES = new Set(["llm_light", "llm_rag", "identity_llm"]);
 
 /**
- * @param {{ ok?: boolean, cursor_session_mode?: string }} llm
+ * @param {{ ok?: boolean, cloud_session_mode?: string }} llm
  * @param {{ route?: string }} [turn]
  */
-function buildCursorResponseMeta(llm, turn = {}) {
+function buildCloudResponseMeta(llm, turn = {}) {
   const chatRoute = llm.ok
-    ? llm.cursor_session_mode === "session_reuse"
-      ? "cursor_agent_session"
+    ? llm.cloud_session_mode === "session_reuse"
+      ? "cloud_agent_session"
       : turn.route === "llm_rag"
-        ? "cursor_agent_raw"
-        : "cursor_agent_raw"
-    : "cursor_agent_fallback";
+        ? "cloud_agent_raw"
+        : "cloud_agent_raw"
+    : "cloud_agent_fallback";
   return {
     chat_route: chatRoute,
-    chat_engine: "cursor_agent",
-    chat_source: "cursor",
+    chat_engine: "cloud_agent",
+    chat_source: "cloud",
   };
 }
 
 /**
- * Cursor: pula Supabase/acervo quando a resposta virá do agente (mais rápido).
+ * Cloud: pula Supabase/acervo quando a resposta virá do agente (mais rápido).
  * @param {{
  *   question: string,
  *   history: Array<{ role: string, content: string }>,
@@ -135,8 +135,8 @@ function buildCursorResponseMeta(llm, turn = {}) {
  * @param {ReturnType<typeof analyzeChatTurn>} turn
  * @param {Record<string, unknown>} postExtras
  */
-async function tryCursorLlmFastPath(input, turn, postExtras) {
-  if (env.CHAT_LLM_PROVIDER !== "cursor" || !CURSOR_LLM_ROUTES.has(turn.route)) {
+async function tryCloudLlmFastPath(input, turn, postExtras) {
+  if (!isCloudChatLlm() || !CLOUD_LLM_ROUTES.has(turn.route)) {
     return null;
   }
 
@@ -150,7 +150,7 @@ async function tryCursorLlmFastPath(input, turn, postExtras) {
   });
   const elapsedMs = Date.now() - t0;
   if (elapsedMs > 8_000) {
-    console.info(`[ia/chat] Cursor fast-path em ${Math.round(elapsedMs / 1000)}s`);
+    console.info(`[ia/chat] cloud fast-path em ${Math.round(elapsedMs / 1000)}s`);
   }
 
   const answer = llm.ok
@@ -164,7 +164,7 @@ async function tryCursorLlmFastPath(input, turn, postExtras) {
     nomeFantasia: null,
   });
 
-  const chatMeta = buildCursorResponseMeta(llm, turn);
+  const chatMeta = buildCloudResponseMeta(llm, turn);
 
   return {
     ok: true,
@@ -238,7 +238,7 @@ export async function processChatMessage(input) {
     }
     if (directQuick) return directQuick;
 
-    const cursorFast = await tryCursorLlmFastPath(
+    const cloudFast = await tryCloudLlmFastPath(
       {
         question,
         history,
@@ -248,7 +248,7 @@ export async function processChatMessage(input) {
       turnQuick,
       postExtrasQuick,
     );
-    if (cursorFast) return cursorFast;
+    if (cloudFast) return cloudFast;
 
     let facts = null;
     if (id_empresa && db) {
@@ -368,7 +368,7 @@ export async function processChatMessage(input) {
       trainingBlock = [hint, trainingBlock].filter(Boolean).join("\n\n");
     }
 
-    if (fastPath || env.CHAT_LLM_PROVIDER === "cursor") {
+    if (fastPath || isCloudChatLlm()) {
       const t0 = Date.now();
       const llm = await runNodeChatLlm({
         question,
@@ -380,7 +380,7 @@ export async function processChatMessage(input) {
       });
       const elapsedMs = Date.now() - t0;
       if (elapsedMs > 8_000) {
-        const label = env.CHAT_LLM_PROVIDER === "cursor" ? "Cursor Agent" : "fast-path Ollama";
+        const label = isCloudChatLlm() ? "agente cloud" : "fast-path Ollama";
         console.info(`[ia/chat] ${label} em ${Math.round(elapsedMs / 1000)}s`);
       }
 
@@ -400,19 +400,18 @@ export async function processChatMessage(input) {
         nomeFantasia: acervoBundle?.nomeFantasia ?? nomeFantasia,
       });
 
-      const chatMeta =
-        env.CHAT_LLM_PROVIDER === "cursor"
-          ? buildCursorResponseMeta(llm, turn)
-          : {
-              chat_route:
-                turn.route === "llm_rag"
-                  ? "node_llm_context"
-                  : llm.ok
-                    ? "node_llm_light"
-                    : "node_llm_fallback",
-              chat_engine: "node_ollama",
-              chat_source: "ollama",
-            };
+      const chatMeta = isCloudChatLlm()
+        ? buildCloudResponseMeta(llm, turn)
+        : {
+            chat_route:
+              turn.route === "llm_rag"
+                ? "node_llm_context"
+                : llm.ok
+                  ? "node_llm_light"
+                  : "node_llm_fallback",
+            chat_engine: "node_ollama",
+            chat_source: "ollama",
+          };
 
       return {
         ok: true,

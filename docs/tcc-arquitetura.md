@@ -237,7 +237,7 @@ TUMAIA_NODE_CHAT=true
 | Bridge WPPConnect | `whatsappBridge.js` | Implementado |
 | LLM leve no Node | `chatNodeLlmLight.js` | Implementado |
 | Chat Node (sem RAG) | `TUMAIA_NODE_CHAT` (padrão `true`) | Implementado |
-| RAG Python | `backend/ia/python/` | Legado — fora do caminho feliz |
+| RAG Python | `backend/ia/python/` | Legado — fora do fluxo principal |
 | `TUMAIA_DEMO_MODE` | — | Pendente |
 
 ---

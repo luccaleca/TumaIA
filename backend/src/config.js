@@ -60,36 +60,36 @@ const envSchema = z.object({
     z.number().int().min(15_000).max(300_000),
   ),
   /**
-   * Protótipo / TCC / VPS: chat no Node (regras + estados + LLM).
-   * MVP: com CHAT_LLM_PROVIDER=cursor (padrão). Sem worker Python/RAG no caminho feliz.
+   * Chat no Node (regras + estados + LLM). Padrão ligado.
    * Defina `false` só para depurar o legado `backend/ia/python/`.
    */
   TUMAIA_NODE_CHAT: z.preprocess((v) => parseEnvBool(v, true), z.boolean()),
   /**
-   * Alias legado: força Node no WhatsApp. Com `TUMAIA_NODE_CHAT=true` (padrão) já cobre painel e WhatsApp.
+   * Alias: força Node no WhatsApp. Com `TUMAIA_NODE_CHAT=true` (padrão) já cobre painel e WhatsApp.
    */
   TUMAIA_WHATSAPP_FAST_PATH: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
   /** Modelo Ollama para conversa no Node (ex.: llama3.2:1b). Padrão: LLAMA_MODEL. */
   OLLAMA_FAST_CHAT_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   /**
-   * Motor da camada conversacional (chat): `cursor` (padrão MVP) ou `ollama` (legado local).
-   * Com `cursor`, use CURSOR_API_KEY; Ollama/Python ficam fora do caminho feliz.
+   * Motor conversacional: `cloud` (padrão) ou `ollama` (local).
+   * Com `cloud`, use CHAT_CLOUD_API_KEY.
    */
   CHAT_LLM_PROVIDER: z.preprocess((v) => {
-    const s = String(v ?? "cursor").trim().toLowerCase();
-    return s === "ollama" ? "ollama" : "cursor";
-  }, z.enum(["ollama", "cursor"])),
-  CURSOR_API_KEY: z.preprocess(empty, z.string().min(1).optional()),
-  CURSOR_CHAT_MODEL: z.preprocess(
+    const s = String(v ?? "cloud").trim().toLowerCase();
+    if (s === "ollama") return "ollama";
+    return "cloud";
+  }, z.enum(["ollama", "cloud"])),
+  CHAT_CLOUD_API_KEY: z.preprocess(empty, z.string().min(1).optional()),
+  CHAT_CLOUD_MODEL: z.preprocess(
     (v) => (v === "" || v === undefined ? "grok-4.6" : String(v).trim()),
     z.string().min(1),
   ),
-  CURSOR_CHAT_TIMEOUT_MS: z.preprocess(
+  CHAT_CLOUD_TIMEOUT_MS: z.preprocess(
     (v) => (v === "" || v === undefined ? 300_000 : Number(v)),
     z.number().int().min(30_000).max(900_000),
   ),
-  /** Reutiliza agente cloud na mesma conversa (menos cold start). Padrão 25 min. */
-  CURSOR_CHAT_SESSION_TTL_MS: z.preprocess(
+  /** Reutiliza sessão cloud na mesma conversa (menos cold start). Padrão 25 min. */
+  CHAT_CLOUD_SESSION_TTL_MS: z.preprocess(
     (v) => (v === "" || v === undefined ? 1_500_000 : Number(v)),
     z.number().int().min(60_000).max(3_600_000),
   ),
@@ -252,3 +252,8 @@ const envSchema = z.object({
 });
 
 export const env = envSchema.parse(process.env);
+
+/** Provider cloud (não-Ollama) para conversa. */
+export function isCloudChatLlm() {
+  return env.CHAT_LLM_PROVIDER === "cloud";
+}

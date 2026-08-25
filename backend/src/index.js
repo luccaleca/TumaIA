@@ -1,5 +1,5 @@
 import { createApp } from "./app.js";
-import { env } from "./config.js";
+import { env, isCloudChatLlm } from "./config.js";
 import { ensureChatWorkerReady, shutdownChatWorker } from "./services/chatPythonWorker.js";
 import { isWppconnectEnabled, ensureWppconnectSession } from "./services/wppconnectClient.js";
 
@@ -27,10 +27,10 @@ const server = app.listen(env.PORT, () => {
   const baseUrl = `http://localhost:${env.PORT}`;
   console.log(`tumaia-backend ${baseUrl}`);
   const nodeChat =
-    env.TUMAIA_NODE_CHAT || env.TUMAIA_WHATSAPP_FAST_PATH || env.CHAT_LLM_PROVIDER === "cursor";
+    env.TUMAIA_NODE_CHAT || env.TUMAIA_WHATSAPP_FAST_PATH || isCloudChatLlm();
   if (nodeChat) {
     console.info(
-      "[chat] motor Node ativo — regras + estados; Python/RAG fora do caminho feliz (MVP)",
+      "[chat] motor Node ativo — regras + estados; Python/RAG desligado no fluxo principal",
     );
   } else {
     // Legado: primeira mensagem não deve pagar sozinha o boot do Python + Chroma.
@@ -56,16 +56,16 @@ const server = app.listen(env.PORT, () => {
       else console.warn("[wppconnect] sessão WhatsApp inativa:", s.error || s.status);
     });
   }
-  if (env.CHAT_LLM_PROVIDER === "cursor") {
+  if (isCloudChatLlm()) {
     console.info(
-      `[chat] MVP: conversa só via Cursor Agent (${env.CURSOR_CHAT_MODEL}); Ollama fora do chat`,
+      `[chat] conversa via agente cloud (${env.CHAT_CLOUD_MODEL}); Ollama fora do chat`,
     );
-    if (!env.CURSOR_API_KEY) {
-      console.warn("[chat] CURSOR_API_KEY ausente — respostas conversacionais vão falhar.");
+    if (!env.CHAT_CLOUD_API_KEY) {
+      console.warn("[chat] CHAT_CLOUD_API_KEY ausente — respostas conversacionais vão falhar.");
     }
   } else {
     console.info(
-      `[chat] CHAT_LLM_PROVIDER=ollama (legado) — modelo ${env.OLLAMA_FAST_CHAT_MODEL || env.LLAMA_MODEL || "padrão"}`,
+      `[chat] CHAT_LLM_PROVIDER=ollama — modelo ${env.OLLAMA_FAST_CHAT_MODEL || env.LLAMA_MODEL || "padrão"}`,
     );
   }
 });

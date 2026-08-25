@@ -28,7 +28,7 @@ import {
   isConversaNaturalQuestion,
   shouldUseOpenConversation,
 } from "./chatConversaNatural.js";
-import { env } from "../config.js";
+import { env, isCloudChatLlm } from "../config.js";
 
 
 
@@ -179,7 +179,7 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
   }
 
   const useConversaScript =
-    ctx.useConversaNaturalScript ?? env.CHAT_LLM_PROVIDER !== "cursor";
+    ctx.useConversaNaturalScript ?? !isCloudChatLlm();
   const conversaNaturalAnswer = useConversaScript
     ? tryChatConversaNaturalResponse(q, nomeFantasia)
     : null;
