@@ -7,6 +7,8 @@ import empresas from "./routes/empresas.js";
 import ia from "./routes/ia.js";
 import chat from "./routes/chat.js";
 import wppconnect from "./routes/wppconnect.js";
+import plataforma from "./routes/plataforma.js";
+import tumacoreEmpresa from "./routes/tumacoreEmpresa.js";
 
 export function createApp() {
   const app = express();
@@ -26,6 +28,8 @@ export function createApp() {
   app.use("/empresas", empresas);
   app.use("/ia", ia);
   app.use("/chat", chat);
+  app.use("/plataforma", plataforma);
+  app.use("/tumacore/empresa", tumacoreEmpresa);
   app.use("/internal", internal);
   app.use("/wppconnect", wppconnect);
 

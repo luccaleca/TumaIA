@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { authApiFetchWithToken } from "../../../../lib/auth";
+import { authApiFetchWithToken } from "../../../../../lib/auth";
 import PlataformaPeriodFilter, {
   plataformaRangeQuery,
-} from "../PlataformaPeriodFilter";
+} from "../../PlataformaPeriodFilter";
 
 function KpiCard({ label, value, hint }) {
   return (
@@ -21,49 +20,7 @@ function formatInt(n) {
   return Number(n || 0).toLocaleString("pt-BR");
 }
 
-function formatDate(iso) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return "—";
-  }
-}
-
-function SegmentDonut({ segments }) {
-  const total = segments.reduce((s, x) => s + (Number(x.total) || 0), 0) || 1;
-  const colors = ["#0f172a", "#334155", "#64748b", "#94a3b8", "#cbd5e1", "#e2e8f0"];
-  let acc = 0;
-  const stops = segments.slice(0, 6).map((s, i) => {
-    const start = (acc / total) * 100;
-    acc += Number(s.total) || 0;
-    const end = (acc / total) * 100;
-    return `${colors[i % colors.length]} ${start}% ${end}%`;
-  });
-  return (
-    <div className="flex flex-wrap items-center gap-4">
-      <div
-        className="h-28 w-28 shrink-0 rounded-full"
-        style={{ background: `conic-gradient(${stops.join(", ")})` }}
-        aria-hidden
-      />
-      <ul className="space-y-1 text-sm">
-        {segments.slice(0, 6).map((s, i) => (
-          <li key={s.segmento} className="flex items-center gap-2">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ background: colors[i % colors.length] }}
-            />
-            <span className="text-foreground">{s.segmento}</span>
-            <span className="tabular-nums text-muted-foreground">{formatInt(s.total)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-export default function TumaCoreDashboardPage() {
+export default function TumaCoreEmpresaDashboardPage() {
   const [period, setPeriod] = useState(7);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -75,7 +32,7 @@ export default function TumaCoreDashboardPage() {
     setLoading(true);
     setError("");
     const qs = plataformaRangeQuery({ period, from, to });
-    const r = await authApiFetchWithToken(`/plataforma/dashboard?${qs}`);
+    const r = await authApiFetchWithToken(`/tumacore/empresa/dashboard?${qs}`);
     if (!r.ok) {
       setData(null);
       setError(r.json?.error || `Falha ao carregar (${r.status || "rede"})`);
@@ -91,8 +48,7 @@ export default function TumaCoreDashboardPage() {
   }, [load]);
 
   const kpis = data?.kpis || {};
-  const empresas = Array.isArray(data?.empresas) ? data.empresas : [];
-  const segmentos = Array.isArray(data?.por_segmento) ? data.por_segmento : [];
+  const empresa = data?.empresa || {};
   const evolucao = Array.isArray(data?.evolucao) ? data.evolucao : [];
   const fluxo = data?.fluxo || {};
 
@@ -123,7 +79,7 @@ export default function TumaCoreDashboardPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Visão da plataforma
+            {empresa.nome_fantasia || "Sua empresa"}
             {data?.range?.label ? ` · ${data.range.label}` : ""}.
           </p>
         </div>
@@ -152,16 +108,15 @@ export default function TumaCoreDashboardPage() {
       {data ? (
         <>
           <section className="grid grid-cols-2 gap-3 md:grid-cols-4" aria-label="Indicadores">
-            <KpiCard
-              label="Empresas"
-              value={formatInt(kpis.empresas_total)}
-              hint={`${formatInt(kpis.empresas_ativas)} ativas`}
-            />
-            <KpiCard label="Usuários" value={formatInt(kpis.usuarios_total)} hint="cadastrados" />
+            <KpiCard label="Membros" value={formatInt(kpis.membros)} hint={empresa.segmento || undefined} />
             <KpiCard
               label="Msgs usuário"
               value={formatInt(kpis.mensagens_usuario_periodo)}
               hint={`${formatInt(kpis.conversas_periodo)} conversas`}
+            />
+            <KpiCard
+              label="Msgs assistente"
+              value={formatInt(kpis.mensagens_assistente_periodo)}
             />
             <KpiCard
               label="Mídias"
@@ -212,7 +167,6 @@ export default function TumaCoreDashboardPage() {
 
             <section className="rounded-xl border border-border bg-surface p-4">
               <h2 className="text-sm font-semibold text-foreground">Fluxo no período</h2>
-              <p className="text-xs text-muted-foreground">Volume relativo (não é falha/crédito)</p>
               <ul className="mt-4 space-y-3">
                 {[
                   { label: "Mensagens usuário", value: fluxo.mensagens_usuario },
@@ -239,89 +193,6 @@ export default function TumaCoreDashboardPage() {
               </ul>
             </section>
           </div>
-
-          {segmentos.length > 0 ? (
-            <section className="rounded-xl border border-border bg-surface p-4">
-              <h2 className="mb-3 text-sm font-semibold text-foreground">Por segmento</h2>
-              <SegmentDonut segments={segmentos} />
-            </section>
-          ) : null}
-
-          <section className="overflow-hidden rounded-xl border border-border bg-surface">
-            <div className="border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-foreground">Empresas</h2>
-              <p className="text-xs text-muted-foreground">
-                Ordenadas por conversas · {formatInt(kpis.empresas_com_chat_periodo)} com chat ·{" "}
-                <Link href="/painel/tumacore/clientes" className="underline underline-offset-2">
-                  ver gestão
-                </Link>
-              </p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-2 font-medium">Empresa</th>
-                    <th className="px-4 py-2 font-medium">Segmento</th>
-                    <th className="px-4 py-2 font-medium">Status</th>
-                    <th className="px-4 py-2 font-medium">Membros</th>
-                    <th className="px-4 py-2 font-medium">Conversas</th>
-                    <th className="px-4 py-2 font-medium">Mídias</th>
-                    <th className="px-4 py-2 font-medium">Última atividade</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {empresas.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-6 text-muted-foreground">
-                        Nenhuma empresa cadastrada.
-                      </td>
-                    </tr>
-                  ) : (
-                    empresas.map((e) => (
-                      <tr key={e.id_empresa} className="border-t border-border">
-                        <td className="px-4 py-2.5 font-medium text-foreground">
-                          <Link
-                            href="/painel/tumacore/clientes"
-                            className="hover:underline"
-                            onClick={() => {
-                              try {
-                                sessionStorage.setItem("tumacore-cliente-focus", e.id_empresa);
-                              } catch {
-                                /* ignore */
-                              }
-                            }}
-                          >
-                            {e.nome_fantasia}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-2.5 text-muted-foreground">{e.segmento}</td>
-                        <td className="px-4 py-2.5">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                              e.ativo
-                                ? "bg-emerald-500/15 text-emerald-800"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {e.ativo ? "Ativa" : "Inativa"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 tabular-nums">{formatInt(e.membros)}</td>
-                        <td className="px-4 py-2.5 tabular-nums">
-                          {formatInt(e.conversas_periodo)}
-                        </td>
-                        <td className="px-4 py-2.5 tabular-nums">{formatInt(e.midias_periodo)}</td>
-                        <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                          {formatDate(e.ultima_atividade)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
         </>
       ) : null}
     </div>

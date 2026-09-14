@@ -160,9 +160,8 @@ const envSchema = z.object({
     z.enum(["raw", "standard"]),
   ),
   /**
-   * `gpt_integrated` (padrão): PNGs do acervo em `input_images` / `images.edit` — como API oficial.
-   * `collage`: fundo GPT + colagem Sharp.
-   * `collage_refine`: collage Sharp + segunda passada GPT na imagem composta.
+   * `gpt_integrated` (padrão): PNGs do acervo em `input_images` / `images.edit`.
+   * `collage` / `collage_refine`: legado Sharp — só debug local; não usar em produção.
    */
   IMAGE_PRODUCT_MODE: z.preprocess((v) => {
     const s = String(v ?? "gpt_integrated").trim().toLowerCase();
@@ -248,6 +247,15 @@ const envSchema = z.object({
   N8N_INSTAGRAM_TIMEOUT_MS: z.preprocess(
     (v) => (v === "" || v === undefined ? 90_000 : Number(v)),
     z.number().int().min(5_000).max(300_000),
+  ),
+  /**
+   * Allowlist de e-mails com acesso ao TumaCore Plataforma (`/plataforma/*`).
+   * Separados por vírgula. Não usar domínio genérico. Independente do cargo
+   * administrador da empresa (TumaCore Empresa / workspace do cliente).
+   */
+  TUMAIA_PLATAFORMA_ADMIN_EMAILS: z.preprocess(
+    (v) => (v === "" || v === undefined ? "" : String(v).trim()),
+    z.string().max(2000),
   ),
 });
 

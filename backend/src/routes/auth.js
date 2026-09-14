@@ -9,6 +9,7 @@ import { env } from "../config.js";
 import { getSupabaseAdmin, getSupabaseAnon } from "../supabaseAdmin.js";
 import { requireUserJwt } from "../middleware/requireUserJwt.js";
 import { loadUsuarioParaMe } from "../modules/auth/usuarioMeService.js";
+import { withDonoPlataformaFlag } from "../modules/auth/plataformaAdmin.js";
 import {
   putEmpresaAtivaBody,
   saveUsuarioEmpresaUltima,
@@ -45,7 +46,31 @@ r.post("/register", async (req, res) => {
     });
 
     if (authError) {
-      const msg = authError.message ?? "Falha ao criar usuário no Auth";
+      console.error("auth.register:", authError);
+      const statusNum = Number(authError.status);
+      const unreachable =
+        statusNum === 0 ||
+        statusNum === 504 ||
+        statusNum === 521 ||
+        statusNum === 522 ||
+        statusNum === 503 ||
+        statusNum === 502 ||
+        authError.name === "AuthRetryableFetchError" ||
+        /fetch failed|network|ECONNREFUSED|ENOTFOUND|getaddrinfo|timeout/i.test(
+          String(authError.message || ""),
+        );
+      if (unreachable) {
+        res.status(503).json({
+          error:
+            "Supabase indisponível ou pausado. Reative o projeto em supabase.com/dashboard.",
+          code: "supabase_unreachable",
+        });
+        return;
+      }
+      const msg =
+        !authError.message || authError.message === "{}"
+          ? "Falha ao criar usuário no Auth"
+          : authError.message;
       const status = /already|duplicate|exists/i.test(msg) ? 409 : 400;
       res.status(status).json({ error: msg });
       return;
@@ -165,9 +190,27 @@ r.post("/login", async (req, res) => {
         email,
         password_length: senha.length,
       });
-      res.status(401).json({
-        error: error.message,
+      const statusNum = Number(error.status);
+      const unreachable =
+        statusNum === 0 ||
+        statusNum === 504 ||
+        statusNum === 521 ||
+        statusNum === 522 ||
+        statusNum === 503 ||
+        statusNum === 502 ||
+        error.name === "AuthRetryableFetchError" ||
+        /fetch failed|network|ECONNREFUSED|ENOTFOUND|getaddrinfo|timeout/i.test(
+          String(error.message || ""),
+        );
+      const errorMessage = unreachable
+        ? "Não foi possível alcançar o Supabase Auth (HTTP 504 / projeto pausado ou fora do ar). Reative o projeto em supabase.com/dashboard ou confira o SUPABASE_URL no backend/.env."
+        : !error.message || error.message === "{}"
+          ? "Credenciais inválidas ou erro no Supabase."
+          : error.message;
+      res.status(unreachable ? 503 : 401).json({
+        error: errorMessage,
         ...(typeof error.code === "string" && { code: error.code }),
+        ...(unreachable ? { code: "supabase_unreachable" } : {}),
         /** Confirma o que o servidor recebeu (não é o hash; ajuda a ver tamanho errado / typo). */
         received: { email, password_length: senha.length },
       });
@@ -273,7 +316,9 @@ r.get("/me", requireUserJwt, async (req, res) => {
       res.status(out.status).json({ error: out.error });
       return;
     }
-    res.json({ usuario: out.usuario });
+    res.json({
+      usuario: withDonoPlataformaFlag(out.usuario, env.TUMAIA_PLATAFORMA_ADMIN_EMAILS),
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro interno";
     console.error("auth.me:", e);
@@ -340,7 +385,9 @@ r.patch("/me", requireUserJwt, async (req, res) => {
       return;
     }
 
-    res.json({ usuario: data });
+    res.json({
+      usuario: withDonoPlataformaFlag(data, env.TUMAIA_PLATAFORMA_ADMIN_EMAILS),
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro interno";
     console.error("auth.patchMe:", e);

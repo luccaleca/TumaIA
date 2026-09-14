@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { authApiFetchWithToken } from "../../../../lib/auth";
+import { authApiFetchWithToken } from "../../../../../lib/auth";
 import PlataformaPeriodFilter, {
   plataformaRangeQuery,
-} from "../PlataformaPeriodFilter";
+} from "../../PlataformaPeriodFilter";
 
 const DOW = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -41,7 +41,7 @@ function KpiCard({ label, value, delta }) {
   );
 }
 
-export default function TumaCoreAnalyticsPage() {
+export default function TumaCoreEmpresaAnalyticsPage() {
   const [period, setPeriod] = useState(7);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -53,7 +53,7 @@ export default function TumaCoreAnalyticsPage() {
     setLoading(true);
     setError("");
     const qs = plataformaRangeQuery({ period, from, to });
-    const r = await authApiFetchWithToken(`/plataforma/analytics?${qs}`);
+    const r = await authApiFetchWithToken(`/tumacore/empresa/analytics?${qs}`);
     if (!r.ok) {
       setData(null);
       setError(r.json?.error || `Falha ao carregar (${r.status || "rede"})`);
@@ -87,7 +87,7 @@ export default function TumaCoreAnalyticsPage() {
   }, [data]);
 
   const kpis = data?.kpis || {};
-  const ranking = Array.isArray(data?.ranking_empresas) ? data.ranking_empresas : [];
+  const empresa = data?.empresa || {};
   const trend = Array.isArray(data?.trend) ? data.trend : [];
   const heatmap = Array.isArray(data?.heatmap) ? data.heatmap : [];
 
@@ -97,7 +97,7 @@ export default function TumaCoreAnalyticsPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">Analytics</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Uso da plataforma (chat e mídias)
+            Uso de {empresa.nome_fantasia || "sua empresa"}
             {data?.range?.label ? ` · ${data.range.label}` : ""}.
           </p>
         </div>
@@ -125,9 +125,7 @@ export default function TumaCoreAnalyticsPage() {
 
       {data ? (
         <>
-          <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
-            <KpiCard label="Empresas ativas" value={formatInt(kpis.empresas_ativas)} />
-            <KpiCard label="Com chat" value={formatInt(kpis.empresas_com_chat)} />
+          <section className="grid grid-cols-2 gap-3 md:grid-cols-3">
             <KpiCard
               label="Msgs usuário"
               value={formatInt(kpis.mensagens_usuario)}
@@ -177,80 +175,40 @@ export default function TumaCoreAnalyticsPage() {
             </div>
           </section>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <section className="rounded-xl border border-border bg-surface p-4">
-              <h2 className="text-sm font-semibold text-foreground">Heatmap (msgs user)</h2>
-              <p className="text-xs text-muted-foreground">Dia da semana × hora (Brasília)</p>
-              <div className="mt-3 overflow-x-auto">
-                <div className="inline-grid grid-cols-[auto_repeat(24,minmax(10px,1fr))] gap-0.5">
-                  <div />
-                  {Array.from({ length: 24 }, (_, h) => (
-                    <div key={h} className="text-center text-[8px] text-muted-foreground">
-                      {h}
+          <section className="rounded-xl border border-border bg-surface p-4">
+            <h2 className="text-sm font-semibold text-foreground">Heatmap (msgs user)</h2>
+            <p className="text-xs text-muted-foreground">Dia da semana × hora (Brasília)</p>
+            <div className="mt-3 overflow-x-auto">
+              <div className="inline-grid grid-cols-[auto_repeat(24,minmax(10px,1fr))] gap-0.5">
+                <div />
+                {Array.from({ length: 24 }, (_, h) => (
+                  <div key={h} className="text-center text-[8px] text-muted-foreground">
+                    {h}
+                  </div>
+                ))}
+                {heatmap.map((row, dow) => (
+                  <div key={`row-${dow}`} className="contents">
+                    <div className="pr-1 text-right text-[10px] text-muted-foreground">
+                      {DOW[dow]}
                     </div>
-                  ))}
-                  {heatmap.map((row, dow) => (
-                    <div key={`row-${dow}`} className="contents">
-                      <div className="pr-1 text-right text-[10px] text-muted-foreground">
-                        {DOW[dow]}
-                      </div>
-                      {(row || []).map((cell, hour) => {
-                        const intensity = (Number(cell) || 0) / maxHeat;
-                        return (
-                          <div
-                            key={`${dow}-${hour}`}
-                            title={`${DOW[dow]} ${hour}h: ${cell}`}
-                            className="h-3 w-full rounded-[2px]"
-                            style={{
-                              backgroundColor: `rgba(15, 23, 42, ${0.08 + intensity * 0.85})`,
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
+                    {(row || []).map((cell, hour) => {
+                      const intensity = (Number(cell) || 0) / maxHeat;
+                      return (
+                        <div
+                          key={`${dow}-${hour}`}
+                          title={`${DOW[dow]} ${hour}h: ${cell}`}
+                          className="h-3 w-full rounded-[2px]"
+                          style={{
+                            backgroundColor: `rgba(15, 23, 42, ${0.08 + intensity * 0.85})`,
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
-            </section>
-
-            <section className="overflow-hidden rounded-xl border border-border bg-surface">
-              <div className="border-b border-border px-4 py-3">
-                <h2 className="text-sm font-semibold text-foreground">Ranking de empresas</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2 font-medium">Empresa</th>
-                      <th className="px-4 py-2 font-medium">Msgs</th>
-                      <th className="px-4 py-2 font-medium">Mídias</th>
-                      <th className="px-4 py-2 font-medium">Chat</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ranking.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="px-4 py-6 text-muted-foreground">
-                          Sem atividade no período.
-                        </td>
-                      </tr>
-                    ) : (
-                      ranking.map((r) => (
-                        <tr key={r.id_empresa} className="border-t border-border">
-                          <td className="px-4 py-2 font-medium">{r.nome_fantasia}</td>
-                          <td className="px-4 py-2 tabular-nums">
-                            {formatInt(r.mensagens_usuario)}
-                          </td>
-                          <td className="px-4 py-2 tabular-nums">{formatInt(r.midias)}</td>
-                          <td className="px-4 py-2 tabular-nums">{formatInt(r.conversas)}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          </div>
+            </div>
+          </section>
         </>
       ) : null}
     </div>

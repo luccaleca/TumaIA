@@ -45,6 +45,14 @@ describe("auth perfil — patchMeBody (PATCH /auth/me)", () => {
     assert.equal(r.success, false);
   });
 
+  it("rejeita tentativa de auto-promover dono_plataforma via PATCH", () => {
+    const r = patchMeBody.safeParse({
+      nome: "Cliente",
+      dono_plataforma: true,
+    });
+    assert.equal(r.success, false);
+  });
+
   it("rejeita nome vazio quando nome é enviado", () => {
     const r = patchMeBody.safeParse({ nome: "" });
     assert.equal(r.success, false);

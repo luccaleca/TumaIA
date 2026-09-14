@@ -6,10 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { ThemeProvider, useTheme } from "../components/ThemeProvider";
 import {
   DEV_DASHBOARD_PREVIEW_KEY,
+  authApiFetchWithToken,
   clearDevDashboardPreview,
   clearToken,
   fetchMe,
 } from "../../lib/auth";
+import { isDonoPlataformaUsuario } from "../../lib/plataformaAdmin";
+import { isAdminTumaCoreEmpresa } from "../../lib/tumacoreEmpresa";
 
 function NavIcon({ children, className = "" }) {
   return (
@@ -88,31 +91,8 @@ function IconTumaCore() {
   );
 }
 
-function IconChevron({ open }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      strokeWidth={2}
-      stroke="currentColor"
-      className={`h-3.5 w-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-      aria-hidden
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-    </svg>
-  );
-}
-
-const TUMACORE_NAV_STORAGE_KEY = "tumaia-tumacore-nav-open";
-const TUMACORE_BASE = "/painel/tumacore";
-
-const TUMACORE_NAV_ITEMS = [
-  { href: `${TUMACORE_BASE}/dashboard`, label: "Dashboard" },
-  { href: `${TUMACORE_BASE}/analytics`, label: "Analytics" },
-  { href: `${TUMACORE_BASE}/clientes`, label: "Gestão de clientes" },
-  { href: `${TUMACORE_BASE}/chat-sql`, label: "Chat SQL" },
-];
+const TUMACORE_PLATAFORMA_HREF = "/painel/tumacore/dashboard";
+const TUMACORE_EMPRESA_HREF = "/painel/tumacore/empresa/dashboard";
 
 function NavLink({ item, active }) {
   const Icon = item.icon;
@@ -132,85 +112,13 @@ function NavLink({ item, active }) {
   );
 }
 
-function TumaCoreNavAccordion({ pathname, isActive }) {
-  const underTumaCore = pathname === TUMACORE_BASE || pathname.startsWith(`${TUMACORE_BASE}/`);
-  const [open, setOpen] = useState(underTumaCore);
-
-  useEffect(() => {
-    if (underTumaCore) {
-      setOpen(true);
-      try {
-        sessionStorage.setItem(TUMACORE_NAV_STORAGE_KEY, "1");
-      } catch {
-        /* ignore */
-      }
-      return;
-    }
-    try {
-      if (sessionStorage.getItem(TUMACORE_NAV_STORAGE_KEY) === "1") {
-        setOpen(true);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, [underTumaCore]);
-
-  function toggle() {
-    setOpen((prev) => {
-      const next = !prev;
-      try {
-        sessionStorage.setItem(TUMACORE_NAV_STORAGE_KEY, next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }
-
-  return (
-    <div className="flex flex-col gap-0.5">
-      <button
-        type="button"
-        onClick={toggle}
-        className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
-          underTumaCore
-            ? "bg-muted font-semibold text-foreground"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
-        aria-expanded={open}
-        aria-controls="tumacore-nav-submenu"
-      >
-        <IconTumaCore />
-        <span className="flex-1">TumaCore</span>
-        <IconChevron open={open} />
-      </button>
-      {open ? (
-        <div id="tumacore-nav-submenu" className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2" role="group" aria-label="TumaCore">
-          {TUMACORE_NAV_ITEMS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-lg px-3 py-2 text-sm transition-colors ${
-                isActive(item.href)
-                  ? "bg-accent font-semibold text-accent-foreground shadow-sm"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-              aria-current={isActive(item.href) ? "page" : undefined}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function PainelShell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [nome, setNome] = useState("...");
   const [ready, setReady] = useState(false);
+  const [donoPlataforma, setDonoPlataforma] = useState(false);
+  const [adminEmpresa, setAdminEmpresa] = useState(false);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -221,12 +129,15 @@ function PainelShell({ children }) {
       sessionStorage.getItem(DEV_DASHBOARD_PREVIEW_KEY) === "1"
     ) {
       setNome("Pré-visualização (sem login)");
+      setDonoPlataforma(true);
+      setAdminEmpresa(false);
       setReady(true);
       return () => {
         active = false;
       };
     }
-    fetchMe().then(({ ok, usuario }) => {
+    (async () => {
+      const { ok, usuario } = await fetchMe();
       if (!active) return;
       if (!ok || !usuario) {
         clearToken();
@@ -235,8 +146,17 @@ function PainelShell({ children }) {
       }
       const fallback = usuario?.email ? String(usuario.email).split("@")[0] : "usuário";
       setNome(String(usuario.nome || "").trim() || fallback || "usuário");
+      const isDono = isDonoPlataformaUsuario(usuario);
+      setDonoPlataforma(isDono);
+      if (!isDono) {
+        const minhas = await authApiFetchWithToken("/empresas/minhas");
+        if (!active) return;
+        setAdminEmpresa(Boolean(minhas.ok && isAdminTumaCoreEmpresa(minhas.json?.empresas)));
+      } else {
+        setAdminEmpresa(false);
+      }
       setReady(true);
-    });
+    })();
     return () => {
       active = false;
     };
@@ -279,7 +199,7 @@ function PainelShell({ children }) {
         <>
           <header className="border-b border-border bg-background/90 backdrop-blur-md">
             <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-              <Link href="/" className="text-lg font-bold tracking-tight">
+              <Link href="/painel/chat" className="text-lg font-bold tracking-tight">
                 <span className="text-foreground">Tuma</span>
                 <span className="text-accent">IA</span>
               </Link>
@@ -304,8 +224,33 @@ function PainelShell({ children }) {
                 {mainNav.map((item) => (
                   <NavLink key={item.href} item={item} active={isActive(item.href)} />
                 ))}
-                <TumaCoreNavAccordion pathname={pathname} isActive={isActive} />
               </nav>
+
+              {donoPlataforma || adminEmpresa ? (
+                <>
+                  <div className="my-2 border-t border-border" role="separator" />
+                  {donoPlataforma ? (
+                    <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Plataforma
+                    </p>
+                  ) : null}
+                  <nav className="flex flex-col gap-0.5" aria-label="Área TumaCore">
+                    <NavLink
+                      item={{
+                        href: donoPlataforma ? TUMACORE_PLATAFORMA_HREF : TUMACORE_EMPRESA_HREF,
+                        label: "TumaCore",
+                        icon: IconTumaCore,
+                      }}
+                      active={
+                        donoPlataforma
+                          ? isActive("/painel/tumacore") &&
+                            !pathname.startsWith("/painel/tumacore/empresa")
+                          : isActive("/painel/tumacore/empresa")
+                      }
+                    />
+                  </nav>
+                </>
+              ) : null}
 
               <div className="my-2 border-t border-border" role="separator" />
 
