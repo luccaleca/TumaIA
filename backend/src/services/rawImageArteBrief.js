@@ -5,8 +5,13 @@ import {
   formatoToJson,
   getFormatPresetById,
   normalizeFormatoFromRaw,
+  tryDetectFormatPresetFromText,
 } from "./arteFormatPresets.js";
 import { deriveFraseNaImagemFromHistory, extractFraseFromUserText, recentUserTexts } from "./imageHeadline.js";
+import {
+  deriveCreationStateFromHistory,
+  extractStyleTermsFromText,
+} from "./chatCreationInterpret.js";
 
 const TEMA_MAX = 200;
 const TITULO_MAX = 48;
@@ -97,6 +102,8 @@ function detectRede(text) {
  */
 function detectEstilo(text) {
   const t = String(text || "");
+  const fromList = extractStyleTermsFromText(t);
+  if (fromList.length) return fromList.join(", ").slice(0, 120);
   const m = t.match(
     /(?:estilo|visual|tom)\s*[:\-]?\s*([^.,;]+)|(?:fundo|background)\s+(\w+(?:\s+\w+)?)|(?:gradiente)\s+([^.,;]+)/i,
   );
@@ -104,8 +111,10 @@ function detectEstilo(text) {
     const chunk = (m[1] || m[2] || m[3] || "").trim();
     if (chunk.length >= 3) return chunk.slice(0, 120);
   }
-  if (/minimalist|premium|moderno|clean|elegante/i.test(t)) {
-    const hit = t.match(/minimalist[ao]?|premium|moderno|clean|elegante/i);
+  if (/minimalist|premium|moderno|clean|elegante|photorealistic|realista/i.test(t)) {
+    const hit = t.match(
+      /photorealistic|fotorealista|minimalist[ao]?|premium|moderno|clean|elegante|realista/i,
+    );
     if (hit) return hit[0].slice(0, 120);
   }
   return "";
@@ -142,23 +151,66 @@ function splitTituloSubtitulo(text) {
  */
 export function buildArteBriefFromHistory(history, brandColors = [], existing = null) {
   const base = normalizeArteBrief(existing, brandColors);
-  const userBlob = recentUserTexts(history, 3).join(" ").trim();
-  if (!userBlob) return base;
+  const userTexts = recentUserTexts(history, 6);
+  const userBlob = userTexts.join(" ").trim();
+  const latestUser = userTexts.length ? userTexts[userTexts.length - 1] : "";
+  const creation = deriveCreationStateFromHistory(history);
+  if (!userBlob && !creation.produto) return base;
 
-  const preset = detectFormatPresetFromText(userBlob);
+  // Formato: só a mensagem mais recente pode mudar o preset; senão mantém o atual.
+  const explicitFmt = tryDetectFormatPresetFromText(latestUser);
+  const preset = explicitFmt
+    ? explicitFmt
+    : base.formato?.preset_id
+      ? getFormatPresetById(base.formato.preset_id)
+      : detectFormatPresetFromText(userBlob || creation.tema);
   const { titulo, subtitulo } = splitTituloSubtitulo(userBlob);
   const frase = extractFraseFromUserText(userBlob) || deriveFraseNaImagemFromHistory(history) || "";
   const rede = detectRede(userBlob) || base.rede;
-  const estilo = detectEstilo(userBlob) || base.estilo;
+  const estilo =
+    creation.estilo ||
+    detectEstilo(userBlob) ||
+    base.estilo;
 
-  let tema = userBlob
-    .replace(/frase\s*:\s*.+?(?=\s*[,;]|$)/gi, "")
-    .replace(/t[ií]tulo\s*:\s*.+?(?=\s*[,;]|$)/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  let tema = "";
+  if (
+    creation.tema ||
+    creation.intencao ||
+    creation.oferta ||
+    creation.produto ||
+    creation.sabor ||
+    creation.cenario ||
+    creation.caracteristica
+  ) {
+    tema = [
+      creation.intencao,
+      creation.tema,
+      creation.produto,
+      creation.sabor ? `sabor ${creation.sabor}` : "",
+      creation.oferta,
+      creation.cenario ? `cenário ${creation.cenario}` : "",
+      creation.caracteristica,
+      creation.destaque,
+      creation.composicao,
+    ]
+      .filter(Boolean)
+      .join(" · ")
+      .slice(0, TEMA_MAX);
+  }
+  if (!tema) {
+    tema = userBlob
+      .replace(/frase\s*:\s*.+?(?=\s*[,;]|$)/gi, "")
+      .replace(/t[ií]tulo\s*:\s*.+?(?=\s*[,;]|$)/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
   if (tema.length > TEMA_MAX) tema = `${tema.slice(0, TEMA_MAX - 1)}…`;
 
   const texto = frase && frase !== titulo ? frase.slice(0, TEXTO_MAX) : base.texto;
+  const observacoes = [creation.destaque, creation.composicao, creation.caracteristica, base.observacoes]
+    .filter(Boolean)
+    .join(". ")
+    .slice(0, 300);
 
   return normalizeArteBrief(
     {
@@ -170,7 +222,7 @@ export function buildArteBriefFromHistory(history, brandColors = [], existing = 
       texto: texto || base.texto,
       rede,
       estilo,
-      observacoes: base.observacoes,
+      observacoes: observacoes || base.observacoes,
     },
     brandColors,
   );
@@ -178,23 +230,27 @@ export function buildArteBriefFromHistory(history, brandColors = [], existing = 
 
 /**
  * Mescla extração do histórico sem apagar campos que o usuário já editou no painel.
+ * Formato: se o chat pediu ratio/preset explícito, a extração prevalece.
  *
  * @param {Record<string, unknown>} draft
  * @param {Record<string, unknown>} extracted
+ * @param {{ preferExtractedFormato?: boolean }} [opts]
  */
-export function mergeArteBriefUserEdits(draft, extracted) {
+export function mergeArteBriefUserEdits(draft, extracted, opts = {}) {
   const d = normalizeArteBrief(draft);
   const e = normalizeArteBrief(extracted, d.cores);
+  const preferFmt = Boolean(opts.preferExtractedFormato);
   return normalizeArteBrief({
     tema: d.tema.trim() ? d.tema : e.tema,
-    formato: d.formato?.preset_id ? d.formato : e.formato,
+    formato: preferFmt && e.formato?.preset_id ? e.formato : d.formato?.preset_id ? d.formato : e.formato,
     cores: d.cores.length ? d.cores : e.cores,
     titulo: d.titulo.trim() ? d.titulo : e.titulo,
     subtitulo: d.subtitulo.trim() ? d.subtitulo : e.subtitulo,
     texto: d.texto.trim() ? d.texto : e.texto,
     rede: d.rede && d.rede !== "instagram" ? d.rede : e.rede || d.rede,
-    estilo: d.estilo.trim() ? d.estilo : e.estilo,
-    observacoes: d.observacoes.trim() ? d.observacoes : e.observacoes,
+    // Estilo/destaque: instrução recente do chat prevalece sobre rascunho antigo.
+    estilo: e.estilo.trim() ? e.estilo : d.estilo,
+    observacoes: e.observacoes.trim() ? e.observacoes : d.observacoes,
   });
 }
 

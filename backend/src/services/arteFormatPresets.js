@@ -122,29 +122,58 @@ export function normalizeFormatoFromRaw(raw) {
 
 /**
  * @param {string} text
+ * @returns {ArteFormatPreset | null} null se o texto não pedir formato explicitamente
+ */
+export function tryDetectFormatPresetFromText(text) {
+  const t = String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t) return null;
+
+  // Ordem: ratios e nomes específicos antes de genéricos (ex.: feed vs stories).
+  if (
+    /\b(9\s*[:x]\s*16|9x16|1080\s*[x×]\s*1920)\b/.test(t) ||
+    /\b(stories?|story|reels?)\b/.test(t)
+  ) {
+    return getFormatPresetById("stories");
+  }
+  if (
+    /\b(1\s*[:x]\s*1|1x1|1080\s*[x×]\s*1080)\b/.test(t) ||
+    /\b(quadrado|carrossel|carousel)\b/.test(t)
+  ) {
+    return getFormatPresetById("post_square");
+  }
+  if (
+    /\b(4\s*[:x]\s*5|4x5|1080\s*[x×]\s*1350)\b/.test(t) ||
+    /\bfeed\s*retrato\b/.test(t)
+  ) {
+    return getFormatPresetById("feed_portrait");
+  }
+  if (
+    /\b(16\s*[:x]\s*9|16x9)\b/.test(t) ||
+    /\b(youtube|paisagem|thumbnail|thumb\b)\b/.test(t) ||
+    /\bvers[aã]o\s+16\b/.test(t) ||
+    /\bformato\s+16\b/.test(t)
+  ) {
+    return getFormatPresetById("landscape");
+  }
+  if (/\b(2\s*[:x]\s*3|2x3)\b/.test(t)) return getFormatPresetById("photo_v");
+  if (/\b(3\s*[:x]\s*2|3x2)\b/.test(t)) return getFormatPresetById("photo_h");
+  if (/\b(4\s*[:x]\s*3|4x3)\b/.test(t) || /\bclassico\b/.test(t)) {
+    return getFormatPresetById("classic");
+  }
+  return null;
+}
+
+/**
+ * @param {string} text
  * @returns {ArteFormatPreset}
  */
 export function detectFormatPresetFromText(text) {
-  const t = String(text || "").toLowerCase();
-  if (/stories|story\b|reels?\b|9\s*:\s*16|9x16|1080\s*[x×]\s*1920/.test(t)) {
-    return getFormatPresetById("stories");
-  }
-  if (/carrossel|carousel|1\s*:\s*1|1x1|quadrado|1080\s*[x×]\s*1080/.test(t)) {
-    return getFormatPresetById("post_square");
-  }
-  if (/feed\s*retrato|4\s*:\s*5|4x5|1080\s*[x×]\s*1350/.test(t)) {
-    return getFormatPresetById("feed_portrait");
-  }
-  if (/16\s*:\s*9|16x9|youtube|paisagem|horizontal\s*larg/.test(t)) {
-    return getFormatPresetById("landscape");
-  }
-  if (/2\s*:\s*3|2x3/.test(t)) return getFormatPresetById("photo_v");
-  if (/3\s*:\s*2|3x2/.test(t)) return getFormatPresetById("photo_h");
-  if (/4\s*:\s*3|4x3/.test(t)) return getFormatPresetById("classic");
-  if (/instagram|insta\b|feed\b/.test(t) && !/stories|reels?/.test(t)) {
-    return getFormatPresetById("feed_portrait");
-  }
-  return getFormatPresetById(DEFAULT_FORMAT_PRESET_ID);
+  return tryDetectFormatPresetFromText(text) || getFormatPresetById(DEFAULT_FORMAT_PRESET_ID);
 }
 
 /**

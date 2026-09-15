@@ -38,11 +38,12 @@ import {
   listSlashChipMidiaIds,
   reconcileSlashChipsWithText,
   slashChipsToApiPicks,
+  slugifySlashMidiaLabel,
   SLASH_MENU_MAX_MIDIAS,
   parseSlashTrigger,
   stripLegacyChatInputMarkers,
 } from "../../../lib/chatSlashMenu";
-import { arteBriefReady, emptyArteBrief, normalizeArteBrief } from "../../../lib/arteFormatPresets";
+import { arteBriefReady, emptyArteBrief, formatoToJson, normalizeArteBrief, tryDetectFormatPresetFromText } from "../../../lib/arteFormatPresets";
 import {
   CHAT_PEDIDO_AGUARDE_MSG,
   CHAT_PEDIDO_COLETANDO_INTRO,
@@ -779,11 +780,7 @@ export default function PainelChatPage() {
 
   const handlePickSlashMidia = useCallback(
     (midia) => {
-      const label = String(midia.label ?? "midia")
-        .toLowerCase()
-        .replace(/\s+/g, "-")
-        .replace(/[^\w.-]/g, "")
-        .slice(0, 40);
+      const label = slugifySlashMidiaLabel(midia.label ?? "midia");
       const current = slashChipsRef.current;
       if (current.some((c) => c.type === "midia" && c.id === midia.id)) return;
       if (current.filter((c) => c.type === "midia").length >= SLASH_MENU_MAX_MIDIAS) return;
@@ -1165,6 +1162,14 @@ export default function PainelChatPage() {
         return { ok: false, error: String(errText), status: result.status };
       }
       const urls = Array.isArray(result.json?.image_urls) ? result.json.image_urls.filter(Boolean) : [];
+      if (!urls.length) {
+        return {
+          ok: false,
+          error:
+            "A geração terminou sem imagem. O formato pode ter sido atualizado no resumo, mas a prévia não foi entregue — tente de novo.",
+          status: result.status,
+        };
+      }
       const imageMidiaIds = Array.isArray(result.json?.image_midia_ids)
         ? result.json.image_midia_ids.filter((id) => typeof id === "string" && UUID_RE.test(id.trim()))
         : [];
@@ -1692,7 +1697,7 @@ export default function PainelChatPage() {
           supplementLinks,
           conversaId: idChat,
         });
-        if (!out.ok) {
+        if (!out.ok || !Array.isArray(out.urls) || !out.urls.length) {
           const errBubble = {
             id: newMessageId(),
             role: "assistant",
@@ -1786,6 +1791,73 @@ export default function PainelChatPage() {
 
       const okSyncUser = await syncMensagens(idChat, msgsComUsuario);
       if (!okSyncUser) {
+        setSending(false);
+        return;
+      }
+
+      // Formato explícito (16:9, stories…) → mesmo preset do seletor / payload de geração.
+      const formatPreset = tryDetectFormatPresetFromText(question);
+      if (formatPreset) {
+        const nextBrief = normalizeArteBrief({
+          ...arteBriefDraftRef.current,
+          formato: formatoToJson(formatPreset),
+        });
+        arteBriefDraftRef.current = nextBrief;
+        setArteBriefDraft(nextBrief);
+        persistArteBriefDraft(nextBrief);
+      }
+
+      // Formato muda com sessão de arte ativa → regenerar de verdade (nunca fingir “aqui está”).
+      const priorForFormat = msgsComUsuario.slice(0, -1);
+      const formatImageUrl = formatPreset ? findLatestImageUrlInMessages(priorForFormat) : null;
+      const formatProposal = formatPreset ? findLatestImageProposalObject(priorForFormat) : null;
+      const formatShouldRegen =
+        Boolean(formatPreset) &&
+        (Boolean(formatImageUrl) ||
+          (arteBriefReady(arteBriefDraftRef.current) && Boolean(formatProposal)));
+      if (formatShouldRegen) {
+        if (!(await askImagePreviewConfirm())) {
+          setSending(false);
+          return;
+        }
+        const imageMsgId = findLatestImageMessageId(priorForFormat);
+        if (imageMsgId) setImageGeneratingAfterId(imageMsgId);
+        const confirmAnchor = findLatestConfirmedProposalAnchor(
+          priorForFormat,
+          arteBriefDraftRef.current,
+        );
+        const latestProposal =
+          confirmAnchor?.proposal || formatProposal || {};
+        const latestLinks = Array.isArray(confirmAnchor?.supplement?.links)
+          ? confirmAnchor.supplement.links
+          : [];
+        const out = await invokeImagePreview({
+          msgs: msgsComUsuario,
+          proposal: latestProposal,
+          supplementLinks: latestLinks,
+          conversaId: idChat,
+        });
+        setImageGeneratingAfterId(null);
+        if (!out.ok || !Array.isArray(out.urls) || !out.urls.length) {
+          const errBubble = {
+            id: newMessageId(),
+            role: "assistant",
+            content:
+              out.error ||
+              "A imagem não foi gerada. O formato foi atualizado no resumo, mas a prévia falhou — tente de novo.",
+            sources: [],
+          };
+          const comErro = [...msgsComUsuario, errBubble];
+          setMessages(comErro);
+          await syncMensagens(idChat, comErro);
+          setSending(false);
+          return;
+        }
+        const contextoLinha = buildImageContextNote(out.contexto);
+        const assistantFollowUp = buildImagePreviewAssistantMessage(out, contextoLinha);
+        const finalMsgs = [...msgsComUsuario, assistantFollowUp];
+        setMessages(finalMsgs);
+        await syncMensagens(idChat, finalMsgs);
         setSending(false);
         return;
       }
@@ -1891,7 +1963,7 @@ export default function PainelChatPage() {
             revisionInstructions: typedCmd.instructions,
           });
           setImageGeneratingAfterId(null);
-          if (!out.ok) {
+          if (!out.ok || !Array.isArray(out.urls) || !out.urls.length) {
             const errBubble = {
               id: crypto.randomUUID(),
               role: "assistant",
@@ -1931,7 +2003,7 @@ export default function PainelChatPage() {
           supplementLinks: latestLinks,
           conversaId: idChat,
         });
-        if (!out.ok) {
+        if (!out.ok || !Array.isArray(out.urls) || !out.urls.length) {
           const errBubble = {
             id: newMessageId(),
             role: "assistant",
@@ -1960,6 +2032,13 @@ export default function PainelChatPage() {
         history: historyForApi,
         id_empresa: empresaId,
         ...(idChat ? { chat_session_id: idChat } : {}),
+        ...(picksAtSend.midias?.length
+          ? {
+              reference_midia_ids: picksAtSend.midias
+                .map((m) => m.id)
+                .filter((id) => typeof id === "string" && id.trim()),
+            }
+          : {}),
       };
 
       const result = await authApiFetchWithToken("/ia/chat", {

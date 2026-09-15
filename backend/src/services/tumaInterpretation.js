@@ -1,3 +1,5 @@
+import { tryDetectFormatPresetFromText } from "./arteFormatPresets.js";
+
 /**
  * Interpretação de intenção — porteiro do fluxo de post.
  * Distingue pedido real de arte/post de conversa, dúvida de capacidade ou menção casual.
@@ -30,7 +32,7 @@ const POST_MODEL_CREATE_REQUEST =
 
 /** Pedido claro de criar arte/post agora (não “pode fazer um post?”). */
 const EXPLICIT_CREATE_REQUEST =
-  /\b(quero|preciso|vamos|bora|gostaria\s+de)\s+(de\s+)?(fazer|criar|montar|gerar|publicar|uma?)?\s*(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+(um|uma|minha|meu)\s+(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(gere|gera|gerar|monta|montar|cria|criar|crie|faz|faça|manda|mandar)\s+(um|uma|a|o|minha|meu|pra|para)?\s*(arte|imagem|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\bfazer\s+(um|uma)\s+(arte|imagem|post(agem)?|banner|flyer)\b|\bme\s+ajuda\s+a\s+(fazer|criar|montar|gerar|publicar)\s+(um|uma)?\s*(arte|imagem|post(agem)?|banner)?\b|\bcri(e|ar)\s+(um|uma)\s+(arte|imagem|post(agem)?|visual)\b|\bmont(a|ar)\s+(um|uma|a)\s+(arte|imagem|post(agem)?|banner)\b|\bgera(r|ç)[aã]o\s+(de\s+)?(imagem|arte|visual)\b|\bgera(r)?\s+imagem\b|\bpode\s+fazer\b.{0,40}\b(pessoa|academia|usando|whey|creatina|produto)\b/i;
+  /\b(quero|preciso|vamos|bora|gostaria\s+de)\s+(de\s+)?(fazer|criar|montar|gerar|publicar|uma?)?\s*(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+(um|uma|minha|meu)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+de\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(gere|gera|gerar|monta|montar|cria|criar|crie|faz|faça|manda|mandar)\s+(um|uma|a|o|minha|meu|pra|para)?\s*(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\bfazer\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer)\b|\bme\s+ajuda\s+a\s+(fazer|criar|montar|gerar|publicar)\s+(um|uma)?\s*(arte|imagem|foto|fotos|post(agem)?|banner)?\b|\bcri(e|ar)\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|visual)\b|\bmont(a|ar)\s+(um|uma|a)\s+(arte|imagem|foto|fotos|post(agem)?|banner)\b|\bgera(r|ç)[aã]o\s+(de\s+)?(imagem|arte|foto|visual)\b|\bgera(r)?\s+(imagem|foto)\b|\bpode\s+fazer\b.{0,40}\b(pessoa|academia|usando|whey|creatina|produto)\b/i;
 
 const INTENT_NOW =
   /\b(quero|preciso|vamos|bora|gere|gera|gerar|monta|montar|cria|criar|faz|faça|manda|gostaria\s+de)\b/i;
@@ -263,6 +265,38 @@ export function isPostDeliveryTypedCommand(text) {
 }
 
 /**
+ * Pedido explícito de mudar o preset de formato (16:9, stories…).
+ * @param {string} text
+ */
+export function isExplicitFormatChangeRequest(text) {
+  return Boolean(tryDetectFormatPresetFromText(text));
+}
+
+/**
+ * Histórico já tem criação/briefing/imagem em andamento.
+ * @param {Array<{ role: string, content: string }>} history
+ */
+function historySuggestsActiveArtSession(history) {
+  const h = Array.isArray(history) ? history : [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    const m = h[i];
+    const c = typeof m?.content === "string" ? m.content : "";
+    if (!c) continue;
+    if (m.role === "assistant") {
+      if (
+        ASSISTANT_POST_BRIEFING.test(c) ||
+        ASSISTANT_IMAGE_OFFER.test(c) ||
+        /pr[eé]via|resumo da arte|confirme|preparando resumo|imagem gerada/i.test(c)
+      ) {
+        return true;
+      }
+    }
+    if (m.role === "user" && hasExplicitCreateRequest(c)) return true;
+  }
+  return false;
+}
+
+/**
  * Abrir fluxo de briefing / arte. Só pedido explícito — não “falou de Instagram”.
  * @param {string} text
  */
@@ -284,6 +318,14 @@ export function detectImageGenerationIntentFromHistory(history, latestUserText) 
   if (detectImageGenerationIntent(latestUserText)) return true;
   if (isPostModelBriefingFollowUp(history, latestUserText)) return true;
   if (isPostBriefingCorrectionFollowUp(history, latestUserText)) return true;
+
+  // «quero a versão 16:9» após briefing/arte → reabre geração (não deixa LLM fingir sucesso).
+  if (
+    isExplicitFormatChangeRequest(latestUserText) &&
+    historySuggestsActiveArtSession(history)
+  ) {
+    return true;
+  }
 
   const h = Array.isArray(history) ? history : [];
   const lastAssistant = [...h].reverse().find((m) => m.role === "assistant");

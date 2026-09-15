@@ -1,4 +1,6 @@
-/** Espelha ackend/src/services/tumaInterpretation.js */
+/** Espelha backend/src/services/tumaInterpretation.js */
+
+import { tryDetectFormatPresetFromText } from "./arteFormatPresets.js";
 
 /**
  * Interpretação de intenção — porteiro do fluxo de post.
@@ -282,10 +284,42 @@ export function detectImageGenerationIntent(text) {
  * @param {Array<{ role: string, content: string }>} history
  * @param {string} [latestUserText]
  */
+export function isExplicitFormatChangeRequest(text) {
+  return Boolean(tryDetectFormatPresetFromText(text));
+}
+
+function historySuggestsActiveArtSession(history) {
+  const h = Array.isArray(history) ? history : [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    const m = h[i];
+    const c = typeof m?.content === "string" ? m.content : "";
+    if (!c) continue;
+    if (m.role === "assistant") {
+      if (
+        ASSISTANT_POST_BRIEFING.test(c) ||
+        ASSISTANT_IMAGE_OFFER.test(c) ||
+        /pr[eé]via|resumo da arte|confirme|preparando resumo|imagem gerada/i.test(c)
+      ) {
+        return true;
+      }
+    }
+    if (m.role === "user" && hasExplicitCreateRequest(c)) return true;
+  }
+  return false;
+}
+
 export function detectImageGenerationIntentFromHistory(history, latestUserText) {
   if (detectImageGenerationIntent(latestUserText)) return true;
   if (isPostModelBriefingFollowUp(history, latestUserText)) return true;
   if (isPostBriefingCorrectionFollowUp(history, latestUserText)) return true;
+
+  // «quero a versão 16:9» após briefing/arte → reabre geração (não deixa LLM fingir sucesso).
+  if (
+    isExplicitFormatChangeRequest(latestUserText) &&
+    historySuggestsActiveArtSession(history)
+  ) {
+    return true;
+  }
 
   const h = Array.isArray(history) ? history : [];
   const lastAssistant = [...h].reverse().find((m) => m.role === "assistant");

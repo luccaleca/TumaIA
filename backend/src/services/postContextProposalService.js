@@ -42,6 +42,7 @@ import {
 } from "./cadastroMeaningful.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
 import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
+import { tryDetectFormatPresetFromText } from "./arteFormatPresets.js";
 import { TUMA_IA_REGRAS_RESUMO_IMAGEM } from "./tumaIaRegrasResumo.js";
 
 const linkItemSchema = z.object({
@@ -887,8 +888,14 @@ async function llamaGenerateJson(promptUser) {
 function buildRawPostContextProposal(history, brandColors = [], existingBrief = null) {
   const intent = resolvePedidoCliente(null, history, 2000);
   const extracted = buildArteBriefFromHistory(history, brandColors, existingBrief);
+  const latestUser = [...(Array.isArray(history) ? history : [])]
+    .reverse()
+    .find((m) => m?.role === "user" && String(m.content || "").trim());
+  const preferExtractedFormato = Boolean(
+    tryDetectFormatPresetFromText(String(latestUser?.content || "")),
+  );
   const arte_brief = existingBrief
-    ? mergeArteBriefUserEdits(existingBrief, extracted)
+    ? mergeArteBriefUserEdits(existingBrief, extracted, { preferExtractedFormato })
     : extracted;
   if (intent && !arte_brief.tema) {
     const scene = detectMontagemScene(intent);
@@ -1005,7 +1012,7 @@ export async function generatePostContextProposal(opts) {
         post_context_proposal: mergedProposal,
         briefing_status: "collecting",
         missing_slots: rawGate.missing_slots,
-        _meta: { pipeline: "raw", provider: env.IMAGE_PROVIDER || "replicate" },
+        _meta: { pipeline: "raw", provider: env.IMAGE_PROVIDER || "grok" },
       };
     }
     return {
@@ -1017,7 +1024,7 @@ export async function generatePostContextProposal(opts) {
       post_context_proposal: mergedProposal,
       briefing_status: rawBrief.briefing_status,
       missing_slots: rawBrief.missing_slots,
-      _meta: { pipeline: "raw", provider: env.IMAGE_PROVIDER || "replicate" },
+      _meta: { pipeline: "raw", provider: env.IMAGE_PROVIDER || "grok" },
     };
   }
 

@@ -112,4 +112,19 @@ describe("imageGenerationIntent / interpretação", () => {
     ];
     assert.equal(detectImageGenerationIntentFromHistory(history, "não está correto"), true);
   });
+
+  it("pedido de versão 16:9 após briefing reabre geração", () => {
+    const history = [
+      {
+        role: "user",
+        content: "quero uma promoção de verão do powerade com preço grande",
+      },
+      {
+        role: "assistant",
+        content:
+          "*Confira se entendi certo:*\n📋 Resumo da arte\n\nEstá certo? Digite *gerar imagem*",
+      },
+    ];
+    assert.equal(detectImageGenerationIntentFromHistory(history, "quero a versão 16:9"), true);
+  });
 });
