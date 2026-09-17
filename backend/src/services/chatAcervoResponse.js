@@ -5,6 +5,14 @@
 import { loadMidiasEmpresaResumo } from "./imagePreviewPrompt.js";
 import { classifyChatAcervoIntent } from "./chatIntent.js";
 import {
+  deriveCreationStateFromHistory,
+  formatCreationBriefAck,
+  hasRichCreationBrief,
+  isBareProductSelection,
+  mergeReferenceMidiaIdsFromSlashText,
+  shouldPreferImageBriefingOverAcervo,
+} from "./chatCreationInterpret.js";
+import {
   buildMidiaSearchBlob,
   rowMatchesProductSpec,
   scorePhraseAgainstBlob,
@@ -262,12 +270,26 @@ function campaignEmptyHint(campanhaTipo) {
  * @param {string | null} beneficio
  * @param {import("./chatIntent.js").CampanhaTipo} [campanhaTipo]
  */
-function formatPromoAcervoAnswer(rows, nomeFantasia, attr, filtro, beneficio, campanhaTipo) {
+function formatPromoAcervoAnswer(
+  rows,
+  nomeFantasia,
+  attr,
+  filtro,
+  beneficio,
+  campanhaTipo,
+  question = "",
+) {
   const marca = nomeFantasia ? ` da ${nomeFantasia}` : "";
   const rotulo = String(attr || "").trim();
   const imgs = filterRowsForList(rows, filtro);
   const rawLabels = [...new Set(imgs.map(midiaProductLabel))];
   const labels = filterDisplayProductLabels(rawLabels).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  if (labels.length && question && hasRichCreationBrief(question)) {
+    const state = deriveCreationStateFromHistory([], question);
+    if (!state.produto && rotulo) state.produto = rotulo;
+    return formatCreationBriefAck(state, labels.length === 1 ? labels[0] : rotulo || labels[0]);
+  }
 
   const intro = campaignIntroLine(campanhaTipo, rotulo, beneficio);
 
@@ -289,7 +311,7 @@ function formatPromoAcervoAnswer(rows, nomeFantasia, attr, filtro, beneficio, ca
   return (
     `${intro} No acervo${marca}, ${campaignItemsLine(campanhaTipo, qtd)}:\n\n` +
     `${bullets}\n\n` +
-    "Quer que eu monte a arte do post com eles? Descreva o visual ou confirme no resumo do painel."
+    "Quer que eu monte a arte do post com eles? Confirme no resumo do painel — a mídia do acervo já está selecionada."
   );
 }
 
@@ -301,6 +323,7 @@ function formatPromoAcervoAnswer(rows, nomeFantasia, attr, filtro, beneficio, ca
  *   db: import("@supabase/supabase-js").SupabaseClient,
  *   nomeFantasia?: string | null,
  *   midias?: Array<Record<string, unknown>>,
+ *   referenceMidiaIds?: string[],
  *   classifyIntent?: typeof classifyChatAcervoIntent,
  * }} opts
  * @returns {Promise<string | null>}
@@ -325,8 +348,66 @@ export async function tryChatAcervoResponse(opts) {
     ? opts.midias
     : await loadMidiasEmpresaResumo(db, idEmpresa, 200);
 
+  const attachmentIds = mergeReferenceMidiaIdsFromSlashText(
+    opts.referenceMidiaIds,
+    [...(Array.isArray(opts.history) ? opts.history : []), { role: "user", content: question }],
+    midias,
+  );
+  const attachedRows = attachmentIds.length
+    ? imagensAcervo(midias).filter((r) => attachmentIds.includes(String(r?.id_midia || "").trim()))
+    : [];
+
   const classify = opts.classifyIntent || classifyChatAcervoIntent;
-  const { kind, termo, filtro, beneficio, campanhaTipo } = classify(question, opts.history || []);
+  let { kind, termo, filtro, beneficio, campanhaTipo } = classify(question, opts.history || []);
+  const historyForBrief = Array.isArray(opts.history) ? opts.history : [];
+
+  // Mídia explícita do slash/menu: nunca listar o acervo inteiro.
+  if (attachedRows.length) {
+    const labels = [...new Set(attachedRows.map(midiaProductLabel))];
+    const rotulo =
+      labels.length === 1
+        ? labels[0]
+        : labels.length <= 3
+          ? formatProductNamesPt(labels)
+          : `${labels.length} itens selecionados`;
+    const nome = labels.length === 1 ? labels[0] : rotulo;
+
+    // Briefing já veio junto com a mídia → não pedir descrição manual do produto.
+    if (shouldPreferImageBriefingOverAcervo(question, historyForBrief) || hasRichCreationBrief(question, historyForBrief)) {
+      const state = deriveCreationStateFromHistory(historyForBrief, question);
+      return formatCreationBriefAck(state, nome);
+    }
+
+    if (isBareProductSelection(question) || kind === "NONE") {
+      if (isBareProductSelection(question) || (!beneficio && kind === "NONE")) {
+        return `${nome} selecionado.`;
+      }
+    }
+
+    if (kind === "NONE") {
+      kind = "USO_ACERVO_PROMO";
+      campanhaTipo = campanhaTipo || "promocao";
+    }
+    termo = rotulo;
+    filtro = null;
+    if (kind === "USO_ACERVO_PROMO") {
+      return formatPromoAcervoAnswer(
+        attachedRows,
+        nomeFantasia || null,
+        termo,
+        null,
+        beneficio ?? null,
+        campanhaTipo,
+        question,
+      );
+    }
+    if (kind === "LISTAR_PRODUTOS") {
+      return formatListAnswer(attachedRows, nomeFantasia || null, termo, null);
+    }
+    if (kind === "INFO_PRODUTO") {
+      return formatInfoAnswer(attachedRows, termo, nomeFantasia || null);
+    }
+  }
 
   if (kind === "NONE") return null;
 
@@ -338,6 +419,7 @@ export async function tryChatAcervoResponse(opts) {
       filtro ?? null,
       beneficio ?? null,
       campanhaTipo,
+      question,
     );
   }
 

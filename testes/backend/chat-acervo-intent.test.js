@@ -4,6 +4,7 @@ import {
   classifyChatAcervoIntent,
   historySuggestsCatalogListing,
   isPostModelosQuestion,
+  extractAcervoListFilter,
 } from "../../backend/src/services/chatIntent.js";
 
 const CATALOG_HISTORY = [
@@ -76,6 +77,46 @@ describe("chat acervo intent", () => {
     assert.equal(r.campanhaTipo, "lancamento");
     assert.equal(r.filtro?.mode, "specific");
     assert.ok(r.filtro?.specificPhrases?.some((p) => /pro force morango/i.test(p)));
+  });
+
+  it("promo powerade + halloween + chip de arquivo — filtra só powerade", () => {
+    const q =
+      "preciso de uma foto da fyt de promoção do produto /powerade.png--eaa8db0b-64ff-4b74-92d2-f2 , a promoção vai ser de halloween";
+    // Foto + tema: vai para briefing de arte (não dump de catálogo).
+    const r = classifyChatAcervoIntent(q);
+    assert.equal(r.kind, "NONE");
+    const f = extractAcervoListFilter(q);
+    assert.ok(f);
+    const terms = [...(f.genericTerms || []), ...(f.specificPhrases || [])];
+    assert.ok(terms.some((t) => /powerade/i.test(t)));
+    assert.ok(!terms.some((t) => /halloween|eaa8/i.test(t)));
+  });
+
+  it("monta post de promocao do powerade — não zera filtro", () => {
+    const r = classifyChatAcervoIntent("monta um post de promocao do powerade");
+    assert.equal(r.kind, "USO_ACERVO_PROMO");
+    assert.match(r.termo || "", /powerade/i);
+    assert.ok(r.filtro);
+  });
+
+  it("reference_midia_ids: responde só a mídia anexada", async () => {
+    const powerId = "eaa8db0b-64ff-4b74-92d2-f21111111111";
+    const midias = [
+      { id_midia: powerId, tipo_midia: "imagem", nome_exibicao: "Powerade" },
+      { id_midia: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", tipo_midia: "imagem", nome_exibicao: "creatina growth" },
+      { id_midia: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", tipo_midia: "imagem", nome_exibicao: "whey de chocolate" },
+    ];
+    const ans = await tryChatAcervoResponse({
+      question: "promoção de halloween com esse produto",
+      idEmpresa: "00000000-0000-0000-0000-000000000001",
+      nomeFantasia: "FYT",
+      midias,
+      referenceMidiaIds: [powerId],
+      classifyIntent: classifyChatAcervoIntent,
+    });
+    assert.match(ans || "", /Powerade/i);
+    assert.doesNotMatch(ans || "", /creatina growth/i);
+    assert.doesNotMatch(ans || "", /whey de chocolate/i);
   });
 
   it("destaque: divulgar linha whey growth", () => {

@@ -89,6 +89,22 @@ export function slashChipDisplayLabel(chip) {
 }
 
 /**
+ * Label curto do chip de mídia (sem sufixo de UUID do storage).
+ * @param {string} raw
+ */
+export function slugifySlashMidiaLabel(raw) {
+  return String(raw ?? "midia")
+    .toLowerCase()
+    .replace(/\.(png|jpe?g|webp|gif|avif|bmp|svg)(?:-{1,2}[0-9a-f][0-9a-f-]{5,})?$/i, "")
+    .replace(/--[0-9a-f-]{6,}$/i, "")
+    .replace(/\s+/g, "-")
+    .replace(/[^\w.-]+/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 36);
+}
+
+/**
  * @param {SlashChip[]} chips
  * @returns {Array<{ label: string }>}
  */

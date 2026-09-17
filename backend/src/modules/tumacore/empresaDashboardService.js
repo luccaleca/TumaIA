@@ -1,10 +1,15 @@
 import { getSupabaseAdmin } from "../../supabaseAdmin.js";
+import { resolveDashboardRange } from "../plataforma/dateRange.js";
 import {
-  dayKeyFromIso,
-  resolveDashboardRange,
-  shiftYmd,
-  ymdFromInstant,
-} from "../plataforma/dateRange.js";
+  buildConversasRecentes,
+  buildCriacoesRecentes,
+  buildDestaques,
+  buildEvolucao,
+  buildFrequencia,
+  dayListFromRange,
+  loadEmpresaPeriodActivity,
+  throwIfError,
+} from "./empresaMetricsShared.js";
 
 function requireDb() {
   const db = getSupabaseAdmin();
@@ -16,16 +21,9 @@ function requireDb() {
   return db;
 }
 
-function throwIfError(res, fallback) {
-  if (res?.error) {
-    const err = new Error(res.error.message || fallback);
-    err.status = 500;
-    throw err;
-  }
-}
-
 /**
- * Dashboard TumaCore Empresa — apenas a empresa autorizada pelo backend.
+ * Dashboard TumaCore Empresa — valor e uso do TumaIA na empresa autorizada.
+ * Só métricas com fonte no banco atual (sem Instagram / créditos inventados).
  *
  * @param {{ id_empresa: string, period?: string|number, from?: string, to?: string }} opts
  */
@@ -39,51 +37,13 @@ export async function loadEmpresaDashboard(opts) {
 
   const db = requireDb();
   const range = resolveDashboardRange(opts);
-  const { startIso, endIsoExclusive } = range;
 
-  const [
-    empresaRes,
-    membrosRes,
-    midiasTotalRes,
-    midiasPeriodoRes,
-    conversasRes,
-  ] = await Promise.all([
-    db
-      .from("empresa")
-      .select("id_empresa, nome_fantasia, segmento, ativo, data_criacao")
-      .eq("id_empresa", idEmpresa)
-      .maybeSingle(),
-    db
-      .from("usuario_empresa")
-      .select("id_usuario", { count: "exact", head: true })
-      .eq("id_empresa", idEmpresa)
-      .eq("ativo", true),
-    db
-      .from("midia")
-      .select("id_midia", { count: "exact", head: true })
-      .eq("id_empresa", idEmpresa)
-      .eq("ativo", true),
-    db
-      .from("midia")
-      .select("data_criacao")
-      .eq("id_empresa", idEmpresa)
-      .eq("ativo", true)
-      .gte("data_criacao", startIso)
-      .lt("data_criacao", endIsoExclusive)
-      .limit(5000),
-    db
-      .from("chat_conversa")
-      .select("id_conversa, data_atualizacao")
-      .eq("id_empresa", idEmpresa)
-      .eq("ativo", true)
-      .gte("data_atualizacao", startIso)
-      .lt("data_atualizacao", endIsoExclusive)
-      .limit(5000),
-  ]);
-
-  for (const r of [empresaRes, membrosRes, midiasTotalRes, midiasPeriodoRes, conversasRes]) {
-    throwIfError(r, "Falha ao agregar dashboard da empresa");
-  }
+  const empresaRes = await db
+    .from("empresa")
+    .select("id_empresa, nome_fantasia, segmento, ativo, data_criacao")
+    .eq("id_empresa", idEmpresa)
+    .maybeSingle();
+  throwIfError(empresaRes, "Falha ao carregar empresa");
 
   if (!empresaRes.data || String(empresaRes.data.id_empresa) !== idEmpresa) {
     const err = new Error("Empresa autorizada não encontrada");
@@ -91,79 +51,17 @@ export async function loadEmpresaDashboard(opts) {
     throw err;
   }
 
-  const conversas = Array.isArray(conversasRes.data) ? conversasRes.data : [];
-  const conversaIds = conversas.map((c) => String(c.id_conversa)).filter(Boolean);
+  const activity = await loadEmpresaPeriodActivity(
+    db,
+    idEmpresa,
+    range.startIso,
+    range.endIsoExclusive,
+  );
 
-  let msgsRows = [];
-  if (conversaIds.length) {
-    const mensagensRes = await db
-      .from("chat_mensagem")
-      .select("data_criacao, papel, id_conversa")
-      .in("id_conversa", conversaIds)
-      .in("papel", ["user", "assistant"])
-      .gte("data_criacao", startIso)
-      .lt("data_criacao", endIsoExclusive)
-      .limit(8000);
-    throwIfError(mensagensRes, "Falha ao agregar mensagens da empresa");
-    msgsRows = Array.isArray(mensagensRes.data) ? mensagensRes.data : [];
-  }
-
-  const midiasPeriodo = Array.isArray(midiasPeriodoRes.data) ? midiasPeriodoRes.data : [];
-
-  const midiasPorDia = new Map();
-  let ultimaAtividade = null;
-  for (const m of midiasPeriodo) {
-    const day = dayKeyFromIso(m.data_criacao);
-    if (day) midiasPorDia.set(day, (midiasPorDia.get(day) || 0) + 1);
-    if (m.data_criacao && (!ultimaAtividade || String(m.data_criacao) > String(ultimaAtividade))) {
-      ultimaAtividade = m.data_criacao;
-    }
-  }
-
-  const conversasPorDia = new Map();
-  for (const c of conversas) {
-    const day = dayKeyFromIso(c.data_atualizacao);
-    if (day) conversasPorDia.set(day, (conversasPorDia.get(day) || 0) + 1);
-    if (c.data_atualizacao && (!ultimaAtividade || String(c.data_atualizacao) > String(ultimaAtividade))) {
-      ultimaAtividade = c.data_atualizacao;
-    }
-  }
-
-  const msgsUserPorDia = new Map();
-  const msgsAssistantPorDia = new Map();
-  let msgsUser = 0;
-  let msgsAssistant = 0;
-  for (const m of msgsRows) {
-    const day = dayKeyFromIso(m.data_criacao);
-    if (m.papel === "user") {
-      msgsUser += 1;
-      if (day) msgsUserPorDia.set(day, (msgsUserPorDia.get(day) || 0) + 1);
-    } else if (m.papel === "assistant") {
-      msgsAssistant += 1;
-      if (day) msgsAssistantPorDia.set(day, (msgsAssistantPorDia.get(day) || 0) + 1);
-    }
-  }
-
-  const days = [];
-  if (range.isRolling24h) {
-    days.push(ymdFromInstant(new Date(range.startIso)), ymdFromInstant(new Date()));
-  } else {
-    let cur = range.from;
-    while (cur <= range.to) {
-      days.push(cur);
-      cur = shiftYmd(cur, 1);
-    }
-  }
-  const dayList = [...new Set(days)];
-
-  const evolucao = dayList.map((day) => ({
-    day,
-    mensagens_usuario: msgsUserPorDia.get(day) || 0,
-    mensagens_assistente: msgsAssistantPorDia.get(day) || 0,
-    midias: midiasPorDia.get(day) || 0,
-    conversas: conversasPorDia.get(day) || 0,
-  }));
-
+  const dayList = dayListFromRange(range);
+  const evolucao = buildEvolucao(dayList, activity);
+  const frequencia = buildFrequencia(dayList, activity);
+  const destaques = buildDestaques(activity, { frequencia, evolucao });
   const emp = empresaRes.data;
 
   return {
@@ -175,8 +73,8 @@ export async function loadEmpresaDashboard(opts) {
       segmento: String(emp.segmento || "").trim() || "—",
       ativo: emp.ativo !== false,
       data_criacao: emp.data_criacao || null,
-      membros: Number(membrosRes.count || 0),
-      ultima_atividade: ultimaAtividade,
+      membros: activity.membros.length,
+      ultima_atividade: activity.ultimaAtividade,
     },
     range: {
       label: range.label,
@@ -188,19 +86,25 @@ export async function loadEmpresaDashboard(opts) {
       isRolling24h: range.isRolling24h,
     },
     kpis: {
-      membros: Number(membrosRes.count || 0),
-      midias_total: Number(midiasTotalRes.count || 0),
-      midias_periodo: midiasPeriodo.length,
-      conversas_periodo: conversas.length,
-      mensagens_usuario_periodo: msgsUser,
-      mensagens_assistente_periodo: msgsAssistant,
+      conteudos_gerados: activity.conteudosGerados.length,
+      conversas: activity.conversas.length,
+      mensagens_usuario: activity.msgsUser,
+      mensagens_assistente: activity.msgsAssistant,
+      midias_acervo: activity.midiasAcervoTotal,
+      membros: activity.membros.length,
     },
-    fluxo: {
-      mensagens_usuario: msgsUser,
-      mensagens_assistente: msgsAssistant,
-      midias: midiasPeriodo.length,
-      conversas: conversas.length,
-    },
+    frequencia,
     evolucao,
+    destaques,
+    criacoes_recentes: buildCriacoesRecentes(activity, 8),
+    conversas_recentes: buildConversasRecentes(activity, 6),
+    metricas_indisponiveis: [
+      "aprovados",
+      "rejeitados",
+      "publicados",
+      "pendentes_aprovacao",
+      "creditos",
+      "playbooks",
+    ],
   };
 }

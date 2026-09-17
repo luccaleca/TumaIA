@@ -14,13 +14,12 @@
     "test:replicate:smoke": "node scripts/run-replicate-smoke.mjs"
   },
   "dependencies": {
-    "tuma-cloud-chat-sdk": "npm:@cursor/sdk@^1.0.22",
     "@supabase/supabase-js": "^2.49.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "pg": "^8.20.0",
     "sharp": "^0.34.5",
+    "tuma-cloud-chat-sdk": "npm:@cursor/sdk@^1.0.22",
     "zod": "^3.24.2"
   }
 }

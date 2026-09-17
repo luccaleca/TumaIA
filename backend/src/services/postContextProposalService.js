@@ -25,24 +25,15 @@ import {
   resolveActivePedidoHint,
   resolvePedidoCliente,
 } from "./imageHeadline.js";
-import { pickBestProductMidiaId, pickHeroProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
-import {
-  applyProductMediaGate,
-  extractProductMentions,
-  narrowImageRowsByProductMention,
-  parseProductMentionSpec,
-  scoreRowForProductSpec,
-  pruneProposalMidiasToPedido,
-  reconcileProposalMidias,
-  resolveMidiaRowsForPedido,
-  scoreRowProductMention,
-} from "./productMentionMatch.js";
+import { pickHeroProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
+import { applyProductMediaGate, buildCreationProductCandidate, pickCreationUserMessage, resolveProductFromAcervo } from "./productAcervoResolve.js";
 import {
   extractPedidoCampanhaLabels,
 } from "./cadastroMeaningful.js";
 import { applyBriefingGate, listMissingBriefingSlots } from "./postBriefingSlots.js";
 import { buildArteBriefFromHistory, mergeArteBriefUserEdits } from "./rawImageArteBrief.js";
 import { tryDetectFormatPresetFromText } from "./arteFormatPresets.js";
+import { mergeReferenceMidiaIdsFromSlashText } from "./chatCreationInterpret.js";
 import { TUMA_IA_REGRAS_RESUMO_IMAGEM } from "./tumaIaRegrasResumo.js";
 
 const linkItemSchema = z.object({
@@ -285,8 +276,20 @@ function pickBestCampaignContext(_contextoRows, _userHint = "") {
   return null;
 }
 
-function pickReferencedMidias(midiaRows, userHint = "", limit = 3) {
-  return resolveMidiaRowsForPedido(midiaRows, userHint, limit);
+function pickReferencedMidias(midiaRows, userHint = "", limit = 3, history = []) {
+  const message = pickCreationUserMessage(history, userHint);
+  const resolved = resolveProductFromAcervo(
+    buildCreationProductCandidate({
+      message: message || String(userHint || "").trim(),
+      midiaRows,
+      entities: {},
+    }),
+    midiaRows,
+  );
+  if (resolved.status === "matched") {
+    return resolved.matches.slice(0, limit);
+  }
+  return [];
 }
 
 function buildHeroProductSelection(rows, userHint = "", fallbackToFirst = false) {
@@ -625,9 +628,15 @@ function mergeChatAttachmentMidiasIntoProposal(proposal, attachmentIds, midiaRow
   return p;
 }
 
-function ensureProposalMidiasReferenced(proposal, midiaRows, userHint) {
+function ensureProposalMidiasReferenced(proposal, midiaRows, userHint, history = []) {
   const p = proposal && typeof proposal === "object" ? { ...proposal } : {};
-  const picked = pickReferencedMidias(midiaRows, userHint, 3);
+  if (p.product_media_status === "matched" && Array.isArray(p.midias_referenced) && p.midias_referenced.length) {
+    return p;
+  }
+  if (p.product_media_status === "missing" || p.product_media_status === "ambiguous") {
+    return p;
+  }
+  const picked = pickReferencedMidias(midiaRows, userHint, 3, history);
   if (!picked.length) return p;
   p.midias_referenced = picked.map((row) => ({
     id_midia: String(row.id_midia ?? "").trim(),
@@ -677,15 +686,29 @@ function finalizePostContextProposal(proposal, midiaRows, history, userHint, cad
   if (!String(p.intent_summary ?? "").trim() && hint) {
     p.intent_summary = hint.slice(0, 500);
   }
-  const productMissing = p.product_media_status === "missing";
-  if (productMissing) {
+  const status = String(p.product_media_status ?? "").trim();
+  const productBlocked = status === "missing" || status === "ambiguous";
+  if (productBlocked) {
     p.midias_referenced = [];
     p.hero_product = null;
-  } else {
-    p = reconcileProposalMidias(p, midiaRows, hint);
-    p = ensureProposalMidiasReferenced(p, midiaRows, hint);
+  } else if (status === "matched" && Array.isArray(p.midias_referenced) && p.midias_referenced.length) {
+    // Já resolvido pelo gate semântico — não reabrir busca por hint composto.
     p = normalizeMidiasReferencedRows(p, midiaRows);
     p.hero_product = normalizeHeroProductSelection(p.hero_product, p.midias_referenced);
+  } else if (status === "not_requested") {
+    p = normalizeMidiasReferencedRows(p, midiaRows);
+    p.hero_product = normalizeHeroProductSelection(p.hero_product, p.midias_referenced);
+  } else {
+    // Sem status do gate: resolve pelo mesmo motor (mensagem ∩ acervo), nunca bag-of-words criativo.
+    const gate = applyProductMediaGate(p, midiaRows, userHint, history);
+    p = gate.proposal;
+    if (p.product_media_status === "matched") {
+      p = normalizeMidiasReferencedRows(p, midiaRows);
+      p.hero_product = normalizeHeroProductSelection(p.hero_product, p.midias_referenced);
+    } else if (p.product_media_status === "missing" || p.product_media_status === "ambiguous") {
+      p.midias_referenced = [];
+      p.hero_product = null;
+    }
   }
   const mandatoryFacts = collectMandatoryImageFacts(history, p);
   if (Object.keys(mandatoryFacts).length) {
@@ -770,7 +793,7 @@ function buildFallbackProposalFromPanel(history, contextoRows, midiaRows, empres
   const hint = resolveActivePedidoHint(history);
   const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   const ctx = pickBestCampaignContext(contextoRows, hint);
-  const midias = pickReferencedMidias(midiaRows, hint, 3);
+  const midias = pickReferencedMidias(midiaRows, hint, 3, history);
   const frase = deriveFraseNaImagemFromHistory(history, contextoRows);
   const links = [];
   if (ctx) {
@@ -947,9 +970,6 @@ export async function generatePostContextProposal(opts) {
     attachmentMidiaIds = [],
     focusContextoId = null,
   } = opts;
-  const attachmentIds = Array.isArray(attachmentMidiaIds)
-    ? attachmentMidiaIds.map((x) => String(x || "").trim()).filter(Boolean)
-    : [];
   const focusId = String(focusContextoId ?? "").trim() || null;
 
   if ((env.IMAGE_PIPELINE || "raw") === "raw") {
@@ -958,6 +978,11 @@ export async function generatePostContextProposal(opts) {
       loadMidiasEmpresaResumo(db, idEmpresa, 72),
       loadEmpresaResumoParaImagem(db, idEmpresa),
     ]);
+    const attachmentIds = mergeReferenceMidiaIdsFromSlashText(
+      attachmentMidiaIds,
+      history,
+      midiaRows,
+    );
     const { identidadeDados } = partitionContextosIdentidade(contextoRows);
     const brandColors = identidadeDados ? allBrandColorsFromIdentidade(identidadeDados) : [];
     const raw = buildFallbackProposalFromPanel(
@@ -1204,6 +1229,11 @@ ${formatMidiasForLlm(midiaRows)}
     post_context_proposal.frase_na_imagem = "";
   }
 
+  const attachmentIds = mergeReferenceMidiaIdsFromSlashText(
+    attachmentMidiaIds,
+    history,
+    midiaRows,
+  );
   post_context_proposal = mergeChatAttachmentMidiasIntoProposal(
     post_context_proposal,
     attachmentIds,

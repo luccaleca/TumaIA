@@ -1,7 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  applyProductMediaGate,
   extractProductMentions,
   filterReferenceMidiaIdsToPedido,
   parseProductMentionSpec,
@@ -10,6 +9,7 @@ import {
   narrowImageRowsByProductMention,
   reconcileProposalMidias,
 } from "../../backend/src/services/productMentionMatch.js";
+import { applyProductMediaGate } from "../../backend/src/services/productAcervoResolve.js";
 import {
   buildResumoVisual,
   deriveFraseNaImagemFromHistory,
@@ -331,14 +331,15 @@ describe("productMentionMatch — whey de * no acervo", () => {
     assert.equal(pool.length, 3);
   });
 
-  it("mensagem de falta usa rotulo whey sabor, nao whey growth", () => {
+  it("produto ausente no acervo bloqueia sem inventar marca", () => {
     const gate = applyProductMediaGate(
       { midias_referenced: [] },
-      [WHEY_DE_ROWS[0]],
-      PEDIDO_TRES_WHEYS_DE,
+      WHEY_DE_ROWS,
+      "quero arte do unicornio galactico que cadastrei",
     );
     assert.equal(gate.blocked, true);
-    assert.match(gate.confirmation_message, /whey chocolate/i);
-    assert.doesNotMatch(gate.confirmation_message, /whey growth chocolate/i);
+    assert.equal(gate.proposal.product_media_status, "missing");
+    assert.doesNotMatch(String(gate.confirmation_message || ""), /whey growth/i);
+    assert.match(String(gate.confirmation_message || ""), /não encontrei|nao encontrei|mídias|midias|unicornio/i);
   });
 });

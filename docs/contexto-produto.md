@@ -4,7 +4,7 @@
 
 TumaIA é um SaaS voltado para PMEs que precisam manter presença ativa no Instagram sem depender de um fluxo manual de criação. A proposta central é transformar pedidos simples — principalmente pelo **WhatsApp** — em posts prontos para aprovação e publicação.
 
-O produto é **WhatsApp-first**: o canal principal de entrada para o usuário final é a conversa. O **painel web** existe como retaguarda para configurar marca, catálogo, mídias, contextos e revisar o fluxo de arte.
+O produto é **WhatsApp-first**: o canal principal de entrada para o usuário final é a conversa. O **painel web** existe como retaguarda para configurar marca, catálogo, mídias e revisar o fluxo de arte.
 
 ## Problema que o produto resolve
 
@@ -25,14 +25,14 @@ flowchart LR
   PAINEL[Painel Next.js]
   API[Backend Express]
   SB[(Supabase)]
-  PY[Worker Python RAG]
+  AGENTE[Agente Node]
   IMG[Geração de imagem]
   N8N[n8n Instagram]
 
   WA -->|WPPConnect webhook| API
   PAINEL -->|JWT| API
   API --> SB
-  API --> PY
+  API --> AGENTE
   API --> IMG
   API -->|publicar| N8N
   N8N --> IG[Instagram]
@@ -40,20 +40,20 @@ flowchart LR
 
 1. O usuário pede um post no **WhatsApp** ou no **painel** (chat).
 2. O sistema identifica a **empresa** (telefone + workspace ativo no WhatsApp; JWT + `id_empresa` no painel).
-3. Consulta **contexto da marca** no Supabase: identidade, campanhas, mídias do acervo.
-4. A **Tuma** (IA) conversa, monta briefing e **proposta de post** quando o pedido é explícito.
+3. Consulta **identidade da marca** e mídias do acervo no Supabase.
+4. A **Tuma** (agente) conversa, monta briefing e **proposta de post** quando o pedido é explícito.
 5. O usuário confirma e pede **gerar imagem** → provedor configurado (OpenAI gpt-image-2 ou Replicate).
 6. Gera **legenda e hashtags** alinhadas ao pedido e à marca.
 7. Usuário aprova ou pede ajustes (comandos no WhatsApp ou UI no painel).
 8. **Publicação no Instagram** via webhook n8n (quando configurado).
 
-> **Nota:** O fluxo pode passar por n8n em produção para WhatsApp oficial ou orquestração extra. Em desenvolvimento, o caminho direto **WPPConnect → backend** já está implementado.
+> **Nota:** Em desenvolvimento, o caminho direto **WPPConnect → backend** já está implementado. O worker Python/RAG é legado e fica fora do caminho feliz (`TUMAIA_NODE_CHAT=true`).
 
 ## Exemplo de pedido
 
 `Post de camiseta azul para promoção de inverno, tom moderno e hashtags para público jovem.`
 
-O valor está em enriquecer o pedido com o **contexto já cadastrado** (cores, logo, produtos em Mídias, modelos de post) antes de chamar a IA.
+O valor está em enriquecer o pedido com o **contexto já cadastrado** (cores, logo, produtos em Mídias) antes de chamar a IA.
 
 ## Papel de cada parte
 
@@ -63,39 +63,36 @@ Canal principal de solicitação e entrega. Comandos de texto (`gerar imagem`, `
 
 ### Painel Next.js
 
-Cadastro, identidade de marca, acervo de mídias, chat persistido, fluxo visual de arte (briefing, prévia, legenda, publicar).
+Cadastro, identidade de marca, acervo de mídias, chat persistido, fluxo visual de arte (briefing, prévia, legenda, publicar). Área **TumaCore** (ops) só para dono da plataforma.
 
 ### Backend Express
 
-Autenticação, multi-tenant, rotas `/ia`, `/chat`, `/empresas`, webhooks `/internal` e `/wppconnect`, orquestração Node + subprocesso Python.
+Autenticação, multi-tenant, rotas `/ia`, `/chat`, `/empresas`, `/plataforma`, webhooks `/internal` e `/wppconnect`, orquestração do agente em Node.
 
 ### Supabase
 
-Fonte de verdade: empresas, usuários, contextos, mídias, conversas, storage de imagens geradas.
+Fonte de verdade: empresas, usuários, identidade, mídias, conversas, storage de imagens geradas.
 
 ### IA (Tuma)
 
-- **Chat conversacional** — worker Python com RAG (Chroma + Ollama por padrão).
+- **Chat conversacional** — motor Node (`TUMAIA_NODE_CHAT=true`) com LLM cloud ou Ollama.
 - **Roteamento de intenção** — Node decide conversa vs fluxo de arte (`tumaInterpretation`, `processChatMessage`).
-- **Proposta e legenda** — serviços Node com LLM (Ollama / Replicate / OpenAI conforme env).
-- **Imagem** — OpenAI ou Replicate, com referências do acervo quando aplicável.
+- **Proposta e legenda** — serviços Node com LLM conforme env.
+- **Imagem** — GPT Image 2 / Replicate com referências do acervo.
 
 ### n8n
 
-Opcional: automação externa, publicação Instagram (`N8N_INSTAGRAM_WEBHOOK_URL`), integrações que usam `/internal/*`.
+Opcional: publicação Instagram (`N8N_INSTAGRAM_WEBHOOK_URL`) e integrações `/internal/*`.
 
-## O que outra IA deve assumir
+## O que outra pessoa deve assumir
 
 - Não é só gerador de imagem: é fluxo de marketing para Instagram.
-- WhatsApp é canal principal; painel configura e mantém contexto.
+- WhatsApp é canal principal; painel configura e mantém a marca.
 - **Aprovação** faz parte do fluxo — não publicar sem confirmação.
-- Contexto de marca é central para qualidade.
+- Identidade da marca + acervo são centrais para qualidade.
 - Detalhes técnicos atuais: [`stack-e-estado-atual.md`](./stack-e-estado-atual.md).
 
 ## Implementação vs visão de produto
 
-O repositório evolui com provedores e experimentos (FLUX legado, múltiplos `TEXT_PROVIDER`). Ao codar:
-
-- use [`stack-e-estado-atual.md`](./stack-e-estado-atual.md) para o que **existe**;
-- use este documento para o **porquê** de produto;
-- quando houver divergência, documente ambos explicitamente.
+- use [`stack-e-estado-atual.md`](./stack-e-estado-atual.md) e [`tcc-arquitetura.md`](./tcc-arquitetura.md) para o que **existe**;
+- use este documento para o **porquê** de produto.

@@ -6,6 +6,27 @@ export const ACERVO_SUPLEMENTOS = [
   { id: "creatina-max", nome_exibicao: "creatina max", nome_arquivo: "creatina-max.png", tipo_midia: "imagem" },
   { id: "creatina-growth", nome_exibicao: "creatina growth", nome_arquivo: "creatina-growth.png", tipo_midia: "imagem" },
   { id: "creatina-integral", nome_exibicao: "creatina integral", nome_arquivo: "creatina-integral.png", tipo_midia: "imagem" },
+  {
+    id: "creatina-limao",
+    nome_exibicao: "creatina limao",
+    nome_arquivo: "creatina-limao.png",
+    descricao: "creatina sabor limao",
+    tipo_midia: "imagem",
+  },
+  {
+    id: "creatina-300g",
+    nome_exibicao: "creatina 300g",
+    nome_arquivo: "creatina-300g.png",
+    alt_text: "pote creatina 300g",
+    tipo_midia: "imagem",
+  },
+  {
+    id: "pre-azul",
+    nome_exibicao: "pre-treino azul",
+    nome_arquivo: "pre-treino-azul.png",
+    descricao: "pre treino embalagem azul",
+    tipo_midia: "imagem",
+  },
   { id: "monster", nome_exibicao: "Monster Energy 473ml", nome_arquivo: "monster-energy-lata.png", tipo_midia: "imagem" },
   { id: "pf-morango", nome_exibicao: "pro force morango", nome_arquivo: "pro-force-morango.png", tipo_midia: "imagem" },
   { id: "pf-chocolate", nome_exibicao: "pro force chocolate", nome_arquivo: "pro-force-chocolate.png", tipo_midia: "imagem" },
@@ -22,7 +43,7 @@ export const ACERVO_SUPLEMENTOS = [
 ];
 
 export const GRUPOS = {
-  creatinas: ["creatina-max", "creatina-growth", "creatina-integral"],
+  creatinas: ["creatina-max", "creatina-growth", "creatina-integral", "creatina-limao", "creatina-300g"],
   monster: ["monster"],
   proForce: ["pf-morango", "pf-chocolate", "pf-cookies", "pf-kit4", "pf-cafe"],
   barras: ["barra-dark", "barra-canela", "barra-branco", "barra-avela"],

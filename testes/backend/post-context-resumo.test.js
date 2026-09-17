@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildResumoVisual, looksLikeRawUserCopy } from "../../backend/src/services/imageHeadline.js";
 import { resolvePostSupplementLinks } from "../../backend/src/services/postContextProposalService.js";
-import { applyProductMediaGate } from "../../backend/src/services/productMentionMatch.js";
+import { applyProductMediaGate } from "../../backend/src/services/productAcervoResolve.js";
 
 const PEDIDO =
   "quero um post de promoção dos monster de 15 por 9, bem chamativo, só para academias";

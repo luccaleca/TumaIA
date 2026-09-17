@@ -1,3 +1,8 @@
+import {
+  looksLikeYoutubePointerThumbnail,
+  youtubePointerThumbnailPromptBlock,
+} from "./youtubeThumbnailLayout.js";
+
 /**
  * Espelha o fluxo documentado da OpenAI para gpt-image-2:
  * POST /v1/images/edits — vários `image[]` + um prompt em bloco único.
@@ -93,7 +98,11 @@ export function buildOfficialGptImage2Prompt(ctx = {}) {
     nomeFantasia ? `Brand: ${nomeFantasia}.` : "",
   ].filter(Boolean);
 
-  return parts.join(" ").replace(/\s+/g, " ").trim().slice(0, 32_000);
+  let prompt = parts.join(" ").replace(/\s+/g, " ").trim();
+  if (looksLikeYoutubePointerThumbnail(`${pedido}\n${frase}`)) {
+    prompt = `${prompt}\n\n${youtubePointerThumbnailPromptBlock({ fraseNaImagem: frase, pedido })}`;
+  }
+  return prompt.trim().slice(0, 32_000);
 }
 
 /**

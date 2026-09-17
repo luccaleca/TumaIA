@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   getImageProductMode,
+  isLegacyCollageProductMode,
   usesGptIntegratedProducts,
   usesGptRefineAfterCollage,
   usesSharpProductCollage,
@@ -20,8 +21,14 @@ describe("image product delivery modes", () => {
 
   it("collage_refine: Sharp depois refinamento", () => {
     assert.equal(usesSharpProductCollage("collage_refine"), true);
+    assert.equal(isLegacyCollageProductMode("collage_refine"), true);
     assert.equal(usesGptRefineAfterCollage("collage_refine"), true);
     assert.equal(usesGptIntegratedProducts("collage_refine"), false);
+  });
+
+  it("isLegacyCollageProductMode marca só collage*", () => {
+    assert.equal(isLegacyCollageProductMode("gpt_integrated"), false);
+    assert.equal(isLegacyCollageProductMode("collage"), true);
   });
 
   it("prompt integrado cita referências e preservação de embalagem", () => {

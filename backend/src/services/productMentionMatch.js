@@ -65,6 +65,42 @@ const PRODUCT_MENTION_STOP = new Set([
   "aqui",
   "agora",
   "hoje",
+  "photorealistic",
+  "fotorealista",
+  "realistic",
+  "realista",
+  "minimal",
+  "minimalista",
+  "clean",
+  "premium",
+  "luxury",
+  "luxo",
+  "editorial",
+  "lifestyle",
+  "hero",
+  "showcase",
+  "cinematic",
+  "studio",
+  "estudio",
+  "dramatic",
+  "dramatico",
+  "natural",
+  "commercial",
+  "comercial",
+  "catalog",
+  "catalogo",
+  "elegante",
+  "moderno",
+  "moderna",
+  "profissional",
+  "fundo",
+  "background",
+  "neon",
+  "gradiente",
+  "estilo",
+  "visual",
+  "bonito",
+  "bonita",
 ]);
 
 /** Linha + sabor/variante explícitos no pedido → só esses PNGs (não todas as creatinas). */
@@ -1587,38 +1623,4 @@ export function filterReferenceMidiaIdsToPedido(ids, midiaRows, pedidoHint) {
     const row = byId.get(String(id ?? "").trim());
     return row ? rowMatchesProductSpec(row, spec, 35) : false;
   });
-}
-
-/**
- * @param {Record<string, unknown>} proposal
- * @param {Array<Record<string, unknown>>} midiaRows
- * @param {string} userHint
- * @param {Array<{ role: string, content: string }>} [history]
- */
-export function applyProductMediaGate(proposal, midiaRows, userHint, _history = []) {
-  let p = reconcileProposalMidias(proposal, midiaRows, userHint);
-  p = pruneProposalMidiasToPedido(p, midiaRows, userHint);
-  const check = checkProductMediaAvailability(userHint, midiaRows);
-
-  if (!check.missing) {
-    p.product_media_status = check.mentions.length ? "matched" : "not_requested";
-    if (check.mentions.length) p.products_requested = check.mentions;
-    return { proposal: p, blocked: false };
-  }
-
-  p.midias_referenced = [];
-  p.hero_product = null;
-  p.products_requested = check.mentions;
-  p.product_media_status = "missing";
-  p.frase_na_imagem = "";
-  if (p.facts_for_image && typeof p.facts_for_image === "object") {
-    delete p.facts_for_image.frase_na_imagem;
-  }
-
-  return {
-    proposal: p,
-    blocked: true,
-    confirmation_message: buildMissingProductMediaMessage(check.mentions),
-    missing_slots: ["midia_acervo"],
-  };
 }

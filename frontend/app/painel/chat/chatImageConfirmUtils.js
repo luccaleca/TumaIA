@@ -184,16 +184,6 @@ export function patchMessageContextoSelection(msg, ctxId, contextosCampanha) {
     row.schema_json && typeof row.schema_json === "object" && row.schema_json.tipo
       ? String(row.schema_json.tipo)
       : "";
-  const modeloSlug =
-    row.schema_json &&
-    typeof row.schema_json === "object" &&
-    typeof row.schema_json.playbook_slug === "string"
-      ? row.schema_json.playbook_slug.trim()
-      : row.dados_json &&
-          typeof row.dados_json === "object" &&
-          typeof row.dados_json.playbook_slug === "string"
-        ? row.dados_json.playbook_slug.trim()
-        : "";
   const rowId = row.id_contexto_empresa ?? row.id_empresa_modelo_post;
   const proposal = {
     ...(msg.post_supplement.post_context_proposal &&
@@ -214,9 +204,7 @@ export function patchMessageContextoSelection(msg, ctxId, contextosCampanha) {
     kind: "contexto",
     id: rowId,
     label: nome,
-    href: modeloSlug
-      ? `/painel/contextos?modelo=${encodeURIComponent(modeloSlug)}`
-      : `/painel/contextos?contexto=${encodeURIComponent(String(rowId))}`,
+    href: `/painel/empresa`,
   });
   return {
     ...msg,

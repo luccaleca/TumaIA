@@ -4,6 +4,11 @@
 
 import { isIdentityOrMetaQuestion } from "./chatOffTopic.js";
 import { parseProductMentionSpec } from "./productMentionMatch.js";
+import {
+  isVisualStyleTerm,
+  shouldSkipAcervoForCreationFollowUp,
+  stripCreationNoiseForProductSearch,
+} from "./chatCreationInterpret.js";
 
 /** Adjetivos de status — não são nomes de produto no acervo. */
 const ACERVO_STATUS_WORDS = new Set([
@@ -220,12 +225,40 @@ function wantsFilteredProductList(raw, history = []) {
 }
 
 /**
+ * Remove ruído de chip/arquivo e temas de data que não são produto do acervo.
+ * Ex.: `/powerade.png--eaa8db0b-…` → `powerade`
+ * @param {string} raw
+ */
+export function scrubAcervoNoiseText(raw) {
+  // Estilo/tema/preço nunca entram na busca de produto.
+  const stripped = stripCreationNoiseForProductSearch(raw);
+  if (stripped) return stripped;
+  return String(raw || "")
+    .replace(
+      /\/([^\s/]+?)\.(?:png|jpe?g|webp|gif|avif|bmp|svg)(?:-{1,2}[0-9a-f][0-9a-f-]{5,})?/gi,
+      (_, name) => ` ${String(name).replace(/[-_]+/g, " ")} `,
+    )
+    .replace(/(^|\s)\/([a-z0-9][\w-]{1,40})\b/gi, (_, sp, name) => `${sp}${name} `)
+    .replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){1,4}[0-9a-f]*\b/gi, " ")
+    .replace(
+      /\b(halloween|hallowen|natal|pascoa|páscoa|black\s*friday|dia\s+dos?\s+\w+|comemorativ\w*)\b/gi,
+      " ",
+    )
+    .replace(
+      /\b(monta|montar|cria|criar|gera|gerar|preciso|precisa|foto|fotos|arte|post|banner|valor|preco|preço|photorealistic|premium|clean|minimal|lifestyle|cinematic)\b/gi,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Filtro de listagem quando o usuário pede produtos de uma linha/marca específica.
  * @param {string} question
  * @returns {ReturnType<typeof parseProductMentionSpec> | null}
  */
 export function extractAcervoListFilter(question) {
-  const raw = String(question || "").trim();
+  const raw = scrubAcervoNoiseText(question);
   if (!raw) return null;
 
   const spec = parseProductMentionSpec(raw);
@@ -260,13 +293,79 @@ export function extractAcervoListFilter(question) {
     "qual",
     "disponivel",
     "disponiveis",
+    "monta",
+    "montar",
+    "cria",
+    "criar",
+    "gera",
+    "gerar",
+    "preciso",
+    "precisa",
+    "halloween",
+    "hallowen",
+    "natal",
+    "pascoa",
+    "promocao",
+    "promocional",
+    "campanha",
+    "oferta",
+    "desconto",
+    "fyt",
+    "tuma",
+    "consegue",
+    "conseguem",
+    "fazer",
+    "faz",
+    "entram",
+    "entra",
+    "coloca",
+    "colocamos",
+    "sera",
+    "serao",
+    "todos",
+    "todas",
+    "gente",
+    "insta",
+    "instagram",
+    "entao",
+    "assim",
+    "voce",
+    "voces",
+    "nessa",
+    "nesse",
+    "desta",
+    "deste",
+  ]);
+
+  /** Preferência de produto conhecido sobre verbo residual. */
+  const PRODUCT_PREF = new Set([
+    "powerade",
+    "creatina",
+    "whey",
+    "monster",
+    "chocolate",
+    "morango",
+    "baunilha",
+    "cookie",
+    "cookies",
+    "cafe",
+    "canela",
+    "naked",
+    "wafer",
   ]);
 
   if (spec.mode === "generic" && spec.genericTerms.length) {
     const terms = spec.genericTerms.filter(
-      (t) => t.length >= 4 && !GENERIC_STOP.has(t) && !/^(produto|produtos|item|itens)$/.test(t),
+      (t) =>
+        t.length >= 4 &&
+        !GENERIC_STOP.has(t) &&
+        !isVisualStyleTerm(t) &&
+        !/^(produto|produtos|item|itens)$/.test(t) &&
+        !/^[0-9a-f]{6,}$/i.test(t),
     );
-    if (terms.length === 1 || (terms.length > 1 && terms.some((t) => t.includes(" ")))) {
+    if (!terms.length) return null;
+    // Vários termos: manter os que parecem produto (não descartar o filtro inteiro).
+    if (terms.length === 1 || terms.some((t) => t.includes(" "))) {
       return {
         mode: "generic",
         terms,
@@ -274,6 +373,19 @@ export function extractAcervoListFilter(question) {
         genericTerms: terms,
       };
     }
+    const ranked = [...terms].sort((a, b) => {
+      const pa = PRODUCT_PREF.has(a) || CAMPAIGN_FALLBACK_TERMS.some((t) => t === a || t.includes(a)) ? 1 : 0;
+      const pb = PRODUCT_PREF.has(b) || CAMPAIGN_FALLBACK_TERMS.some((t) => t === b || t.includes(b)) ? 1 : 0;
+      if (pb !== pa) return pb - pa;
+      return b.length - a.length || a.localeCompare(b);
+    });
+    const best = ranked[0];
+    return {
+      mode: "generic",
+      terms: [best],
+      specificPhrases: [],
+      genericTerms: [best],
+    };
   }
 
   return null;
@@ -288,6 +400,7 @@ const CAMPAIGN_FALLBACK_TERMS = [
   "pro force",
   "whey growth",
   "naked wafer",
+  "powerade",
   "chocolate",
   "morango",
   "baunilha",
@@ -316,11 +429,11 @@ function sanitizeCampaignTerm(raw, maxWords = 3) {
     .trim();
   term = term
     .split(/\s+/)
-    .filter((t) => t && !/^\d+%?$/.test(t))
+    .filter((t) => t && !/^\d+%?$/.test(t) && !isVisualStyleTerm(t))
     .slice(0, maxWords)
     .join(" ")
     .trim();
-  if (term.length < 3 || isGenericCatalogPhrase(term)) return null;
+  if (term.length < 3 || isGenericCatalogPhrase(term) || isVisualStyleTerm(term)) return null;
   return term;
 }
 
@@ -346,23 +459,28 @@ export function wantsCampaignAcervoUsage(q, raw) {
   return hasCampaignCue && hasProductScope;
 }
 
-/** @deprecated alias — use wantsCampaignAcervoUsage */
-export function wantsPromoAcervoUsage(q, raw) {
-  return wantsCampaignAcervoUsage(q, raw);
-}
-
 /**
  * Atributo/linha genérica para filtrar o acervo («todos com chocolate», «linha whey»).
  * @param {string} raw
  * @returns {string | null}
  */
 export function extractCampaignProductAttribute(raw) {
-  const n = normalizeForIntent(raw);
+  // Limpa só chip/arquivo — mantém «promoção de X» para o atributo da campanha.
+  const light = String(raw || "")
+    .replace(
+      /\/([^\s/]+?)\.(?:png|jpe?g|webp|gif|avif|bmp|svg)(?:--[0-9a-f-]{6,})?/gi,
+      (_, name) => ` ${String(name).replace(/[-_]+/g, " ")} `,
+    )
+    .replace(/(^|\s)\/([a-z0-9][\w-]{1,40})\b/gi, (_, sp, name) => `${sp}${name} `)
+    .replace(/\b[0-9a-f]{8}(?:-[0-9a-f]{4}){1,4}[0-9a-f]*\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const n = normalizeForIntent(light);
   if (!n) return null;
 
   const patterns = [
-    /\bpromo[cç][aã]o\s+de\s+([a-z0-9][a-z0-9\s-]{1,28})/,
-    /\bpromo\s+de\s+([a-z0-9][a-z0-9\s-]{1,28})/,
+    /\bpromo[cç][aã]o\s+(?:de\s+)?(?:do|da|dos|das)?\s*([a-z0-9][a-z0-9\s-]{1,28})/,
+    /\bpromo\s+(?:de\s+)?(?:do|da)?\s*([a-z0-9][a-z0-9\s-]{1,28})/,
     /\b(?:campanha|oferta)\s+(?:de|do|da|dos|das)\s+([a-z0-9][a-z0-9\s-]{1,28})/,
     /\b(?:lancamento|novidade|estreia)\s+(?:de|do|da|dos|das)?\s*([a-z0-9][a-z0-9\s-]{1,28})/,
     /\bpost\s+(?:de\s+)?(?:lancamento|novidade)\s+(?:de|do|da)?\s*([a-z0-9][a-z0-9\s-]{1,28})/,
@@ -373,13 +491,14 @@ export function extractCampaignProductAttribute(raw) {
     /\btodos\s+(?:os\s+)?produtos?\s+(?:que\s+)?(?:tem|t[eê]m|com|de)\s+([a-z0-9]{2,20})/,
     /\btudo\s+(?:que\s+)?(?:tem|t[eê]m|e\s+)?([a-z0-9]{2,20})\s+(?:no\s+nome|no\s+acervo)/,
     /\b(?:com|de)\s+([a-z0-9]{2,20})\s+(?:na\s+promo|no\s+post|na\s+campanha)/,
+    /\bproduto\s+([a-z0-9][a-z0-9\s-]{1,28})/,
   ];
 
   for (const re of patterns) {
     const m = n.match(re);
     if (!m?.[1]) continue;
     const term = sanitizeCampaignTerm(m[1]);
-    if (term) return term;
+    if (term && !isVisualStyleTerm(term)) return term;
   }
 
   if (CAMPAIGN_CUE_RE.test(n)) {
@@ -392,11 +511,6 @@ export function extractCampaignProductAttribute(raw) {
   return null;
 }
 
-/** @deprecated alias — use extractCampaignProductAttribute */
-export function extractPromoProductAttribute(raw) {
-  return extractCampaignProductAttribute(raw);
-}
-
 /**
  * Filtro + rótulo para campanhas (frases específicas do acervo ou termo genérico).
  * @param {string} raw
@@ -404,14 +518,15 @@ export function extractPromoProductAttribute(raw) {
  */
 export function buildCampaignScope(raw) {
   const listFilter = extractAcervoListFilter(raw);
-  if (listFilter) {
+  if (listFilter?.mode === "specific") {
     const rotulo =
-      listFilter.mode === "specific"
-        ? listFilter.specificPhrases.find((p) => p.includes(" ")) || listFilter.specificPhrases[0] || null
-        : listFilter.genericTerms[0] || null;
+      listFilter.specificPhrases.find((p) => p.includes(" ")) ||
+      listFilter.specificPhrases[0] ||
+      null;
     return { filtro: listFilter, rotulo: rotulo ? String(rotulo).trim() : null };
   }
 
+  // «promoção de chocolate» / «promo do powerade» — atributo da campanha vence ruído genérico.
   const attr = extractCampaignProductAttribute(raw);
   if (attr) {
     return {
@@ -423,6 +538,11 @@ export function buildCampaignScope(raw) {
       },
       rotulo: attr,
     };
+  }
+
+  if (listFilter) {
+    const rotulo = listFilter.genericTerms[0] || null;
+    return { filtro: listFilter, rotulo: rotulo ? String(rotulo).trim() : null };
   }
 
   return { filtro: null, rotulo: null };
@@ -467,11 +587,6 @@ export function extractCampaignBenefit(raw) {
   if (/\bfrete\s+gratis\b/.test(n)) return "frete grátis";
   if (/\bdesconto\b/.test(n)) return "desconto promocional";
   return null;
-}
-
-/** @deprecated alias — use extractCampaignBenefit */
-export function extractPromoBenefit(raw) {
-  return extractCampaignBenefit(raw);
 }
 
 /**
@@ -521,8 +636,21 @@ export function classifyChatAcervoIntent(question, history = []) {
       .trim(),
   );
 
+  // Follow-up de criação (estilo/preço/tema) não vira busca de produto.
+  if (shouldSkipAcervoForCreationFollowUp(raw, history)) {
+    return { kind: "NONE", termo: null };
+  }
+
   if (wantsCampaignAcervoUsage(q, raw)) {
+    // Scope no texto original (atributo «promoção de chocolate»); o scrub interno do filtro
+    // remove estilo/tema — não scrubbar antes senão perde o gancho da campanha.
     const { filtro, rotulo } = buildCampaignScope(raw);
+    if (!rotulo && !filtro) {
+      return { kind: "NONE", termo: null };
+    }
+    if (rotulo && isVisualStyleTerm(rotulo) && !(filtro?.genericTerms?.length || filtro?.specificPhrases?.length)) {
+      return { kind: "NONE", termo: null };
+    }
     return {
       kind: "USO_ACERVO_PROMO",
       termo: rotulo,
@@ -542,7 +670,7 @@ export function classifyChatAcervoIntent(question, history = []) {
   }
 
   const termoInfo = extractInfoProductTerm(q, raw);
-  if (termoInfo) {
+  if (termoInfo && !isVisualStyleTerm(termoInfo)) {
     return { kind: "INFO_PRODUTO", termo: termoInfo };
   }
 

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import {
   authApiFetch,
+  DEV_DASHBOARD_PREVIEW_KEY,
   formatAuthError,
   hasValidSession,
   normalizeEmailClient,
@@ -85,6 +86,11 @@ function LoginForm() {
     }
   }
 
+  function onEntrarModoDev() {
+    sessionStorage.setItem(DEV_DASHBOARD_PREVIEW_KEY, "1");
+    router.push("/painel");
+  }
+
   return (
     <AuthLayout
       variant="login"
@@ -123,6 +129,19 @@ function LoginForm() {
       </form>
 
       <AuthMessage kind={displayKind}>{displayMsg}</AuthMessage>
+
+      {process.env.NODE_ENV === "development" && (
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs text-amber-200">
+          <p className="mb-2">Supabase pausado ou sem conexão?</p>
+          <button
+            type="button"
+            onClick={onEntrarModoDev}
+            className="rounded bg-amber-600 px-3 py-1.5 font-medium text-white transition hover:bg-amber-500"
+          >
+            Acessar Painel em Modo Demonstração (Preview)
+          </button>
+        </div>
+      )}
 
       <p className="auth-mobile-switch mt-5 text-center text-sm text-slate-600 md:hidden">
         Ainda não tem conta?{" "}

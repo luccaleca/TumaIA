@@ -6,6 +6,10 @@ import {
   intentLooksPromotional,
   isMeaningfulCadastroValue,
 } from "./cadastroMeaningful.js";
+import {
+  composeCreationPedidoHint,
+  isCreationRevisionOnly,
+} from "./chatCreationInterpret.js";
 
 /** Frase curta que aparece NA IMAGEM (não é legenda do post). */
 export const FRASE_NA_IMAGEM_MAX = 56;
@@ -181,11 +185,29 @@ export function normalizeFraseNaImagem(raw) {
  */
 export function resolveActivePedidoHint(history, opts = {}) {
   const question = typeof opts.question === "string" ? opts.question.trim() : "";
-  if (question && !isPostBriefingCorrectionText(question)) {
+  const skipQuestion = Boolean(question && isPostBriefingCorrectionText(question));
+  const composed = composeCreationPedidoHint(history || [], {
+    question: skipQuestion ? "" : question,
+  });
+  if (composed && !skipQuestion) return composed.slice(0, 2000);
+  // Correção do painel: mantém o pedido anterior (não o hint de “correto”).
+  if (composed && skipQuestion) {
+    const withoutCorrection = composeCreationPedidoHint(
+      (history || []).filter(
+        (m) => !(m?.role === "user" && isPostBriefingCorrectionText(String(m.content || ""))),
+      ),
+      {},
+    );
+    if (withoutCorrection) return withoutCorrection.slice(0, 2000);
+  }
+
+  if (question && !isPostBriefingCorrectionText(question) && !isCreationRevisionOnly(question)) {
     return question.slice(0, 2000);
   }
 
-  const pedidoTexts = recentUserTexts(history, 6).filter((t) => !isPostBriefingCorrectionText(t));
+  const pedidoTexts = recentUserTexts(history, 6).filter(
+    (t) => !isPostBriefingCorrectionText(t) && !isCreationRevisionOnly(t),
+  );
   const latestPedido = pedidoTexts.length ? pedidoTexts[pedidoTexts.length - 1].trim() : "";
   if (latestPedido) return latestPedido.slice(0, 2000);
 
@@ -375,15 +397,6 @@ export function extractPromoPricing(text) {
   }
 
   return null;
-}
-
-/** @deprecated use extractPromoPricing */
-function extractPromoPricePair(text) {
-  const pricing = extractPromoPricing(text);
-  if (!pricing || pricing.kind !== "pair") return null;
-  const m = pricing.display.match(/de R\$\s*([\d.,]+)\s+por R\$\s*([\d.,]+)/i);
-  if (!m) return null;
-  return { de: m[1], por: m[2] };
 }
 
 /**

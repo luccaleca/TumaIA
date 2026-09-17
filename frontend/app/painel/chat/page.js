@@ -2031,6 +2031,8 @@ export default function PainelChatPage() {
         question,
         history: historyForApi,
         id_empresa: empresaId,
+        canal: "web",
+        arte_brief: arteBriefDraftRef.current,
         ...(idChat ? { chat_session_id: idChat } : {}),
         ...(picksAtSend.midias?.length
           ? {
@@ -2119,12 +2121,17 @@ export default function PainelChatPage() {
         Boolean(result.json?.route_image_generation) ||
         Boolean(result.json?.offer_post_context) ||
         detectImageGenerationIntentFromHistory(historyForApi, question);
+      const demoAgent = Boolean(result.json?.chat_demo_agent);
+      const answerTrim = typeof answer === "string" ? answer.trim() : "";
+      // Demo: mantém a resposta natural do agente; fora do demo, placeholders de briefing.
       const assistantContent = routeImage
-        ? post_supplement?.briefing_status === "collecting"
-          ? CHAT_PEDIDO_COLETANDO_INTRO
-          : post_supplement
-            ? CHAT_PEDIDO_RESUMO_MSG
-            : CHAT_PEDIDO_AGUARDE_MSG
+        ? demoAgent && answerTrim
+          ? answerTrim
+          : post_supplement?.briefing_status === "collecting"
+            ? CHAT_PEDIDO_COLETANDO_INTRO
+            : post_supplement
+              ? CHAT_PEDIDO_RESUMO_MSG
+              : answerTrim || CHAT_PEDIDO_AGUARDE_MSG
         : answer;
 
       const chat_route =

@@ -284,17 +284,25 @@ describe("fluxo completo — pedido creatina integral", () => {
     assert.ok(compose.gpt_input_ids.includes(logoId));
     assert.equal(logoId, MID_LOGO);
 
-    // 5) Acervo: só creatinas no pool estrito do pedido
+    // 5) Acervo: filtro pelo pedido natural (não pelo hint composto de briefing)
+    const pedidoNatural = PEDIDO_CREATINA;
     const { pool, strict } = narrowImageRowsByProductMention(
       midiaRows.filter((r) => r.tipo_midia === "imagem"),
-      resolveActivePedidoHint(history),
+      pedidoNatural,
     );
     steps.acervo_filtro = {
       strict,
-      mode: parseProductMentionSpec(resolveActivePedidoHint(history)).mode,
+      mode: parseProductMentionSpec(pedidoNatural).mode,
       pool_ids: pool.map((r) => r.id_midia),
-      best_id: pickBestProductMidiaId(pool, resolveActivePedidoHint(history)),
+      best_id: pickBestProductMidiaId(pool, pedidoNatural),
+      resolved_gate: p.product_media_status,
+      resolved_midia: (p.midias_referenced || []).map((r) => r.id_midia),
     };
+    assert.equal(p.product_media_status, "matched");
+    assert.deepEqual(
+      (p.midias_referenced || []).map((r) => r.id_midia),
+      [MID_CREATINA_INTEGRAL],
+    );
     assert.equal(strict, true);
     assert.equal(steps.acervo_filtro.mode, "specific");
     assert.deepEqual(steps.acervo_filtro.pool_ids, [MID_CREATINA_INTEGRAL]);

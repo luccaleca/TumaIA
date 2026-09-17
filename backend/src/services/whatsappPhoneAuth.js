@@ -21,15 +21,4 @@ export function isPlausibleAuthPhone(digits) {
   return d.length >= 11 && d.length <= 13;
 }
 
-/** @deprecated use resolveWhatsappUsuarioEmpresa */
-export function resolveWhatsappEmpresa(from, opts = {}) {
-  void from;
-  void opts;
-  return {
-    ok: false,
-    status: 503,
-    error: "Use resolveWhatsappUsuarioEmpresa (lookup assíncrono no Supabase).",
-  };
-}
-
 export { resolveWhatsappUsuarioEmpresa };

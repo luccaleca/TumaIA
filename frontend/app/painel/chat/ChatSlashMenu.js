@@ -74,32 +74,44 @@ export default function ChatSlashMenu({
       setHighlight(0);
       return;
     }
+    // Sempre reabre na raiz do acervo, lista estável A→Z.
+    setPastaAtual("");
+    setHighlight(0);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     setHighlight(0);
   }, [open, query, pastaAtual]);
 
   useEffect(() => {
-    if (open && empresaId && !pastas.length && !loadingMidias) {
+    if (open && empresaId) {
       void loadMidiasTree();
     }
-  }, [open, empresaId, pastas.length, loadingMidias, loadMidiasTree]);
+  }, [open, empresaId, loadMidiasTree]);
 
   const pastaAtivaId = resolveMidiasPastaAtivaId(pastaAtual, pastaUploadRaiz);
   const isAtDesktop = isMidiasDesktop(pastaAtual, pastaUploadRaiz);
 
   const pastasFilhas = useMemo(() => {
     if (!pastaAtivaId) return [];
-    return pastas.filter((p) => (p.id_pasta_pai || null) === pastaAtivaId);
+    return [...pastas.filter((p) => (p.id_pasta_pai || null) === pastaAtivaId)].sort((a, b) =>
+      String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR", { sensitivity: "base" }),
+    );
   }, [pastas, pastaAtivaId]);
 
   const midiasDaPasta = useMemo(() => {
     if (!pastaAtivaId && !isAtDesktop) return [];
-    return midias.filter((m) => {
+    const rows = midias.filter((m) => {
       if (!isImageMidia(m)) return false;
       if (isAtDesktop) {
         return m.id_pasta === pastaAtivaId || m.id_pasta == null || m.id_pasta === "";
       }
       return m.id_pasta === pastaAtivaId;
     });
+    return rows.sort((a, b) =>
+      midiaLabel(a).localeCompare(midiaLabel(b), "pt-BR", { sensitivity: "base" }),
+    );
   }, [midias, pastaAtivaId, isAtDesktop]);
 
   const breadcrumbs = useMemo(

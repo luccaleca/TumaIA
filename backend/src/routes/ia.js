@@ -49,6 +49,12 @@ const bodySchema = z.object({
   id_empresa: z.string().uuid().optional(),
   /** Reutiliza sessão do agente cloud na mesma conversa (menos latência). */
   chat_session_id: z.string().trim().min(8).max(80).optional(),
+  /** Mídias explícitas do menu `/` — prioridade sobre listagem do acervo. */
+  reference_midia_ids: z.array(z.string().uuid()).max(4).optional(),
+  /** Rascunho do seletor de formato / brief do painel (contexto do agente). */
+  arte_brief: z.record(z.string(), z.unknown()).optional(),
+  /** Canal: web | whatsapp (origem do formato). */
+  canal: z.enum(["web", "whatsapp"]).optional(),
 });
 
 async function assertEmpresaVinculo(req, idEmpresa) {
@@ -287,7 +293,7 @@ r.get("/image-download", requireUserJwt, requireUsuario, async (req, res) => {
   }
 });
 
-/** Prévia de imagem: GPT Image 2 (padrão) ou FLUX legado (`IMAGE_PROVIDER=replicate`). */
+/** Prévia de imagem: Grok Imagine (padrão), Replicate ou OpenAI. */
 r.post("/image-preview", requireUserJwt, requireUsuario, async (req, res) => {
   const db = getSupabaseAdmin();
   if (!db) {

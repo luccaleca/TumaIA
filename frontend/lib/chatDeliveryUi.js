@@ -1,4 +1,4 @@
-/** Espelha `backend/src/services/tumaInterpretation.js` */
+/** Espelha o backend: intenção de gerar imagem no chat do painel. */
 
 export {
   isConversationalMessage,
@@ -8,8 +8,3 @@ export {
   detectImageGenerationIntent,
   detectImageGenerationIntentFromHistory,
 } from "./tumaInterpretation.js";
-
-/** @deprecated use detectImageGenerationIntent */
-export function shouldOfferPostContext(question) {
-  return detectImageGenerationIntent(question);
-}

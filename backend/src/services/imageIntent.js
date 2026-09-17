@@ -5,6 +5,7 @@ import {
   resolvePedidoCliente,
 } from "./imageHeadline.js";
 import { pruneProposalMidiasToPedido } from "./productMentionMatch.js";
+import { pickCreationUserMessage } from "./productAcervoResolve.js";
 
 function contextIdFromRow(row) {
   return String(row?.id_contexto_empresa ?? "").trim();
@@ -118,12 +119,14 @@ export function buildConfirmedImageIntent(opts = {}) {
   const pedidoHint = resolveActivePedidoHint(history, {
     proposal: opts.postContextProposal,
   });
+  // Poda de mídia usa a mensagem natural, não o hint composto de briefing.
+  const productPedidoHint = pickCreationUserMessage(history, "") || pedidoHint;
   const baseProposal = pruneProposalMidiasToPedido(
     opts.postContextProposal && typeof opts.postContextProposal === "object"
       ? { ...opts.postContextProposal }
       : {},
     midiaRows,
-    pedidoHint,
+    productPedidoHint,
   );
 
   const matchedContexto = null;
@@ -138,7 +141,9 @@ export function buildConfirmedImageIntent(opts = {}) {
   }
 
   const prioritizedContextRows = contextoRows;
-  const pedido = pedidoHint || resolvePedidoCliente(postContextProposal, history, 2000) || "";
+  const rawPedido = pickCreationUserMessage(history, "");
+  const pedido =
+    rawPedido || pedidoHint || resolvePedidoCliente(postContextProposal, history, 2000) || "";
   const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, prioritizedContextRows) || "";
   const resumoVisual = buildResumoVisual(postContextProposal, history, pedido);
   const selectionHint = buildSelectionHint(postContextProposal, pedido, fraseNaImagem, matchedContexto);

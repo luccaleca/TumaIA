@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "../supabaseAdmin.js";
 import { ensureChatWorkerReady, runChatSerialized } from "./chatPythonWorker.js";
 import { detectImageGenerationIntentFromHistory } from "./chatDeliveryUi.js";
 import { tryChatAcervoResponse } from "./chatAcervoResponse.js";
+import { isBareProductSelection, mergeReferenceMidiaIdsFromSlashText } from "./chatCreationInterpret.js";
 import { guardChatProductAnswer } from "./chatProductGuard.js";
 import { sanitizeChatAnswer } from "./chatAnswerSanitizer.js";
 import { analyzeChatTurn } from "./chatTurnIntent.js";
@@ -18,6 +19,10 @@ import {
   renderAgenteMarcaMarkdown,
 } from "./brandAgentService.js";
 import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
+import {
+  buildDemoAgentTrainingAppendix,
+  isDemoAgentMode,
+} from "./demoAgentKnowledge.js";
 
 function userFacingChatError(err) {
   const msg = err instanceof Error ? err.message : "Erro ao consultar IA";
@@ -198,7 +203,9 @@ export async function processChatMessage(input) {
   const route_image_generation_early =
     Boolean(id_empresa) && Boolean(dbEarly) && detectImageGenerationIntentFromHistory(history, question);
 
-  if (route_image_generation_early) {
+  // Demo: deixa o LLM interpretar o pedido; ainda marca route_image_generation depois.
+  // Fora do demo: early return silencioso abre só o fluxo de briefing no painel.
+  if (route_image_generation_early && !isDemoAgentMode()) {
     return {
       ok: true,
       data: {
@@ -207,7 +214,7 @@ export async function processChatMessage(input) {
         chat_route: "post_briefing",
         route_image_generation: true,
         offer_post_context: true,
-        image_provider: env.IMAGE_PROVIDER || "replicate",
+        image_provider: env.IMAGE_PROVIDER || "grok",
         image_pipeline: env.IMAGE_PIPELINE || "raw",
       },
     };
@@ -219,16 +226,18 @@ export async function processChatMessage(input) {
     const route_image_generation_quick =
       Boolean(id_empresa) && Boolean(db) && detectImageGenerationIntentFromHistory(history, question);
     const postExtrasQuick =
-      turnQuick.wantsImageRoute || route_image_generation_quick
+      turnQuick.wantsImageRoute || route_image_generation_quick || route_image_generation_early
         ? {
             route_image_generation: true,
             offer_post_context: true,
-            image_provider: env.IMAGE_PROVIDER || "replicate",
+            image_provider: env.IMAGE_PROVIDER || "grok",
             image_pipeline: env.IMAGE_PIPELINE || "raw",
           }
         : {};
 
-    let directQuick = buildDirectTurnResponse(turnQuick, postExtrasQuick);
+    const demo = isDemoAgentMode();
+
+    let directQuick = demo ? null : buildDirectTurnResponse(turnQuick, postExtrasQuick);
     if (directQuick && turnQuick.route === "identity" && id_empresa && db) {
       const nomeFantasiaQuick = await tryLoadNomeFantasia(db, id_empresa);
       if (nomeFantasiaQuick) {
@@ -238,17 +247,20 @@ export async function processChatMessage(input) {
     }
     if (directQuick) return directQuick;
 
-    const cloudFast = await tryCloudLlmFastPath(
-      {
-        question,
-        history,
-        id_empresa,
-        chat_session_id: input.chat_session_id,
-      },
-      turnQuick,
-      postExtrasQuick,
-    );
-    if (cloudFast) return cloudFast;
+    // Demo: não usar fast-path cloud sem marca/acervo/contexto UI.
+    if (!demo) {
+      const cloudFast = await tryCloudLlmFastPath(
+        {
+          question,
+          history,
+          id_empresa,
+          chat_session_id: input.chat_session_id,
+        },
+        turnQuick,
+        postExtrasQuick,
+      );
+      if (cloudFast) return cloudFast;
+    }
 
     let facts = null;
     if (id_empresa && db) {
@@ -261,26 +273,45 @@ export async function processChatMessage(input) {
     const nomeFantasia = facts?.nomeFantasia ?? null;
 
     const route_image_generation =
-      Boolean(id_empresa) && Boolean(db) && detectImageGenerationIntentFromHistory(history, question);
+      Boolean(id_empresa) &&
+      Boolean(db) &&
+      (route_image_generation_early ||
+        detectImageGenerationIntentFromHistory(history, question));
 
-    const turn = analyzeChatTurn(question, history, { nomeFantasia });
+    let turn = analyzeChatTurn(question, history, { nomeFantasia });
+    // Demo: pedidos criativos vão ao LLM (não template de catálogo), salvo seleção bare.
+    if (
+      demo &&
+      turn.route === "acervo" &&
+      !isBareProductSelection(question) &&
+      (turn.wantsImageRoute || route_image_generation)
+    ) {
+      turn = {
+        ...turn,
+        route: "llm_light",
+        includeAcervoInPrompt: true,
+        needsProductGuard: true,
+        wantsImageRoute: true,
+        acervo: null,
+      };
+    }
 
     const postExtras =
       turn.wantsImageRoute || route_image_generation
         ? {
             route_image_generation: true,
             offer_post_context: true,
-            image_provider: env.IMAGE_PROVIDER || "replicate",
+            image_provider: env.IMAGE_PROVIDER || "grok",
             image_pipeline: env.IMAGE_PIPELINE || "raw",
           }
         : {};
 
-    const directTurn = buildDirectTurnResponse(turn, postExtras);
+    const directTurn = demo ? null : buildDirectTurnResponse(turn, postExtras);
     if (directTurn) return directTurn;
 
     const acervoBundle = facts?.acervo ?? null;
 
-    if (id_empresa && db && facts && turn.route === "composite") {
+    if (!demo && id_empresa && db && facts && turn.route === "composite") {
       const compositeAnswer = await tryChatCompositeResponse({
         question,
         facts,
@@ -301,7 +332,7 @@ export async function processChatMessage(input) {
       }
     }
 
-    if (id_empresa && db && facts && turn.route === "empresa") {
+    if (!demo && id_empresa && db && facts && turn.route === "empresa") {
       return {
         ok: true,
         data: {
@@ -315,6 +346,11 @@ export async function processChatMessage(input) {
     }
 
     if (id_empresa && db && turn.route === "acervo" && turn.acervo && acervoBundle) {
+      const referenceMidiaIds = mergeReferenceMidiaIdsFromSlashText(
+        input.reference_midia_ids,
+        [...history, { role: "user", content: question }],
+        acervoBundle.midias,
+      );
       const acervoAnswer = await tryChatAcervoResponse({
         question,
         history,
@@ -322,6 +358,7 @@ export async function processChatMessage(input) {
         db,
         midias: acervoBundle.midias,
         nomeFantasia: acervoBundle.nomeFantasia,
+        referenceMidiaIds,
         classifyIntent: () => turn.acervo,
       });
       if (acervoAnswer) {
@@ -340,7 +377,7 @@ export async function processChatMessage(input) {
     }
 
     let trainingBlock =
-      facts && turn.includeAcervoInPrompt
+      facts && (turn.includeAcervoInPrompt || demo)
         ? buildChatTrainingPromptBlock({
             empresa: facts.empresa,
             contextos: facts.contextos,
@@ -361,9 +398,24 @@ export async function processChatMessage(input) {
       }
     }
 
+    if (demo) {
+      const demoAppendix = buildDemoAgentTrainingAppendix({
+        arteBrief: input.arte_brief && typeof input.arte_brief === "object" ? input.arte_brief : null,
+        referenceMidiaIds: input.reference_midia_ids,
+        midias: acervoBundle?.midias || [],
+        question,
+        history,
+        canal: input.canal || "web",
+        acervoLabels: acervoBundle?.labels || [],
+      });
+      if (demoAppendix) {
+        trainingBlock = [demoAppendix, trainingBlock].filter(Boolean).join("\n\n");
+      }
+    }
+
     if (turn.chat_mode === "identidade") {
       trainingBlock = buildPerfilGeralLlmPromptBlock(nomeFantasia, turn.perfilGeralTheme ?? null);
-    } else if (turn.chat_mode === "conversa_aberta") {
+    } else if (turn.chat_mode === "conversa_aberta" && !demo) {
       const hint = buildConversaNaturalPromptHint(nomeFantasia);
       trainingBlock = [hint, trainingBlock].filter(Boolean).join("\n\n");
     }
@@ -419,13 +471,14 @@ export async function processChatMessage(input) {
           answer,
           source_documents: [],
           ...chatMeta,
+          ...(demo ? { chat_demo_agent: true } : {}),
           ...(turn.chat_mode ? { chat_mode: turn.chat_mode } : {}),
           ...(turn.topics?.length ? { chat_topics: turn.topics } : {}),
-          ...(route_image_generation
+          ...(route_image_generation || postExtras.route_image_generation
             ? {
                 route_image_generation: true,
                 offer_post_context: true,
-                image_provider: env.IMAGE_PROVIDER || "replicate",
+                image_provider: env.IMAGE_PROVIDER || "grok",
                 image_pipeline: env.IMAGE_PIPELINE || "raw",
               }
             : {}),
@@ -494,7 +547,7 @@ export async function processChatMessage(input) {
           ? {
               route_image_generation: true,
               offer_post_context: true,
-              image_provider: env.IMAGE_PROVIDER || "replicate",
+              image_provider: env.IMAGE_PROVIDER || "grok",
               image_pipeline: env.IMAGE_PIPELINE || "raw",
             }
           : {}),

@@ -24,6 +24,33 @@ function resolveModelId() {
   return String(env.CHAT_CLOUD_MODEL || "grok-4.6").trim();
 }
 
+/**
+ * Normaliza ids legados (`composer-2.5-fast`) para o formato aceito pelo SDK.
+ * @returns {{ id: string, params?: Array<{ id: string, value: string }> }}
+ */
+export function resolveCloudChatModel() {
+  const raw = resolveModelId();
+  const lower = raw.toLowerCase();
+  if (lower === "composer-2.5-fast" || lower === "composer-2-5-fast") {
+    return { id: "composer-2.5", params: [{ id: "fast", value: "true" }] };
+  }
+  if (lower.endsWith("-fast") && !lower.includes(".")) {
+    // ex.: legado inválido — tenta base sem sufixo
+    const base = raw.slice(0, -5);
+    if (base) return { id: base, params: [{ id: "fast", value: "true" }] };
+  }
+  return { id: raw };
+}
+
+function buildAgentOptions() {
+  const model = resolveCloudChatModel();
+  return {
+    apiKey: resolveApiKey(),
+    model,
+    cloud: { skipReviewerRequest: true },
+  };
+}
+
 function resolveTimeoutMs() {
   return Number(env.CHAT_CLOUD_TIMEOUT_MS) || 300_000;
 }
@@ -120,7 +147,10 @@ export function buildCloudChatPrompt(input) {
     `Responda em português do Brasil, tom de colega, em 2 a 4 frases curtas.`,
     `Não invente produtos${emp}. Não mencione APIs, modelos internos ou ferramentas de infraestrutura.`,
     "Responda DIRETO o que o usuário perguntou. Não repita saudação nem «O que você precisa hoje?».",
-    "Se pedirem post ou arte, oriente a descrever produto e formato.",
+    "Interprete linguagem humana: produto, intenção, tema, oferta, estilo e formato sem exigir formulário.",
+    "Pergunte só o que faltar de verdade. Se produto/formato/preço já estão no contexto, não pergunte de novo.",
+    "Nunca diga que a imagem foi gerada sem a prévia real do sistema.",
+    "Se pedirem post ou arte e o briefing estiver claro, diga que vai montar o resumo no painel para confirmar.",
   ];
 
   if (agente) {
@@ -141,14 +171,6 @@ export function buildCloudChatPrompt(input) {
   if (hist) parts.push(`Histórico recente:\n${hist}`);
   parts.push(`Usuário: ${question}`);
   return parts.join("\n\n");
-}
-
-function buildAgentOptions() {
-  return {
-    apiKey: resolveApiKey(),
-    model: { id: resolveModelId() },
-    cloud: { skipReviewerRequest: true },
-  };
 }
 
 /**
@@ -225,7 +247,7 @@ export async function promptCloudChat(input) {
   pruneWarmSessions();
 
   const sessionKey = String(input.sessionKey || "").trim();
-  const modelId = resolveModelId();
+  const modelId = resolveCloudChatModel().id;
   const existing = sessionKey ? warmSessions.get(sessionKey) : null;
 
   if (existing && Date.now() - existing.lastUsed <= sessionTtlMs()) {

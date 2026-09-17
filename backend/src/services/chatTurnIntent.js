@@ -29,6 +29,7 @@ import {
   shouldUseOpenConversation,
 } from "./chatConversaNatural.js";
 import { env, isCloudChatLlm } from "../config.js";
+import { shouldPreferImageBriefingOverAcervo } from "./chatCreationInterpret.js";
 
 
 
@@ -122,6 +123,22 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
   }
 
   const acervoEarly = classifyChatAcervoIntent(q, history);
+  // Briefing rico (produto + tema/oferta/visual): abre arte, não lista catálogo.
+  if (
+    acervoEarly.kind !== "NONE" &&
+    (wantsImageRoute || shouldPreferImageBriefingOverAcervo(q, history))
+  ) {
+    return {
+      route: "llm_light",
+      topics: [...new Set([...topics, "POST", "ARTE"])],
+      identityAnswer: null,
+      acervo: null,
+      chat_mode: "conversa_aberta",
+      includeAcervoInPrompt: true,
+      needsProductGuard: true,
+      wantsImageRoute: true,
+    };
+  }
   if (acervoEarly.kind !== "NONE") {
     return {
       route: "acervo",

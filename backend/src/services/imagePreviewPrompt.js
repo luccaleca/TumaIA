@@ -26,6 +26,10 @@ import { clipAgenteMarcaForPrompt, renderAgenteMarcaMarkdown } from "./brandAgen
 export const FLUX_IMAGE_PROMPT_MAX = 2000;
 
 import { buildOfficialGptImage2Prompt } from "./gptImage2OfficialRequest.js";
+import {
+  looksLikeYoutubePointerThumbnail,
+  youtubePointerThumbnailPromptBlock,
+} from "./youtubeThumbnailLayout.js";
 
 /**
  * Prompt integrado — delega ao formato oficial `images.edit` (um bloco + reference pictures).
@@ -277,6 +281,15 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
     base = `${base}\n\nTipografia de campanha (preços, desconto, público) pode aparecer como texto gráfico; não desenhe embalagens nem mockups de produto.`;
   } else if (!mandatoryTypography) {
     base = `${base}\n\nUse os elementos textuais do pedido (ex.: preços, desconto, público-alvo) de forma legível na composição, conforme o resumo acima.`;
+  }
+  const layoutBlob = [pedidoTexto, fraseExplicita, arteBrief?.rede === "youtube" ? "youtube" : ""]
+    .filter(Boolean)
+    .join("\n");
+  if (looksLikeYoutubePointerThumbnail(layoutBlob)) {
+    base = `${base}\n\n${youtubePointerThumbnailPromptBlock({
+      fraseNaImagem: fraseExplicita || extractFraseFromUserText(pedidoTexto),
+      pedido: pedidoTexto,
+    })}`;
   }
   if (composeProductAssets) {
     base = `${base}\n\nReforce: nenhum objeto de produto no quadro — apenas cenário vazio nas zonas reservadas para os PNG do acervo.`;
@@ -576,12 +589,12 @@ export function buildImagePreviewContextMeta(
       identidadeDados?.cor_primaria || identidadeDados?.estilo_visual || identidadeDados?.id_midia_logo,
     ),
     prompt_style: pipeline === "raw" ? "raw" : env.IMAGE_PROMPT_STYLE ?? "compact",
-    image_provider: env.IMAGE_PROVIDER || "replicate",
+    image_provider: env.IMAGE_PROVIDER || "grok",
     image_model:
       env.IMAGE_PROVIDER === "openai"
         ? env.OPENAI_IMAGE_MODEL || "gpt-image-2"
-        : env.IMAGE_PROVIDER === "flux"
-          ? "black-forest-labs/flux-schnell"
-          : "openai/gpt-image-2",
+        : env.IMAGE_PROVIDER === "replicate"
+          ? "openai/gpt-image-2"
+          : env.GROK_IMAGE_MODEL || "grok-imagine-image-2.0",
   };
 }

@@ -20,7 +20,8 @@ Documentação de produto, arquitetura e IA. Setup de ambiente fica nos READMEs 
 | [ia/repertorio-1000-README.md](./ia/repertorio-1000-README.md) | Treino de diálogo em escala |
 | [ia/bateria-treino-dialogo-README.md](./ia/bateria-treino-dialogo-README.md) | Bateria de treino |
 
-Código canônico de prompt: `backend/ia/python/conversa/instrucoes/`
+Código canônico de prompt (legado, ainda usado por treino): `backend/ia/python/conversa/instrucoes/`  
+Motor de chat em produção: Node (`TUMAIA_NODE_CHAT=true`) — ver [`stack-e-estado-atual.md`](./stack-e-estado-atual.md).
 
 ## Outros
 
@@ -30,6 +31,7 @@ Código canônico de prompt: `backend/ia/python/conversa/instrucoes/`
 | [arquitetura/](./arquitetura/) | Diagramas PNG/SVG |
 | [diagramas/](./diagramas/) | Modelo de dados |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | Como contribuir no repositório |
+| [tumacore-migracao.md](./tumacore-migracao.md) | Etapas da migração TumaCore → painel ops |
 
 ## Desenvolvimento
 

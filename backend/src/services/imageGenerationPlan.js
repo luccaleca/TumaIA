@@ -16,7 +16,7 @@ const PROMPT_EXCERPT_MAX = 320;
  * @param {Record<string, unknown>} parsedData
  */
 export async function buildImageGenerationPlan(db, parsedData) {
-  const provider = env.IMAGE_PROVIDER || "replicate";
+  const provider = env.IMAGE_PROVIDER || "grok";
   const pipeline = env.IMAGE_PIPELINE || "raw";
   const productMode = getImageProductMode();
   const idEmpresa = parsedData.id_empresa;

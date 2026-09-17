@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { env } from "../config.js";
-import { executeFlux11Pro, flux11ProInputSchema } from "../services/flux11ProService.js";
-import { executeFluxSchnell, fluxSchnellInputSchema } from "../services/fluxSchnellService.js";
 import {
   executeGptImage2WithReferences,
   friendlyOpenAiImageError,
 } from "../services/gptImage2Service.js";
+import {
+  executeGrokImagine,
+  friendlyGrokImageError,
+  resolveGrokImageApiKey,
+} from "../services/grokImageService.js";
 import {
   executeReplicateGptImage2,
   friendlyReplicateGptImage2Error,
@@ -42,10 +45,7 @@ import { resolveFraseNaImagem } from "../services/imageHeadline.js";
 import { resolveActivePedidoHint } from "../services/imageHeadline.js";
 import { buildConfirmedImageIntent } from "../services/imageIntent.js";
 import { wantsLogoAsHero } from "../services/logoReferencePolicy.js";
-import { friendlyImageGenerationError } from "../services/replicateImagePromptPrep.js";
-import { resolveReferenceMidiasForReplicate } from "../services/referenceMidiaUrls.js";
 import { partitionContextosIdentidade } from "../modules/empresas/identidadeMarca.js";
-import { FLUX_IMAGE_PROMPT_MAX } from "../services/imagePreviewPrompt.js";
 import { aspectRatioFromArteBrief } from "../services/rawImageArteBrief.js";
 import { composeGeneratedSceneWithProducts } from "../services/productSceneComposer.js";
 import { persistChatPreviewImages } from "../services/chatPreviewMidia.js";
@@ -155,7 +155,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
     return;
   }
 
-  const provider = env.IMAGE_PROVIDER || "replicate";
+  const provider = env.IMAGE_PROVIDER || "grok";
   const pipeline = env.IMAGE_PIPELINE || "raw";
   const productMode = getImageProductMode();
   const idEmpresa = parsed.data.id_empresa;
@@ -216,9 +216,9 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
   let previewProductNames = [];
 
   if (isPreviewRevision) {
-    if (provider !== "openai" && provider !== "replicate") {
+    if (provider !== "openai" && provider !== "replicate" && provider !== "grok") {
       res.status(503).json({
-        error: "Alteração de prévia requer GPT Image 2 (IMAGE_PROVIDER openai ou replicate).",
+        error: "Alteração de prévia requer IMAGE_PROVIDER grok, openai ou replicate.",
       });
       return;
     }
@@ -228,7 +228,32 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
       proposal: imageIntent.postContextProposal,
       imageIntent,
     });
-    if (provider === "openai") {
+    if (provider === "grok") {
+      const apiKey = resolveGrokImageApiKey();
+      if (!apiKey) {
+        res.status(503).json({ error: "CHAT_CLOUD_API_KEY (ou XAI_API_KEY) não configurada." });
+        return;
+      }
+      out = await executeGrokImagine(apiKey, {
+        prompt: revisePrompt,
+        input_images: [revisionUrl],
+        aspect_ratio: aspect,
+      });
+      if (!out.ok) {
+        res.status(out.status || 500).json({
+          error: friendlyGrokImageError(out.error),
+          raw: out.raw,
+        });
+        return;
+      }
+      referenceMeta = {
+        mode: "grok-imagine-revision",
+        pipeline: "revision",
+        preview_revision: true,
+        api: out.api || "images/edits",
+        model: out.model,
+      };
+    } else if (provider === "openai") {
       const apiKey = (env.OPENAI_API_KEY || "").trim();
       if (!apiKey) {
         res.status(503).json({ error: "OPENAI_API_KEY não configurada." });
@@ -282,6 +307,94 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
         preview_revision: true,
       };
     }
+  } else if (provider === "grok") {
+    const apiKey = resolveGrokImageApiKey();
+    if (!apiKey) {
+      res.status(503).json({ error: "CHAT_CLOUD_API_KEY (ou XAI_API_KEY) não configurada." });
+      return;
+    }
+    let promptForProvider = prompt;
+    let inputImages;
+    if (pipeline === "raw") {
+      try {
+        const refs = await resolveGptImage2InputImages(
+          db,
+          idEmpresa,
+          parsed.data,
+          contextoRows,
+          imageIntent,
+          productMode,
+          { midiaCatalog: midiaRowsCatalog },
+        );
+        composedProductIds = refs.productRefIds || [];
+        heroProductId = refs.heroProductId || null;
+        previewProductNames = refs.productNames || [];
+        inputImages = refs.inputImages;
+        referenceMeta = refs.referenceMeta || {
+          mode: "grok-imagine",
+          pipeline,
+          product_mode: productMode,
+        };
+        const integrated =
+          usesGptIntegratedProducts(productMode) && (composedProductIds.length || inputImages?.length);
+        promptForProvider = buildFluxImagePrompt({
+          history: parsed.data.history,
+          contextoRows,
+          postContextProposal: imageIntent.postContextProposal,
+          focusContextoId: parsed.data.focus_contexto_id,
+          hasReferenceImage: Boolean(inputImages?.length),
+          referenceKind: refs.referenceKind,
+          strictProductReference: refs.strictProductReference && !integrated,
+          composeProductAssets: refs.composeProductAssets,
+          integratedProductGeneration: integrated,
+          productNames: refs.productNames,
+          productCount: refs.productCount,
+          logoInReferences: refs.logoInReferences,
+          aspectRatio: aspect,
+          pipeline,
+        });
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : "Referência de mídia inválida",
+        });
+        return;
+      }
+    }
+    console.info(
+      `[ia/image-preview] grok refs=${inputImages?.length ?? 0} produtos=${composedProductIds.length} hero=${heroProductId || "—"}`,
+    );
+    out = await executeGrokImagine(apiKey, {
+      prompt: promptForProvider,
+      input_images: inputImages,
+      aspect_ratio: aspect,
+    });
+    if (!out.ok) {
+      console.warn(
+        `[ia/image-preview] grok falhou em ${Date.now() - startedAt}ms:`,
+        out.error || out.status,
+      );
+      res.status(out.status || 500).json({
+        error: friendlyGrokImageError(out.error),
+        raw: out.raw,
+      });
+      return;
+    }
+    if (!referenceMeta) {
+      referenceMeta = {
+        mode: "grok-imagine",
+        pipeline,
+        product_mode: productMode,
+        api: out.api || "images/generations",
+        model: out.model,
+      };
+    } else if (typeof referenceMeta === "object") {
+      referenceMeta = {
+        ...referenceMeta,
+        mode: referenceMeta.mode || "grok-imagine",
+        api: out.api,
+        model: out.model,
+      };
+    }
   } else if (provider === "openai") {
     const apiKey = (env.OPENAI_API_KEY || "").trim();
     if (!apiKey) {
@@ -299,6 +412,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
           contextoRows,
           imageIntent,
           productMode,
+          { midiaCatalog: midiaRowsCatalog },
         );
         composedProductIds = refs.productRefIds || [];
         heroProductId = refs.heroProductId || null;
@@ -370,6 +484,7 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
         contextoRows,
         imageIntent,
         productMode,
+        { midiaCatalog: midiaRowsCatalog },
       );
       inputImages = refs.inputImages;
       composedProductIds = refs.productRefIds || [];
@@ -431,119 +546,14 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
       referenceMeta = { mode: "replicate/gpt-image-2", pipeline };
     }
   } else {
-    const token = env.REPLICATE_API_TOKEN;
-    if (!token) {
-      res.status(503).json({ error: "REPLICATE_API_TOKEN não configurado." });
-      return;
-    }
-
-    const fromBody = (parsed.data.reference_midia_ids || []).map((x) => String(x).trim()).filter(Boolean);
-    const fromProposal = collectReferenceMidiaIds(
-      imageIntent.postContextProposal,
-      parsed.data.post_supplement_links,
-    );
-    let refIds = [...new Set([...fromBody, ...fromProposal])].slice(0, REFERENCE_MIDIA_MAX);
-    let primaryRefUrl = null;
-    let primaryRefKind = "product";
-    let fluxPrompt = prompt;
-
-    if (refIds.length) {
-      try {
-        const { data: midiaRows } = await db
-          .from("midia")
-          .select(
-            "id_midia, nome_exibicao, nome_arquivo, descricao, alt_text, tipo_midia, formato_arquivo, extensao",
-          )
-          .eq("id_empresa", idEmpresa)
-          .eq("ativo", true)
-          .in("id_midia", refIds);
-        if (Array.isArray(midiaRows) && midiaRows.length) {
-          refIds = filterReferenceMidiaIdsToPedido(refIds, midiaRows, previewUserHint);
-          const excludeRefIds = identidadeDados?.id_midia_referencia_analise
-            ? [String(identidadeDados.id_midia_referencia_analise)]
-            : [];
-          refIds = rankReferenceMidiaIds(refIds, midiaRows, previewUserHint, excludeRefIds, logoId);
-        }
-        const resolved = await resolveReferenceMidiasForReplicate(db, idEmpresa, refIds, {
-          logoId,
-          userHint: imageIntent.selectionHint || previewUserHint,
-          logoAsHero,
-        });
-        primaryRefUrl = resolved.primaryUrl;
-        primaryRefKind = resolved.primaryKind === "logo" ? "logo" : "product";
-        if (primaryRefUrl) {
-          fluxPrompt = buildFluxImagePrompt({
-            history: parsed.data.history,
-            contextoRows,
-            postContextProposal: imageIntent.postContextProposal,
-            focusContextoId: parsed.data.focus_contexto_id,
-            hasReferenceImage: true,
-            referenceKind: primaryRefKind,
-            pipeline: "standard",
-          });
-          if (resolved.auxiliaryReferenceText) {
-            fluxPrompt = (fluxPrompt + `\n\n${resolved.auxiliaryReferenceText}`).slice(
-              0,
-              FLUX_IMAGE_PROMPT_MAX,
-            );
-          }
-          referenceMeta = {
-            mode: "flux-1.1-pro-reference",
-            reference_midia_ids: resolved.usedIds,
-          };
-        }
-      } catch (err) {
-        res.status(400).json({
-          error: err instanceof Error ? err.message : "Referência de mídia inválida",
-        });
-        return;
-      }
-    }
-
-    const runSchnell = () =>
-      executeFluxSchnell(
-        token,
-        fluxSchnellInputSchema.parse({
-          prompt: fluxPrompt,
-          aspect_ratio: aspect,
-          num_outputs: 1,
-          output_format: "png",
-          output_quality: 80,
-        }),
-      );
-
-    if (primaryRefUrl) {
-      out = await executeFlux11Pro(
-        token,
-        flux11ProInputSchema.parse({
-          prompt: fluxPrompt,
-          image_prompt: primaryRefUrl,
-          aspect_ratio: aspect,
-          output_format: "png",
-          output_quality: 85,
-          image_prompt_strength: primaryRefKind === "logo" ? 0.12 : 0.22,
-        }),
-      );
-      if (!out.ok && /256\s*x\s*256|at least 256/i.test(String(out.error || ""))) {
-        out = await runSchnell();
-        referenceMeta = { ...referenceMeta, fallback: "schnell_sem_referencia_pixels" };
-      }
-    } else {
-      out = await runSchnell();
-      referenceMeta = { mode: "flux-schnell", pipeline: "standard" };
-    }
-
-    if (!out.ok) {
-      res.status(out.status || 500).json({
-        error: friendlyImageGenerationError(out.error),
-        raw: out.raw,
-      });
-      return;
-    }
+    res.status(503).json({
+      error: `IMAGE_PROVIDER=${provider} não suportado. Use grok (padrão), replicate ou openai.`,
+    });
+    return;
   }
 
   let image_urls = normalizeImageOutputUrls(out.output);
-  const gptRawProvider = provider === "replicate" || provider === "openai";
+  const gptRawProvider = provider === "replicate" || provider === "openai" || provider === "grok";
   if (!isPreviewRevision && pipeline === "raw" && gptRawProvider && image_urls.length) {
     try {
       if (usesSharpProductCollage(productMode) && composedProductIds.length) {
@@ -569,7 +579,14 @@ export async function handleImagePreview(req, res, db, assertEmpresaVinculo) {
       if (usesGptRefineAfterCollage(productMode) && image_urls.length) {
         const refinePrompt = buildRefineComposedImagePrompt(imageIntent);
         let refineOut = null;
-        if (provider === "openai") {
+        if (provider === "grok") {
+          const apiKey = resolveGrokImageApiKey();
+          refineOut = await executeGrokImagine(apiKey, {
+            prompt: refinePrompt,
+            input_images: image_urls.slice(0, 1),
+            aspect_ratio: aspect,
+          });
+        } else if (provider === "openai") {
           const apiKey = (env.OPENAI_API_KEY || "").trim();
           refineOut = await executeGptImage2WithReferences(apiKey, {
             prompt: refinePrompt,

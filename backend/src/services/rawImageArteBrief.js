@@ -206,7 +206,10 @@ export function buildArteBriefFromHistory(history, brandColors = [], existing = 
   }
   if (tema.length > TEMA_MAX) tema = `${tema.slice(0, TEMA_MAX - 1)}…`;
 
-  const texto = frase && frase !== titulo ? frase.slice(0, TEXTO_MAX) : base.texto;
+  const texto =
+    (frase && frase !== titulo ? frase.slice(0, TEXTO_MAX) : "") ||
+    (creation.oferta ? String(creation.oferta).slice(0, TEXTO_MAX) : "") ||
+    base.texto;
   const observacoes = [creation.destaque, creation.composicao, creation.caracteristica, base.observacoes]
     .filter(Boolean)
     .join(". ")

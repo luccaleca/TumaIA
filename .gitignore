@@ -52,3 +52,6 @@ Thumbs.db
 # WPPConnect (clone local — tools/wppconnect/setup.mjs)
 tools/wppconnect/server/
 tools/wppconnect/tumaia.meta.json
+
+# Índice local Chroma (legado — não versionar binários)
+backend/ia/python/indice_contextos/

@@ -2,25 +2,49 @@ import { createApp } from "./app.js";
 import { env, isCloudChatLlm } from "./config.js";
 import { ensureChatWorkerReady, shutdownChatWorker } from "./services/chatPythonWorker.js";
 import { isWppconnectEnabled, ensureWppconnectSession } from "./services/wppconnectClient.js";
+import { looksLikeCrsrPrefixedApiKey, resolveGrokImageApiKey } from "./services/grokImageService.js";
 
 const app = createApp();
 
 const imageProvider = env.IMAGE_PROVIDER || "replicate";
-if (imageProvider === "openai") {
+if (imageProvider === "grok") {
+  if (!resolveGrokImageApiKey()) {
+    if (looksLikeCrsrPrefixedApiKey(env.CHAT_CLOUD_API_KEY || "")) {
+      console.warn(
+        "[grok-image] CHAT_CLOUD_API_KEY (crsr_) não autentica api.x.ai — use XAI_API_KEY ou IMAGE_PROVIDER=replicate.",
+      );
+    } else {
+      console.warn("[grok-image] XAI_API_KEY ausente — /ia/image-preview retornará 503.");
+    }
+  } else if (!env.GROK_ALLOW_BILLING) {
+    console.warn("[grok-image] Defina GROK_ALLOW_BILLING=true para gerar imagens.");
+  } else {
+    console.info(`[image] Grok Imagine (${env.GROK_IMAGE_MODEL || "grok-imagine-image-2.0"})`);
+  }
+} else if (imageProvider === "openai") {
   if (!env.OPENAI_API_KEY) {
     console.warn("[openai-image] OPENAI_API_KEY ausente — /ia/image-preview retornará 503.");
   } else if (!env.OPENAI_ALLOW_BILLING) {
     console.warn("[openai-image] Defina OPENAI_ALLOW_BILLING=true.");
   }
-} else if (!env.REPLICATE_API_TOKEN) {
-  console.warn("[replicate] REPLICATE_API_TOKEN ausente — use o token de replicate.com/openai/gpt-image-2");
-} else if (!env.REPLICATE_ALLOW_BILLING) {
-  console.warn("[replicate] Defina REPLICATE_ALLOW_BILLING=true para gerar imagens.");
 } else if (imageProvider === "replicate") {
-  console.info("[image] Replicate openai/gpt-image-2 (REPLICATE_API_TOKEN)");
+  if (!env.REPLICATE_API_TOKEN) {
+    console.warn("[replicate] REPLICATE_API_TOKEN ausente — use o token de replicate.com/openai/gpt-image-2");
+  } else if (!env.REPLICATE_ALLOW_BILLING) {
+    console.warn("[replicate] Defina REPLICATE_ALLOW_BILLING=true para gerar imagens.");
+  } else {
+    console.info("[image] Replicate openai/gpt-image-2");
+  }
 }
 if (env.IMAGE_PIPELINE === "raw") {
   console.info("[image] IMAGE_PIPELINE=raw — prompt de imagem = só pedido do usuário; proposta sem Llama.");
+}
+if (env.IMAGE_PRODUCT_MODE === "collage" || env.IMAGE_PRODUCT_MODE === "collage_refine") {
+  console.warn(
+    `[image] IMAGE_PRODUCT_MODE=${env.IMAGE_PRODUCT_MODE} é legado (Sharp) — use gpt_integrated em produção.`,
+  );
+} else {
+  console.info("[image] IMAGE_PRODUCT_MODE=gpt_integrated");
 }
 
 const server = app.listen(env.PORT, () => {

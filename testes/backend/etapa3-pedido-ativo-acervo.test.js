@@ -5,11 +5,11 @@ import { resolveActivePedidoHint } from "../../backend/src/services/imageHeadlin
 import { collectReferenceMidiaIds } from "../../backend/src/services/referenceMidiaFromProposal.js";
 import { rankReferenceMidiaIds } from "../../backend/src/services/referenceMidiaRanking.js";
 import {
-  applyProductMediaGate,
   filterReferenceMidiaIdsToPedido,
   pruneProposalMidiasToPedido,
   reconcileProposalMidias,
 } from "../../backend/src/services/productMentionMatch.js";
+import { applyProductMediaGate } from "../../backend/src/services/productAcervoResolve.js";
 
 const PEDIDO_MONSTER =
   "quero fazer um post de promoção dos monster que temos , de 15 reais para 9, faça bem chamativo , so para as academias";

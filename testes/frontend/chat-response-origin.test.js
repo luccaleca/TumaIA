@@ -20,7 +20,8 @@ describe("chatResponseOrigin", () => {
     assert.equal(isInstructionChatMessage({ chat_route: "acervo" }), true);
   });
 
-  it("pinta bolha cloud de azul", () => {
-    assert.match(assistantBubbleSurfaceClass({ chat_source: "cloud" }), /bg-blue-50/);
+  it("bolha da assistente fica neutra (sem cores de diagnóstico)", () => {
+    assert.match(assistantBubbleSurfaceClass({ chat_source: "cloud" }), /bg-background/);
+    assert.match(assistantBubbleSurfaceClass({ chat_route: "acervo" }), /bg-background/);
   });
 });

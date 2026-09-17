@@ -93,6 +93,30 @@ const envSchema = z.object({
     (v) => (v === "" || v === undefined ? 1_500_000 : Number(v)),
     z.number().int().min(60_000).max(3_600_000),
   ),
+  /**
+   * Demo: LLM interpreta linguagem humana com `.md` em `backend/ia/agente/`.
+   * Código determinístico fica em ferramentas/guardrails (acervo, formato UI, imagem real).
+   */
+  CHAT_DEMO_AGENT: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  /**
+   * Interpretação semântica de criação via LLM (JSON estruturado).
+   * Desligado por padrão: fallback determinístico sempre disponível.
+   */
+  CHAT_CREATION_LLM_INTERPRET: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  /**
+   * Provider só da interpretação de criação: `ollama` (padrão) ou `cloud`.
+   * Independente de CHAT_LLM_PROVIDER do chat conversacional.
+   */
+  CHAT_CREATION_LLM_PROVIDER: z.preprocess((v) => {
+    const s = String(v ?? "ollama").trim().toLowerCase();
+    if (s === "cloud") return "cloud";
+    return "ollama";
+  }, z.enum(["ollama", "cloud"])),
+  /** Timeout da interpretação estruturada de criação (ms). Padrão 90s (Ollama local). */
+  CHAT_CREATION_LLM_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 90_000 : Number(v)),
+    z.number().int().min(5_000).max(180_000),
+  ),
   /** Modelo multimodal para análise de imagem (ex. `llava:7b` no Ollama). */
   LLAMA_VISION_MODEL: z.preprocess(empty, z.string().min(1).optional()),
   /** Vision só para identidade da marca (ex. `llava:13b` ou `llama3.2-vision:11b`). */
@@ -118,17 +142,38 @@ const envSchema = z.object({
     z.enum(["compact", "full"]),
   ),
   /**
-   * `replicate` (padrão) = openai/gpt-image-2 na Replicate (REPLICATE_API_TOKEN).
+   * `grok` (padrão) = Grok Imagine na xAI (CHAT_CLOUD_API_KEY / XAI_API_KEY).
+   * `replicate` = secundário — openai/gpt-image-2 na Replicate.
    * `openai` = API direta OpenAI (OPENAI_API_KEY).
-   * `flux` = FLUX Schnell/Pro legado na Replicate.
    */
   IMAGE_PROVIDER: z.preprocess((v) => {
-    const s = String(v ?? "replicate")
+    const s = String(v ?? "grok")
       .trim()
       .toLowerCase();
-    if (s === "openai" || s === "flux") return s;
-    return "replicate";
-  }, z.enum(["replicate", "openai", "flux"])),
+    if (s === "replicate" || s === "openai") return s;
+    if (s === "flux") return "replicate";
+    return "grok";
+  }, z.enum(["grok", "replicate", "openai"])),
+  /** Alias opcional da chave xAI; se vazio, usa CHAT_CLOUD_API_KEY. */
+  XAI_API_KEY: z.preprocess(empty, z.string().min(1).optional()),
+  GROK_ALLOW_BILLING: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  GROK_IMAGE_MODEL: z.preprocess(
+    (v) => (v === "" || v === undefined ? "grok-imagine-image-2.0" : String(v).trim()),
+    z.string().min(1),
+  ),
+  GROK_IMAGE_QUALITY: z.preprocess((v) => {
+    const s = String(v ?? "auto").trim().toLowerCase();
+    if (s === "low" || s === "medium" || s === "auto") return s;
+    return "auto";
+  }, z.enum(["low", "medium", "auto"])),
+  GROK_IMAGE_RESOLUTION: z.preprocess((v) => {
+    const s = String(v ?? "1k").trim().toLowerCase();
+    return s === "2k" ? "2k" : "1k";
+  }, z.enum(["1k", "2k"])),
+  GROK_IMAGE_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 180_000 : Number(v)),
+    z.number().int().min(30_000).max(600_000),
+  ),
   REPLICATE_GPT_IMAGE_QUALITY: z.preprocess(
     (v) => {
       const s = String(v ?? "high").trim().toLowerCase();
@@ -152,8 +197,8 @@ const envSchema = z.object({
     z.number().int().min(60_000).max(600_000),
   ),
   /**
-   * `raw` (padrão): GPT Image 2 — pedido + identidade da marca (+ logo em input_images).
-   * `standard`: montagem FLUX (compact/full + contextos).
+   * `raw` (padrão): pedido + identidade da marca (+ refs em edits).
+   * `standard`: legado de montagem antiga — preferir `raw`.
    */
   IMAGE_PIPELINE: z.preprocess(
     (v) => (String(v ?? "raw").trim().toLowerCase() === "standard" ? "standard" : "raw"),
@@ -262,6 +307,11 @@ const envSchema = z.object({
 export const env = envSchema.parse(process.env);
 
 /** Provider cloud (não-Ollama) para conversa. */
+/** Interpretação de criação usa Ollama por padrão (baterias live sem cloud). */
+export function isCreationLlmOllama() {
+  return env.CHAT_CREATION_LLM_PROVIDER !== "cloud";
+}
+
 export function isCloudChatLlm() {
   return env.CHAT_LLM_PROVIDER === "cloud";
 }

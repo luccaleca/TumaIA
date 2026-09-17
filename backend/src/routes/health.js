@@ -15,8 +15,8 @@ async function probeSupabase() {
       signal: AbortSignal.timeout(8000),
     });
     let hint;
-    if (res.status === 521) {
-      hint = "Projeto Supabase pausado — reative em supabase.com/dashboard";
+    if (res.status === 521 || res.status === 504) {
+      hint = "Projeto Supabase pausado ou fora do ar — reative em supabase.com/dashboard";
     } else if (!res.ok) {
       hint = `Supabase respondeu HTTP ${res.status}`;
     }

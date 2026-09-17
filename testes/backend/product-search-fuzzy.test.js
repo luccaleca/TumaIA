@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  applyProductMediaGate,
   checkProductMediaAvailability,
   compactProductKey,
   narrowImageRowsByProductMention,
@@ -9,6 +8,7 @@ import {
   scorePhraseAgainstBlob,
   scoreRowSpecificPhrase,
 } from "../../backend/src/services/productMentionMatch.js";
+import { applyProductMediaGate } from "../../backend/src/services/productAcervoResolve.js";
 import { pickBestProductMidiaId } from "../../backend/src/services/referenceMidiaRanking.js";
 
 const PRO_FORCE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";

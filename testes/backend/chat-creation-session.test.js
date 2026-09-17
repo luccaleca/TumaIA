@@ -185,4 +185,27 @@ describe("criação — interpretação contínua", () => {
     assert.equal(analyzed.wantsImageRoute, true);
     assert.notEqual(analyzed.route, "acervo");
   });
+
+  it("slash /monster.png-UUID resolve mídia e não pede descrição", async () => {
+    const monsterId = "437a4d60-d4b0-462d-ad5f-aaaaaaaaaaaa";
+    const q =
+      "preciso de uma foto do produto /monster.png-437a4d60-d4b0-462d-ad5f- desconto de natal, 1 é 10 e 3 é 20";
+    const ans = await tryChatAcervoResponse({
+      question: q,
+      idEmpresa: "00000000-0000-0000-0000-000000000001",
+      nomeFantasia: "FYT",
+      midias: [
+        { id_midia: monsterId, tipo_midia: "imagem", nome_exibicao: "Monster" },
+        {
+          id_midia: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          tipo_midia: "imagem",
+          nome_exibicao: "creatina",
+        },
+      ],
+      referenceMidiaIds: [],
+      classifyIntent: classifyChatAcervoIntent,
+    });
+    assert.match(ans || "", /Monster/i);
+    assert.doesNotMatch(ans || "", /Descreva|creatina/i);
+  });
 });

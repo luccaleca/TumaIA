@@ -37,12 +37,12 @@ Este documento liga **falhas típicas de modelos conversacionais** (especialment
 Usuário
    → chatTurnIntent (roteamento rápido)
    → acervo / identidade / composite (resposta determinística)
-   → Python RAG + treino (*.txt em instrucoes/)
+   → agente Node + LLM (regras em instrucoes/*.txt ainda informam o tom)
    → guardChatProductAnswer (produtos inventados)
    → sanitizeChatAnswer + chatLlmFailurePatterns (pós-LLM)
 ```
 
-### Arquivos de treino (Python)
+### Arquivos de treino (texto)
 
 - `treino_erros_llm_comuns.txt` — checklist dos 15 padrões
 - `treino_antipadroes.txt` — exemplos ERRADO/CERTO
@@ -61,4 +61,4 @@ Usuário
 
 ## Após alterar treino
 
-Reinicie o backend para recarregar o worker Python e teste com **nova conversa** no chat.
+Reinicie o backend e teste com **nova conversa** no chat.

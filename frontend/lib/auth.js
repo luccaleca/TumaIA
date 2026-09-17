@@ -41,7 +41,7 @@ export function normalizeSenhaClient(value) {
 export function formatAuthError(json) {
   if (!json || typeof json !== "object") return null;
   const err = json.error;
-  if (typeof err === "string") return err;
+  if (typeof err === "string" && err.trim() && err.trim() !== "{}") return err;
   if (err && typeof err === "object") {
     const fieldErrors = err.fieldErrors;
     if (fieldErrors && typeof fieldErrors === "object") {
@@ -53,10 +53,14 @@ export function formatAuthError(json) {
     }
     if (typeof err.formErrors?.[0] === "string") return err.formErrors[0];
     try {
-      return JSON.stringify(err);
+      const str = JSON.stringify(err);
+      if (str && str !== "{}") return str;
     } catch {
       return "Erro na requisição";
     }
+  }
+  if (json.code === "supabase_unreachable") {
+    return "Banco de dados Supabase inacessível (projeto pausado ou fora do ar).";
   }
   return null;
 }

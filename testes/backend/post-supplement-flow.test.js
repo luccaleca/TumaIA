@@ -127,7 +127,7 @@ describe("post supplement — buildFluxImagePrompt com proposta", () => {
     });
     assert.match(prompt, /500\s*mil\s+seguidores|comemorando/i);
     assert.match(prompt, /Direção visual da arte/i);
-    assert.match(prompt, /Visual da marca|LEIS INQUESTIONÁVEIS/i);
+    assert.match(prompt, /Visual da marca|LEIS (DA MARCA|INQUESTIONÁVEIS)|inquestionáveis/i);
     assert.match(prompt, /#00B341/);
     assert.match(prompt, /limpo, premium/i);
     assert.doesNotMatch(prompt, /Brand identity|Client request/i);

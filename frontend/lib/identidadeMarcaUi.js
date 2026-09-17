@@ -6,7 +6,7 @@ export const MAX_FOTOS_IDENTIDADE = 8;
 /** Tamanho recomendado para logo nas artes (mínimo 512 px desativado temporariamente). */
 export const LOGO_IDENTIDADE_IDEAL_LADO_MAIOR_PX = 1024;
 
-/** Nome fixo do contexto de identidade (um por empresa) — não listar em /painel/contextos. */
+/** Nome fixo do contexto de identidade (um por empresa). */
 export const IDENTIDADE_CONTEXTO_NOME = "Identidade da marca";
 export const IDENTIDADE_TIPO = "identidade_marca";
 
@@ -81,9 +81,6 @@ export const PILARES_COMPLETUDE = [
   { key: "papel_agente", label: "Papel", obrigatorio: false },
   { key: "evitar", label: "Evitar", obrigatorio: false },
 ];
-
-/** @deprecated */
-export const PILAR_LOGO = { key: "id_midia_logo", label: "Logo" };
 
 const MERGE_KEYS = [
   "sobre_empresa",
@@ -185,41 +182,6 @@ export function calcCompletudeLocal(dados) {
       Boolean(String(d.cor_primaria ?? "").trim()) &&
       temJeito,
     faltando: checks.filter((c) => !c.ok).map((c) => c.key),
-  };
-}
-
-/**
- * Preview amigável do que a arte vai usar.
- * @param {Record<string, unknown>} dados
- * @param {{ nome_fantasia?: string } | null} [empresa]
- */
-export function buildLeisMarcaPreview(dados, empresa = null) {
-  const d = dados || {};
-  const nome = String(empresa?.nome_fantasia || "").trim() || "sua marca";
-  const cores = [
-    d.cor_primaria,
-    d.cor_secundaria,
-    ...(Array.isArray(d.cores_adicionais) ? d.cores_adicionais : []),
-  ]
-    .map((c) => String(c || "").trim())
-    .filter(Boolean);
-  const leis = [];
-  if (String(d.id_midia_logo || "").trim()) leis.push("Logo oficial");
-  if (cores.length) leis.push(`Cores: ${cores.join(" · ")}`);
-  if (String(d.estilo_visual || "").trim()) leis.push(`Estilo: ${String(d.estilo_visual).trim()}`);
-  if (String(d.evitar || "").trim()) leis.push(`Evitar: ${String(d.evitar).trim()}`);
-  const papel = String(d.papel_agente || "").trim();
-  if (papel) {
-    const snippet = papel.length > 160 ? `${papel.slice(0, 159)}…` : papel;
-    leis.push(`Papel: ${snippet}`);
-  } else {
-    leis.push("Papel em branco ainda vazio — escreva como a marca fala e se apresenta");
-  }
-  leis.push("Produto: PNG do acervo, sem redesenhar");
-  return {
-    titulo: nome,
-    leis,
-    pronto: calcCompletudeLocal(d).pronto_para_imagem,
   };
 }
 

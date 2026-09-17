@@ -363,7 +363,7 @@ function buildCases() {
     ["pro force chocolate com whey baunilha", ["pf-chocolate", "whey-baunilha"]],
     ["monster e creatina integral", ["monster", "creatina-integral"]],
     ["creatina max com monster", ["creatina-max", "monster"]],
-    ["barra avela e whey chocolate", ["barra-avela", "whey-chocolate"]],
+    ["naked wafer avela e whey chocolate", ["barra-avela", "whey-chocolate"]],
   ];
   for (const [q, ids] of comboPairs) {
     add({ id: `pair-${cases.length}`, query: q, kind: "exact", ids });

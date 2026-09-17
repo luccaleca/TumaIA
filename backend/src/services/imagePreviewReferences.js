@@ -5,6 +5,7 @@ import {
 import { resolveActivePedidoHint } from "./imageHeadline.js";
 import { filterReferenceMidiaIdsToPedido } from "./productMentionMatch.js";
 import { collectReferenceMidiaIds } from "./referenceMidiaFromProposal.js";
+import { mergeReferenceMidiaIdsFromSlashText } from "./chatCreationInterpret.js";
 import { pickHeroProductMidiaId, rankReferenceMidiaIds } from "./referenceMidiaRanking.js";
 import { wantsLogoAsHero } from "./logoReferencePolicy.js";
 import { env } from "../config.js";
@@ -75,7 +76,7 @@ export async function resolveInputImageUrlsForGpt(db, idEmpresa, refIds, opts = 
  * @param {Array<Record<string, unknown>>} contextoRows
  * @param {Record<string, unknown> | null} [imageIntent]
  * @param {string} [productMode]
- * @param {{ throwIfNotReady?: boolean }} [opts]
+ * @param {{ throwIfNotReady?: boolean, midiaCatalog?: Array<Record<string, unknown>> }} [opts]
  */
 export async function resolveGptImage2InputImages(
   db,
@@ -101,6 +102,16 @@ export async function resolveGptImage2InputImages(
   const { identidadeDados } = partitionContextosIdentidade(contextoRows);
   const logoId = identidadeDados?.id_midia_logo ? String(identidadeDados.id_midia_logo).trim() : "";
   const logoAsHero = wantsLogoAsHero(userHint);
+
+  // Catálogo opcional (rota image-preview) resolve `/arquivo-UUID` do histórico.
+  const catalog = Array.isArray(opts.midiaCatalog) ? opts.midiaCatalog : null;
+  if (catalog?.length) {
+    refIds = mergeReferenceMidiaIdsFromSlashText(refIds, parsed.history, catalog).slice(
+      0,
+      REFERENCE_MIDIA_MAX,
+    );
+  }
+
   if (logoId && !refIds.includes(logoId)) {
     refIds = [...refIds, logoId].slice(0, REFERENCE_MIDIA_MAX);
   }
@@ -163,7 +174,7 @@ export async function resolveGptImage2InputImages(
   const productNames = productRows
     .map((row) => String(row.nome_exibicao ?? row.nome_arquivo ?? "").trim())
     .filter(Boolean);
-  const prepForReplicate = (env.IMAGE_PROVIDER || "replicate") === "replicate";
+  const prepForReplicate = (env.IMAGE_PROVIDER || "grok") === "replicate";
   const inputImages = await resolveInputImageUrlsForGpt(db, idEmpresa, inputImageIds, {
     prepForReplicate,
     logoId,

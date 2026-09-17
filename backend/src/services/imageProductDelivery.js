@@ -3,13 +3,15 @@ import { env } from "../config.js";
 /**
  * Como os PNGs do acervo entram na arte final.
  *
- * - `gpt_integrated` — como a API oficial: PNGs em `input_images` / `images.edit`,
- *   o modelo monta cenário + produtos numa passada (recomendado).
- * - `collage` — fundo vazio no GPT + colagem Sharp (legado).
- * - `collage_refine` — collage Sharp e depois GPT harmoniza a imagem composta.
+ * - `gpt_integrated` (padrão) — PNGs em `input_images` / `images.edit`.
+ * - `collage` / `collage_refine` — legado Sharp; só debug local.
  */
 export const IMAGE_PRODUCT_MODES = ["gpt_integrated", "collage", "collage_refine"];
 
+/** true se o modo for colagem Sharp (legado). */
+export function isLegacyCollageProductMode(mode = getImageProductMode()) {
+  return mode === "collage" || mode === "collage_refine";
+}
 export function getImageProductMode() {
   const raw = String(env.IMAGE_PRODUCT_MODE || "gpt_integrated")
     .trim()
@@ -22,7 +24,7 @@ export function usesGptIntegratedProducts(mode = getImageProductMode()) {
 }
 
 export function usesSharpProductCollage(mode = getImageProductMode()) {
-  return mode === "collage" || mode === "collage_refine";
+  return isLegacyCollageProductMode(mode);
 }
 
 export function usesGptRefineAfterCollage(mode = getImageProductMode()) {
