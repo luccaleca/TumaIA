@@ -53,5 +53,8 @@ Thumbs.db
 tools/wppconnect/server/
 tools/wppconnect/tumaia.meta.json
 
+# ngrok local (binário + logs)
+tools/ngrok/
+
 # Índice local Chroma (legado — não versionar binários)
 backend/ia/python/indice_contextos/

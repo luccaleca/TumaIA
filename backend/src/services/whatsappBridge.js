@@ -2,12 +2,39 @@ import { env } from "../config.js";
 import { handleWhatsappInbound } from "./whatsappInboundService.js";
 import { isPlausibleAuthPhone } from "./whatsappPhoneAuth.js";
 import {
+  isWhatsappCloudConfigured,
+  isWhatsappCloudEnabled,
+  whatsappCloudSendImageUrl,
+  whatsappCloudSendText,
+} from "./whatsappCloudClient.js";
+import { parseWhatsappCloudWebhookMessages } from "./whatsappCloudWebhookParser.js";
+import {
   isWppconnectEnabled,
   wppconnectResolvePnLid,
   wppconnectSendImageUrl,
   wppconnectSendText,
 } from "./wppconnectClient.js";
 import { parseWppconnectWebhookMessage, pickLidRecipient } from "./wppconnectWebhookParser.js";
+
+/**
+ * @typedef {{
+ *   label: string,
+ *   sendText: (to: string, text: string) => Promise<{ ok?: boolean, error?: string }>,
+ *   sendImageUrl: (to: string, url: string, caption?: string) => Promise<{ ok?: boolean, error?: string }>,
+ * }} WhatsappOutboundChannel
+ */
+
+const wppChannel = /** @type {WhatsappOutboundChannel} */ ({
+  label: "wppconnect",
+  sendText: wppconnectSendText,
+  sendImageUrl: wppconnectSendImageUrl,
+});
+
+const cloudChannel = /** @type {WhatsappOutboundChannel} */ ({
+  label: "whatsapp-cloud",
+  sendText: whatsappCloudSendText,
+  sendImageUrl: whatsappCloudSendImageUrl,
+});
 
 const DEDUP_TTL_MS = 5 * 60 * 1000;
 const DEDUP_MAX = 2000;
@@ -43,12 +70,18 @@ function buildOutboundText(out) {
   return text;
 }
 
-async function deliverWhatsappReply(msg, out) {
+/**
+ * @param {{ chat_id?: string, from?: string, sender_ids?: string[] }} msg
+ * @param {any} out
+ * @param {WhatsappOutboundChannel} channel
+ */
+async function deliverWhatsappReply(msg, out, channel) {
   const chatId = msg.chat_id || msg.from;
+  const tag = channel.label;
   if (!out.ok) {
     if (out.status === 403) {
       console.warn(
-        `[wppconnect] acesso negado (${out.reason || "?"}): ${out.phone_detected || msg.from} sender_ids=${JSON.stringify(msg.sender_ids || [])}`,
+        `[${tag}] acesso negado (${out.reason || "?"}): ${out.phone_detected || msg.from} sender_ids=${JSON.stringify(msg.sender_ids || [])}`,
       );
       const text =
         out.reason === "not_registered"
@@ -62,36 +95,36 @@ async function deliverWhatsappReply(msg, out) {
               ? out.error ||
                 "Abra o painel TumaIA e entre no workspace da empresa — isso define qual marca o bot usa no WhatsApp."
               : out.error || "Você não pode usar este atendimento agora.";
-      await wppconnectSendText(chatId, text);
+      await channel.sendText(chatId, text);
       return;
     }
     if (out.status === 503) {
-      await wppconnectSendText(chatId, "Serviço indisponível no momento. Tente mais tarde.");
+      await channel.sendText(chatId, "Serviço indisponível no momento. Tente mais tarde.");
       return;
     }
-    await wppconnectSendText(chatId, out.error || "Não consegui processar agora. Tente de novo.");
+    await channel.sendText(chatId, out.error || "Não consegui processar agora. Tente de novo.");
     return;
   }
 
   const urls = Array.isArray(out.image_urls) ? out.image_urls.filter(Boolean) : [];
   for (let i = 0; i < urls.length; i++) {
     const caption = i === 0 && out.caption ? String(out.caption) : "";
-    console.info(`[wppconnect] enviando imagem ${i + 1}/${urls.length} para ${chatId}`);
-    const sent = await wppconnectSendImageUrl(chatId, urls[i], caption);
+    console.info(`[${tag}] enviando imagem ${i + 1}/${urls.length} para ${chatId}`);
+    const sent = await channel.sendImageUrl(chatId, urls[i], caption);
     if (!sent.ok) {
-      console.warn("[wppconnect] falha ao enviar imagem:", sent.error);
-      await wppconnectSendText(
+      console.warn(`[${tag}] falha ao enviar imagem:`, sent.error);
+      await channel.sendText(
         chatId,
         `Gerei a arte, mas não consegui enviar a imagem aqui. URL: ${urls[i]}`,
       );
     } else {
-      console.info(`[wppconnect] imagem ${i + 1}/${urls.length} enviada`);
+      console.info(`[${tag}] imagem ${i + 1}/${urls.length} enviada`);
     }
   }
 
   const text = buildOutboundText(out);
   if (text) {
-    await wppconnectSendText(chatId, text);
+    await channel.sendText(chatId, text);
   }
 }
 
@@ -114,21 +147,34 @@ async function resolveInboundAuthPhone(msg) {
 }
 
 /**
- * @param {import("./wppconnectWebhookParser.js").ReturnType<typeof parseWppconnectWebhookMessage>} msg
+ * @param {{
+ *   from: string,
+ *   chat_id: string,
+ *   body: string,
+ *   message_id?: string | null,
+ *   from_me?: boolean,
+ *   is_group?: boolean,
+ *   sender_ids?: string[],
+ * }} msg
+ * @param {WhatsappOutboundChannel} channel
+ * @param {{ resolveAuthPhone?: boolean }} [opts]
  */
-async function processInboundMessage(msg) {
+async function processInboundMessage(msg, channel, opts = {}) {
   if (msg.from_me) return;
   if (msg.is_group && !env.WPPCONNECT_PROCESS_GROUPS) return;
   if (msg.message_id && rememberMessageId(msg.message_id)) return;
 
-  const authPhone = await resolveInboundAuthPhone(msg);
+  const authPhone =
+    opts.resolveAuthPhone === false
+      ? msg.from
+      : await resolveInboundAuthPhone(/** @type {any} */ (msg));
 
   const isImageCmd = /^gerar\s+imagem/i.test(msg.body);
   const isCaptionCmd = /^gerar\s+legenda/i.test(msg.body);
   if (isImageCmd) {
-    await wppconnectSendText(msg.chat_id || msg.from, "Gerando a arte… isso vai levar alguns instantes. Aguarde ⏳");
+    await channel.sendText(msg.chat_id || msg.from, "Gerando a arte… isso vai levar alguns instantes. Aguarde ⏳");
   } else if (isCaptionCmd) {
-    await wppconnectSendText(
+    await channel.sendText(
       msg.chat_id || msg.from,
       "Montando legenda e hashtags com IA… isso vai levar alguns instantes. Aguarde ⏳",
     );
@@ -143,8 +189,8 @@ async function processInboundMessage(msg) {
       message_id: msg.message_id || undefined,
     });
   } catch (err) {
-    console.error("[wppconnect] erro em handleWhatsappInbound:", err);
-    await wppconnectSendText(
+    console.error(`[${channel.label}] erro em handleWhatsappInbound:`, err);
+    await channel.sendText(
       msg.chat_id || msg.from,
       "Algo deu errado ao processar seu pedido. Tente de novo em instantes.",
     );
@@ -152,9 +198,9 @@ async function processInboundMessage(msg) {
   }
 
   console.info(
-    `[wppconnect] resposta pronta em ${Date.now() - startedAt}ms imgs=${out.image_urls?.length || 0}`,
+    `[${channel.label}] resposta pronta em ${Date.now() - startedAt}ms imgs=${out.image_urls?.length || 0}`,
   );
-  await deliverWhatsappReply(msg, out);
+  await deliverWhatsappReply(msg, out, channel);
 }
 
 /**
@@ -166,26 +212,86 @@ export async function handleWppconnectWebhook(body) {
     return { ok: false, status: 503, error: "WPPCONNECT_ENABLED não está ativo no backend." };
   }
 
+  const root = body && typeof body === "object" ? /** @type {Record<string, unknown>} */ (body) : null;
+  const eventHint = root ? String(root.event || root.Event || "").trim() : "";
+
   const msg = parseWppconnectWebhookMessage(body);
   if (!msg) {
+    if (eventHint) {
+      console.info(`[wppconnect] webhook ignorado (evento=${eventHint}) — só processamos onmessage`);
+    }
     return { ok: true, skipped: true, reason: "evento ignorado" };
   }
 
   if (msg.from_me) {
+    console.info("[wppconnect] webhook ignorado (fromMe) — mensagem do próprio número da sessão");
     return { ok: true, skipped: true, reason: "fromMe" };
   }
 
   if (msg.is_group && !env.WPPCONNECT_PROCESS_GROUPS) {
+    console.info("[wppconnect] webhook ignorado (grupo)");
     return { ok: true, skipped: true, reason: "grupo" };
   }
 
-  void processInboundMessage(msg).catch((err) => {
+  console.info(
+    `[wppconnect] mensagem recebida de ${msg.from || "?"} chat=${msg.chat_id || "?"} body=${String(msg.body || "").slice(0, 80)}`,
+  );
+
+  void processInboundMessage(msg, wppChannel).catch((err) => {
     console.error("[wppconnect] erro ao processar mensagem:", err);
-    void wppconnectSendText(
+    void wppChannel.sendText(
       msg.chat_id || msg.from,
       "Algo deu errado ao consultar a IA. Tente de novo em instantes.",
     );
   });
 
   return { ok: true, accepted: true, from: msg.from };
+}
+
+/**
+ * Webhook Cloud API (Meta) → IA → resposta no WhatsApp oficial.
+ * @param {unknown} body
+ */
+export async function handleWhatsappCloudWebhook(body) {
+  if (!isWhatsappCloudEnabled()) {
+    return { ok: false, status: 503, error: "WHATSAPP_CLOUD_ENABLED não está ativo no backend." };
+  }
+  if (!isWhatsappCloudConfigured()) {
+    return {
+      ok: false,
+      status: 503,
+      error: "Configure WHATSAPP_CLOUD_ACCESS_TOKEN e WHATSAPP_CLOUD_PHONE_NUMBER_ID.",
+    };
+  }
+
+  const expectedPhoneId = String(env.WHATSAPP_CLOUD_PHONE_NUMBER_ID || "").trim();
+  const messages = parseWhatsappCloudWebhookMessages(body);
+  if (!messages.length) {
+    return { ok: true, skipped: true, reason: "sem mensagens de texto" };
+  }
+
+  let accepted = 0;
+  for (const msg of messages) {
+    if (expectedPhoneId && msg.phone_number_id && msg.phone_number_id !== expectedPhoneId) {
+      console.info(
+        `[whatsapp-cloud] ignorado phone_number_id=${msg.phone_number_id} (esperado ${expectedPhoneId})`,
+      );
+      continue;
+    }
+
+    console.info(
+      `[whatsapp-cloud] mensagem de ${msg.from || "?"} body=${String(msg.body || "").slice(0, 80)}`,
+    );
+
+    accepted += 1;
+    void processInboundMessage(msg, cloudChannel, { resolveAuthPhone: false }).catch((err) => {
+      console.error("[whatsapp-cloud] erro ao processar mensagem:", err);
+      void cloudChannel.sendText(
+        msg.chat_id || msg.from,
+        "Algo deu errado ao consultar a IA. Tente de novo em instantes.",
+      );
+    });
+  }
+
+  return { ok: true, accepted: accepted > 0, count: accepted };
 }

@@ -84,6 +84,16 @@ const envSchema = z.object({
     (v) => (v === "" || v === undefined ? "grok-4.6" : String(v).trim()),
     z.string().min(1),
   ),
+  /**
+   * Runtime do SDK do chat: `local` (padrão, sem VM) ou `cloud` (VM hospedada; rate limit).
+   */
+  CHAT_CLOUD_RUNTIME: z.preprocess((v) => {
+    const s = String(v ?? "local").trim().toLowerCase();
+    if (s === "cloud") return "cloud";
+    return "local";
+  }, z.enum(["local", "cloud"])),
+  /** CWD isolado do agente local (padrão: tmp/tumaia-chat-agent). */
+  CHAT_CLOUD_LOCAL_CWD: z.preprocess(empty, z.string().min(1).optional()),
   CHAT_CLOUD_TIMEOUT_MS: z.preprocess(
     (v) => (v === "" || v === undefined ? 300_000 : Number(v)),
     z.number().int().min(30_000).max(900_000),
@@ -283,15 +293,34 @@ const envSchema = z.object({
   /** Segredo opcional no webhook (?secret= ou header x-wppconnect-secret). */
   WPPCONNECT_WEBHOOK_SECRET: z.preprocess(empty, z.string().min(1).optional()),
   WPPCONNECT_PROCESS_GROUPS: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
-  /** Webhook n8n para publicar no Instagram (POST image_url + caption). */
-  N8N_INSTAGRAM_WEBHOOK_URL: z.preprocess(empty, z.string().url().optional()),
-  N8N_INSTAGRAM_CLIENT_ID: z.preprocess(
-    (v) => (v === "" || v === undefined ? "tumaia" : String(v).trim()),
-    z.string().min(1).max(64),
+  /**
+   * WhatsApp Cloud API (Meta Graph) — canal oficial.
+   * Phone number ID ≠ número E.164; vem em WhatsApp → API Setup.
+   */
+  WHATSAPP_CLOUD_ENABLED: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  WHATSAPP_CLOUD_ACCESS_TOKEN: z.preprocess(empty, z.string().min(1).optional()),
+  WHATSAPP_CLOUD_PHONE_NUMBER_ID: z.preprocess(empty, z.string().min(1).optional()),
+  WHATSAPP_CLOUD_WABA_ID: z.preprocess(empty, z.string().min(1).optional()),
+  WHATSAPP_CLOUD_VERIFY_TOKEN: z.preprocess(empty, z.string().min(1).optional()),
+  /** App Secret do app Meta — valida X-Hub-Signature-256 no POST do webhook (opcional em lab). */
+  WHATSAPP_CLOUD_APP_SECRET: z.preprocess(empty, z.string().min(1).optional()),
+  WHATSAPP_CLOUD_API_VERSION: z.preprocess(
+    (v) => (v === "" || v === undefined ? "v21.0" : String(v).trim()),
+    z.string().min(2).max(16),
   ),
-  N8N_INSTAGRAM_TIMEOUT_MS: z.preprocess(
-    (v) => (v === "" || v === undefined ? 90_000 : Number(v)),
-    z.number().int().min(5_000).max(300_000),
+  /**
+   * Publicação Instagram direta (Meta Graph API Content Publishing).
+   * Conta Professional/Business vinculada a Página do Facebook.
+   */
+  INSTAGRAM_GRAPH_ACCESS_TOKEN: z.preprocess(empty, z.string().min(1).optional()),
+  INSTAGRAM_BUSINESS_ACCOUNT_ID: z.preprocess(empty, z.string().min(1).optional()),
+  INSTAGRAM_GRAPH_API_VERSION: z.preprocess(
+    (v) => (v === "" || v === undefined ? "v21.0" : String(v).trim()),
+    z.string().min(2).max(16),
+  ),
+  INSTAGRAM_PUBLISH_TIMEOUT_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 120_000 : Number(v)),
+    z.number().int().min(15_000).max(300_000),
   ),
   /**
    * Allowlist de e-mails com acesso ao TumaCore Plataforma (`/plataforma/*`).

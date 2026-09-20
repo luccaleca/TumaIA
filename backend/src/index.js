@@ -2,6 +2,12 @@ import { createApp } from "./app.js";
 import { env, isCloudChatLlm } from "./config.js";
 import { ensureChatWorkerReady, shutdownChatWorker } from "./services/chatPythonWorker.js";
 import { isWppconnectEnabled, ensureWppconnectSession } from "./services/wppconnectClient.js";
+import {
+  isWhatsappCloudEnabled,
+  isWhatsappCloudConfigured,
+  whatsappCloudCheckPhone,
+  whatsappCloudSubscribeApp,
+} from "./services/whatsappCloudClient.js";
 import { looksLikeCrsrPrefixedApiKey, resolveGrokImageApiKey } from "./services/grokImageService.js";
 
 const app = createApp();
@@ -80,9 +86,39 @@ const server = app.listen(env.PORT, () => {
       else console.warn("[wppconnect] sessão WhatsApp inativa:", s.error || s.status);
     });
   }
-  if (isCloudChatLlm()) {
+  if (isWhatsappCloudEnabled()) {
     console.info(
-      `[chat] conversa via agente cloud (${env.CHAT_CLOUD_MODEL}); Ollama fora do chat`,
+      `[whatsapp-cloud] ativo — webhook em http://localhost:${env.PORT}/whatsapp/cloud/webhook`,
+    );
+    if (!isWhatsappCloudConfigured()) {
+      console.warn(
+        "[whatsapp-cloud] faltam WHATSAPP_CLOUD_ACCESS_TOKEN ou WHATSAPP_CLOUD_PHONE_NUMBER_ID",
+      );
+    } else {
+      whatsappCloudCheckPhone().then((phone) => {
+        if (phone.ok) {
+          console.info(
+            `[whatsapp-cloud] número ${phone.display_phone_number || "?"} CONNECTED (${phone.platform_type})`,
+          );
+        } else {
+          console.warn("[whatsapp-cloud] número não CONNECTED:", phone.error || phone.status);
+        }
+      });
+      if (env.WHATSAPP_CLOUD_WABA_ID?.trim()) {
+        whatsappCloudSubscribeApp().then((sub) => {
+          if (sub.ok) console.info("[whatsapp-cloud] app inscrito nos webhooks da WABA");
+          else console.warn("[whatsapp-cloud] subscribe WABA:", sub.error);
+        });
+      }
+    }
+    console.info(
+      "[whatsapp-cloud] no Meta: Callback URL HTTPS apontando para /whatsapp/cloud/webhook (ngrok em lab)",
+    );
+  }
+  if (isCloudChatLlm()) {
+    const runtime = String(env.CHAT_CLOUD_RUNTIME || "local").trim().toLowerCase();
+    console.info(
+      `[chat] conversa via agente cloud (${env.CHAT_CLOUD_MODEL}, runtime=${runtime}); Ollama fora do chat`,
     );
     if (!env.CHAT_CLOUD_API_KEY) {
       console.warn("[chat] CHAT_CLOUD_API_KEY ausente — respostas conversacionais vão falhar.");
