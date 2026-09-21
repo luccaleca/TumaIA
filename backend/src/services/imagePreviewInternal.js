@@ -6,7 +6,7 @@ async function assertEmpresaInternal() {
 }
 
 /**
- * Executa `handleImagePreview` sem Express real (n8n / WhatsApp).
+ * Executa `handleImagePreview` sem Express real (WhatsApp / automação interna).
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {Record<string, unknown>} body
  */

@@ -49,10 +49,6 @@ Thumbs.db
 .cursor/
 *.swp
 
-# WPPConnect (clone local — tools/wppconnect/setup.mjs)
-tools/wppconnect/server/
-tools/wppconnect/tumaia.meta.json
-
 # ngrok local (binário + logs)
 tools/ngrok/
 

@@ -10,12 +10,9 @@
     "dev": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev:stable -w tumaia-backend\" \"npm run dev -w frontend\"",
     "dev:status": "node tools/dev-status.mjs",
     "dev:reset": "node tools/dev-reset.mjs",
-    "whats": "npm run wppconnect:dev",
-    "whats:session": "npm run wppconnect:session",
     "dev:watch": "concurrently -n backend,frontend -c cyan,magenta \"npm run dev -w tumaia-backend\" \"npm run dev -w frontend\"",
     "dev:web": "npm run dev",
     "dev:app": "npm run dev",
-    "dev:mono": "concurrently -n wpp,backend,frontend -c yellow,cyan,magenta \"npm run whats\" \"npm run dev:stable -w tumaia-backend\" \"npm run dev -w frontend\"",
     "dev:backend": "npm run dev -w tumaia-backend",
     "dev:backend:stable": "npm run dev:stable -w tumaia-backend",
     "dev:frontend": "npm run dev -w frontend",
@@ -29,10 +26,7 @@
     "check:replicate": "npm run check:replicate -w tumaia-backend",
     "test:replicate:smoke": "npm run test:replicate:smoke -w tumaia-backend",
     "repertorio:1000": "node backend/scripts/gerar-repertorio-1000.mjs",
-    "repertorio:simular": "node backend/scripts/simular-repertorio-tuma.mjs",
-    "wppconnect:setup": "node tools/wppconnect/setup.mjs",
-    "wppconnect:dev": "node tools/wppconnect/start.mjs",
-    "wppconnect:session": "node tools/wppconnect/session.mjs"
+    "repertorio:simular": "node backend/scripts/simular-repertorio-tuma.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

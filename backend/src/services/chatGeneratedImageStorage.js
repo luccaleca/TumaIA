@@ -97,7 +97,7 @@ export async function persistChatGeneratedImages(db, idEmpresa, idConversa, imag
 }
 
 /**
- * Salva imagens do WhatsApp no Storage e devolve paths + URLs públicas (para n8n / Instagram).
+ * Salva imagens do WhatsApp no Storage e devolve paths + URLs públicas (para Instagram).
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {string} idEmpresa
  * @param {string} phone

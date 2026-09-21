@@ -17,7 +17,7 @@ const fromBodySchema = z.object({
 });
 
 /**
- * Webhook n8n / WPPConnect → uma mensagem de texto do usuário.
+ * Webhook interno → uma mensagem de texto do usuário (teste / automação).
  * Mantém histórico em memória por telefone e devolve texto (+ URLs de imagem quando houver).
  */
 r.post("/message", async (req, res) => {

@@ -40,7 +40,7 @@ async function probeSupabaseDirect() {
 const CHECKS = [
   { name: "frontend", port: 3000, url: "http://127.0.0.1:3000" },
   { name: "backend", port: 4000, url: "http://127.0.0.1:4000/health" },
-  { name: "wppconnect", port: 21465, url: "http://127.0.0.1:21465/api-docs" },
+  { name: "whatsapp-cloud", port: 4000, url: "http://127.0.0.1:4000/whatsapp/cloud/status" },
 ];
 
 async function probe(url) {

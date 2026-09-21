@@ -60,7 +60,7 @@ async function gerarTextoLlamaJson(prompt) {
 
 /**
  * Gera copy, descrição e hashtags para post.
- * Ideal para ser chamado por n8n/automação via segredo interno.
+ * Ideal para ser chamado por automação via segredo interno.
  */
 r.post("/social-content", async (req, res) => {
   const parsed = gerarConteudoBody.safeParse(req.body);

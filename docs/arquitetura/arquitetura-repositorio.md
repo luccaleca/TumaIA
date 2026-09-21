@@ -9,7 +9,7 @@ Estado funcional atual: [`../stack-e-estado-atual.md`](../stack-e-estado-atual.m
 ```mermaid
 flowchart TB
   subgraph canais["Canais"]
-    WA["WhatsApp\nWPPConnect"]
+    WA["WhatsApp\nCloud API"]
     FE["Next.js\npainel"]
   end
 
@@ -18,12 +18,12 @@ flowchart TB
     EMP["/empresas"]
     CHAT["/chat"]
     IA["/ia"]
-    WPP["/wppconnect"]
-    INT["/internal\nn8n / legado"]
+    WAC["/whatsapp/cloud"]
+    INT["/internal"]
     HLTH["/health"]
   end
 
-  subgraph py["IA — Python subprocesso"]
+  subgraph py["IA — Python subprocesso (legado)"]
     CW["chat_worker.py"]
     CHR["Chroma"]
     ORQ["orquestrador RAG"]
@@ -44,17 +44,17 @@ flowchart TB
     FLX["FLUX via /internal\nlegado"]
   end
 
-  subgraph ext["Externo opcional"]
-    N8N["n8n\nInstagram · automação"]
+  subgraph meta["Meta Graph"]
+    IG["Instagram API"]
   end
 
-  WA --> WPP
+  WA --> WAC
   FE --> AUTH
   FE --> EMP
   FE --> CHAT
   FE --> IA
 
-  WPP --> api
+  WAC --> api
   CHAT --> PG
   IA --> PG
   EMP --> PG
@@ -75,9 +75,7 @@ flowchart TB
   IA --> GPT
   INT --> FLX
 
-  IA -->|"publish-instagram"| N8N
-  INT -.->|"INTERNAL_WEBHOOK_SECRET"| N8N
-  N8N --> IG["Instagram API"]
+  IA -->|"publish-instagram"| IG
 ```
 
 ## Pipeline RAG (chat Tuma)
@@ -109,7 +107,7 @@ flowchart TD
   C["Confirmação ao usuário"]
   I["image-preview\nOpenAI ou Replicate"]
   CAP["post-caption\nlegenda + hashtags"]
-  PUB["publish-instagram\nn8n"]
+  PUB["publish-instagram\nMeta Graph"]
 
   P --> B --> C --> I --> CAP --> PUB
 ```
@@ -124,8 +122,8 @@ No WhatsApp, etapas equivalentes via comandos de texto (`gerar imagem`, `gerar l
 | Empresas | `/empresas/*` | JWT | Multi-tenant, contextos, mídias, identidade |
 | Chat | `/chat/*` | JWT | Conversas persistidas |
 | IA | `/ia/chat`, `/post-context-proposal`, `/post-caption`, `/image-preview`, `/publish-instagram` | JWT | Fluxo completo de arte |
-| WhatsApp | `/wppconnect/webhook` | Opcional secret | Mensagens WPPConnect |
-| Automação | `/internal/*`, `/internal/whatsapp/message` | `x-internal-secret` | n8n, Replicate, legado |
+| WhatsApp | `/whatsapp/cloud/webhook` | Verify token Meta | Mensagens Cloud API |
+| Automação | `/internal/*`, `/internal/whatsapp/message` | `x-internal-secret` | Testes, Replicate, legado |
 | Saúde | `/health` | Público | Diagnóstico |
 
 ## Pastas do monorepo
@@ -136,7 +134,6 @@ No WhatsApp, etapas equivalentes via comandos de texto (`gerar imagem`, `gerar l
 | `backend/src/` | Express, serviços, rotas |
 | `backend/ia/python/` | Worker RAG, instruções `.txt` |
 | `testes/` | Testes Node |
-| `tools/wppconnect/` | Setup/dev WPPConnect |
 | `docs/` | Documentação |
 
 ---

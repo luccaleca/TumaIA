@@ -1,6 +1,6 @@
 # TumaIA Backend (Node + Express)
 
-API do painel Next.js, WhatsApp (WPPConnect) e automações n8n.
+API do painel Next.js, WhatsApp Cloud API (Meta) e publicação Instagram via Graph.
 
 **Estado atual e stack:** [`../docs/stack-e-estado-atual.md`](../docs/stack-e-estado-atual.md)
 
@@ -20,22 +20,20 @@ URL padrão: `http://localhost:4000` (ou `PORT` no `.env`).
 | `SUPABASE_ANON_KEY` | Alguns fluxos de auth |
 | `INTERNAL_WEBHOOK_SECRET` | Rotas `/internal/*` |
 | `LLAMA_BASE_URL`, `LLAMA_MODEL` | Ollama local (`qwen2.5:3b`) |
-| `WPPCONNECT_ENABLED`, `WPPCONNECT_*` | WhatsApp direto |
+| `WHATSAPP_CLOUD_*` | WhatsApp Cloud API (Meta) |
 | `IMAGE_PROVIDER`, `OPENAI_*` / `REPLICATE_*` | Geração de imagem |
-| `N8N_INSTAGRAM_WEBHOOK_URL` | Publicação Instagram |
+| `INSTAGRAM_GRAPH_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ACCOUNT_ID` | Publicação Instagram (Meta Graph) |
 | `MEDIA_BUCKET` | Bucket Supabase para mídias |
 
 Ver comentários completos em `.env.example`.
 
-### WhatsApp (desenvolvimento)
+### WhatsApp (Cloud API)
 
-```bash
-npm run wppconnect:setup    # uma vez
-npm run whats               # WPPConnect em :21465
-npm run whats:session       # QR / status
-```
+No `.env`: `WHATSAPP_CLOUD_ENABLED=true` + token + Phone number ID.
 
-No `.env`: `WPPCONNECT_ENABLED=true`. Webhook: `http://localhost:4000/wppconnect/webhook`.
+Webhook: `GET/POST /whatsapp/cloud/webhook` (em lab, exponha com HTTPS/ngrok).
+
+Status: `GET /whatsapp/cloud/status`.
 
 Usuário precisa **telefone no cadastro** + **workspace ativo** no painel (`id_empresa_ultima`).
 
@@ -66,7 +64,7 @@ Empresas, membros, convites, contextos, mídias, identidade de marca. Sempre val
 | POST | `/post-caption` | Legenda + hashtags |
 | POST | `/image-preview` | Gera prévia de imagem |
 | POST | `/image-preview/plan` | Plano de geração (sem debitar) |
-| POST | `/publish-instagram` | Publica via n8n |
+| POST | `/publish-instagram` | Publica via Meta Graph |
 | GET | `/arte-brief-defaults` | Defaults do brief de arte |
 | GET | `/image-download` | Download de imagem gerada |
 
@@ -74,11 +72,11 @@ Quando o pedido indica post/campanha, o chat pode anexar `post_supplement`, `ui_
 
 ## Rotas — WhatsApp
 
-### `/wppconnect`
+### `/whatsapp/cloud`
 
-- `POST /webhook` — eventos do WPPConnect Server
-- `GET /status` — integração ativa?
-- `POST /recover` — recuperar sessão
+- `GET /webhook` — verificação Meta (`hub.verify_token`)
+- `POST /webhook` — mensagens inbound Cloud API
+- `GET /status` — integração ativa / número CONNECTED?
 
 Fluxo: `whatsappBridge.js` → `whatsappInboundService.js` → mesma IA do painel.
 
@@ -88,7 +86,7 @@ Auth: header `x-internal-secret` ou `Authorization: Bearer` = `INTERNAL_WEBHOOK_
 
 | Rota | Função |
 |------|--------|
-| `POST /internal/whatsapp/message` | Mensagem WhatsApp via n8n |
+| `POST /internal/whatsapp/message` | Mensagem WhatsApp (teste / automação) |
 | `POST /internal/whatsapp/reset` | Limpa sessão em memória |
 | `GET /internal/supabase/ping` | Teste Supabase |
 | `GET/POST /internal/replicate/*` | FLUX legado, usage |

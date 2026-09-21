@@ -7,6 +7,14 @@ function mediaBucket() {
   return (env.MEDIA_BUCKET || "midias").trim();
 }
 
+function graphApiVersion() {
+  return String(env.INSTAGRAM_GRAPH_API_VERSION || "v21.0").trim() || "v21.0";
+}
+
+function graphBaseUrl() {
+  return `https://graph.facebook.com/${graphApiVersion()}`;
+}
+
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {{ idEmpresa: string, imageStoragePath?: string, imageUrl?: string }} input
@@ -47,7 +55,78 @@ async function ensurePublicImageUrl(db, input) {
 }
 
 /**
- * Publica no Instagram via webhook n8n (container + media_publish).
+ * @param {string} url
+ * @param {RequestInit} [init]
+ * @param {number} [timeoutMs]
+ */
+async function fetchJson(url, init = {}, timeoutMs = 60_000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    const raw = await response.text();
+    let parsed = {};
+    try {
+      parsed = raw ? JSON.parse(raw) : {};
+    } catch {
+      parsed = { message: raw };
+    }
+    return { response, raw, parsed };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function graphErrorMessage(parsed, fallback) {
+  const err = parsed?.error;
+  if (err && typeof err === "object") {
+    const msg = String(err.message || "").trim();
+    const code = err.code != null ? ` (code ${err.code})` : "";
+    if (msg) return `${msg}${code}`;
+  }
+  if (typeof parsed?.message === "string" && parsed.message.trim()) return parsed.message.trim();
+  return fallback;
+}
+
+/**
+ * Aguarda o container de mídia ficar pronto para publish.
+ * @param {string} creationId
+ * @param {string} accessToken
+ * @param {number} timeoutMs
+ */
+export async function waitForInstagramContainerReady(creationId, accessToken, timeoutMs = 90_000) {
+  const id = String(creationId || "").trim();
+  const token = String(accessToken || "").trim();
+  if (!id || !token) throw new Error("creation_id e access_token obrigatórios.");
+
+  const started = Date.now();
+  let delayMs = 1_500;
+  while (Date.now() - started < timeoutMs) {
+    const url =
+      `${graphBaseUrl()}/${encodeURIComponent(id)}` +
+      `?fields=status_code,status` +
+      `&access_token=${encodeURIComponent(token)}`;
+    const { response, parsed } = await fetchJson(url, { method: "GET" }, 30_000);
+    if (!response.ok) {
+      throw new Error(graphErrorMessage(parsed, `Falha ao consultar status do container (${response.status}).`));
+    }
+    const status = String(parsed?.status_code || "").trim().toUpperCase();
+    if (status === "FINISHED") return parsed;
+    if (status === "ERROR" || status === "EXPIRED") {
+      throw new Error(
+        graphErrorMessage(parsed, `Container Instagram em estado ${status || "ERROR"}.`),
+      );
+    }
+    await new Promise((r) => setTimeout(r, delayMs));
+    delayMs = Math.min(delayMs + 500, 4_000);
+  }
+  throw new Error("Tempo esgotado aguardando o Instagram processar a imagem.");
+}
+
+/**
+ * Publica feed image no Instagram via Meta Graph API.
+ *
+ * Fluxo: create media container → wait FINISHED → media_publish.
  *
  * @param {import("@supabase/supabase-js").SupabaseClient} db
  * @param {{
@@ -55,14 +134,22 @@ async function ensurePublicImageUrl(db, input) {
  *   caption: string,
  *   imageStoragePath?: string,
  *   imageUrl?: string,
- *   clientId?: string,
  * }} input
  */
-export async function publishToInstagramViaN8n(db, input) {
-  const webhookUrl =
-    env.N8N_INSTAGRAM_WEBHOOK_URL?.trim() || process.env.N8N_INSTAGRAM_WEBHOOK_URL?.trim();
-  if (!webhookUrl) {
-    return { ok: false, status: 503, error: "N8N_INSTAGRAM_WEBHOOK_URL não configurado no servidor." };
+export async function publishToInstagram(db, input) {
+  const accessToken = String(
+    env.INSTAGRAM_GRAPH_ACCESS_TOKEN || process.env.INSTAGRAM_GRAPH_ACCESS_TOKEN || "",
+  ).trim();
+  const igUserId = String(
+    env.INSTAGRAM_BUSINESS_ACCOUNT_ID || process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || "",
+  ).trim();
+  if (!accessToken || !igUserId) {
+    return {
+      ok: false,
+      status: 503,
+      error:
+        "Publicação Instagram sem credenciais. Defina INSTAGRAM_GRAPH_ACCESS_TOKEN e INSTAGRAM_BUSINESS_ACCOUNT_ID no backend/.env.",
+    };
   }
   if (!db) {
     return { ok: false, status: 503, error: "Supabase não configurado." };
@@ -92,89 +179,128 @@ export async function publishToInstagramViaN8n(db, input) {
     return { ok: false, status: 400, error: "image_url precisa ser uma URL pública http(s)." };
   }
 
-  const payload = {
-    client_id: String(input.clientId || env.N8N_INSTAGRAM_CLIENT_ID || "tumaia").trim() || "tumaia",
+  const timeoutMs = Number(env.INSTAGRAM_PUBLISH_TIMEOUT_MS) || 120_000;
+  const createUrl = `${graphBaseUrl()}/${encodeURIComponent(igUserId)}/media`;
+  const createBody = new URLSearchParams({
     image_url: resolved.image_url,
     caption,
-    id_empresa: input.idEmpresa,
-  };
+    access_token: accessToken,
+  });
 
   console.info(
-    `[instagram] chamando n8n client_id=${payload.client_id} image=${resolved.image_url.slice(0, 120)} caption_len=${caption.length}`,
+    `[instagram] criando container ig_user=${igUserId} image=${resolved.image_url.slice(0, 120)} caption_len=${caption.length}`,
   );
 
-  const timeoutMs = Number(env.N8N_INSTAGRAM_TIMEOUT_MS) || 90_000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-  let response;
-  let raw = "";
+  let createRes;
   try {
-    response = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    raw = await response.text();
+    createRes = await fetchJson(
+      createUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+        body: createBody.toString(),
+      },
+      Math.min(timeoutMs, 60_000),
+    );
   } catch (err) {
     const msg =
       err instanceof Error && err.name === "AbortError"
-        ? "Tempo esgotado aguardando o n8n publicar no Instagram."
+        ? "Tempo esgotado criando mídia no Instagram."
         : err instanceof Error
           ? err.message
-          : "Erro de rede ao chamar n8n.";
-    return { ok: false, status: 502, error: msg };
-  } finally {
-    clearTimeout(timer);
+          : "Erro de rede ao chamar a Meta Graph API.";
+    return { ok: false, status: 502, error: msg, image_url: resolved.image_url };
   }
 
-  let parsed = {};
-  try {
-    parsed = raw ? JSON.parse(raw) : {};
-  } catch {
-    parsed = { message: raw };
-  }
-
-  const body =
-    parsed?.body && typeof parsed.body === "object" && !Array.isArray(parsed.body)
-      ? parsed.body
-      : parsed;
-
-  const success =
-    body?.success === true ||
-    (response.ok && typeof body?.instagram_media_id === "string" && body.instagram_media_id.trim());
-
-  if (!response.ok || !success) {
-    const errMsg =
-      (typeof body?.message === "string" && body.message) ||
-      (typeof body?.error === "string" && body.error) ||
-      (typeof parsed?.message === "string" && parsed.message) ||
-      (!raw.trim() && response.ok
-        ? "n8n respondeu HTTP 200 sem confirmar a publicação (corpo vazio). No workflow, o último nó deve devolver JSON com success: true e instagram_media_id."
-        : `n8n respondeu HTTP ${response.status}`);
-    console.warn(
-      `[instagram] falha n8n status=${response.status} image=${resolved.image_url.slice(0, 120)} body=${raw.slice(0, 500) || "(vazio)"}`,
+  const creationId = String(createRes.parsed?.id || "").trim();
+  if (!createRes.response.ok || !creationId) {
+    const errMsg = graphErrorMessage(
+      createRes.parsed,
+      `Meta Graph API respondeu HTTP ${createRes.response.status} ao criar o container.`,
     );
+    console.warn(`[instagram] falha create status=${createRes.response.status} body=${createRes.raw.slice(0, 400)}`);
     return {
       ok: false,
-      status: response.status >= 400 ? response.status : 502,
+      status: createRes.response.status >= 400 ? createRes.response.status : 502,
       error: errMsg,
       image_url: resolved.image_url,
-      n8n_response: body,
+      graph_response: createRes.parsed,
     };
   }
 
-  console.info(
-    `[instagram] publicado via n8n empresa=${input.idEmpresa} media=${body.instagram_media_id || "?"}`,
-  );
+  try {
+    await waitForInstagramContainerReady(creationId, accessToken, timeoutMs);
+  } catch (err) {
+    return {
+      ok: false,
+      status: 502,
+      error: err instanceof Error ? err.message : "Falha ao processar mídia no Instagram.",
+      image_url: resolved.image_url,
+      creation_id: creationId,
+    };
+  }
+
+  const publishUrl = `${graphBaseUrl()}/${encodeURIComponent(igUserId)}/media_publish`;
+  const publishBody = new URLSearchParams({
+    creation_id: creationId,
+    access_token: accessToken,
+  });
+
+  let publishRes;
+  try {
+    publishRes = await fetchJson(
+      publishUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+        body: publishBody.toString(),
+      },
+      Math.min(timeoutMs, 60_000),
+    );
+  } catch (err) {
+    const msg =
+      err instanceof Error && err.name === "AbortError"
+        ? "Tempo esgotado publicando no Instagram."
+        : err instanceof Error
+          ? err.message
+          : "Erro de rede ao publicar no Instagram.";
+    return {
+      ok: false,
+      status: 502,
+      error: msg,
+      image_url: resolved.image_url,
+      creation_id: creationId,
+    };
+  }
+
+  const mediaId = String(publishRes.parsed?.id || "").trim();
+  if (!publishRes.response.ok || !mediaId) {
+    const errMsg = graphErrorMessage(
+      publishRes.parsed,
+      `Meta Graph API respondeu HTTP ${publishRes.response.status} ao publicar.`,
+    );
+    console.warn(
+      `[instagram] falha publish status=${publishRes.response.status} body=${publishRes.raw.slice(0, 400)}`,
+    );
+    return {
+      ok: false,
+      status: publishRes.response.status >= 400 ? publishRes.response.status : 502,
+      error: errMsg,
+      image_url: resolved.image_url,
+      creation_id: creationId,
+      graph_response: publishRes.parsed,
+    };
+  }
+
+  console.info(`[instagram] publicado empresa=${input.idEmpresa} media=${mediaId}`);
 
   return {
     ok: true,
     image_url: resolved.image_url,
     storage_path: resolved.storage_path,
-    instagram_media_id: body.instagram_media_id || null,
-    message: body.message || "Post publicado no Instagram com sucesso.",
-    n8n_response: body,
+    instagram_media_id: mediaId,
+    creation_id: creationId,
+    message: "Post publicado no Instagram com sucesso.",
   };
 }
+

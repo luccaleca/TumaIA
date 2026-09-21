@@ -45,7 +45,7 @@ Subnav: Dashboard · Clientes · Analytics · Consultas · Conta (link para `/pa
 | Analytics por empresa (admin da empresa) | Próxima fase; gate e dados separados |
 | Créditos / saldo / extrato | Sem tabelas de crédito no produto |
 | Mapa Brasil / UF / cidade | `empresa` sem geolocalização |
-| Confiança IA / latência / falhas GPT·n8n | Sem pipeline `tb_geracao` / `tb_analytics_*` |
+| Confiança IA / latência / falhas GPT·Graph | Sem pipeline `tb_geracao` / `tb_analytics_*` |
 | Chat SQL com LLM + Chroma + SQL livre | Alto risco; usamos presets |
 | Perfil duplicado no TumaCore | Conta + Configuração do painel |
 

@@ -18,7 +18,6 @@ Guia para quem desenvolve neste repositório. O TumaIA é um produto em produç�
 | `frontend/` | Next.js 16 — painel |
 | `backend/` | Express + serviços Node + worker Python em `backend/ia/python/` |
 | `testes/` | Testes Node (`node --test`); fora de `backend/` e `frontend/` |
-| `n8n-workflows/` | Orquestração / publicação (referência) |
 | `docs/` | Produto, arquitetura, IA do produto |
 
 Stack: ES modules (`"type": "module"`), Zod, Supabase (Postgres + Auth).
@@ -30,8 +29,6 @@ Pré-requisitos: Node.js, `backend/.env` (a partir de `backend/.env.example`), S
 ```bash
 npm install
 npm run dev              # backend + frontend
-npm run dev:mono         # WhatsApp + backend + frontend
-npm run whats            # só WPPConnect
 npm run dev:backend
 npm run dev:frontend
 npm run dev:status
@@ -63,7 +60,7 @@ Toda feature que toca dados de empresa isola por **`id_empresa`**.
 ## Segurança de rotas
 
 - Painel: `Authorization: Bearer <token>` em `/auth`, `/empresas`, `/chat`, `/ia`.
-- **`/internal/*`**: só automação (n8n); `x-internal-secret` / Bearer com `INTERNAL_WEBHOOK_SECRET`. Nunca chamar do browser.
+- **`/internal/*`**: só automação/serviços; `x-internal-secret` / Bearer com `INTERNAL_WEBHOOK_SECRET`. Nunca chamar do browser.
 - Billing de imagem: só com `REPLICATE_ALLOW_BILLING` / `OPENAI_ALLOW_BILLING` explícitos. Não ligar em testes sem necessidade.
 
 ## IA do produto (Tuma)
@@ -74,7 +71,7 @@ Toda feature que toca dados de empresa isola por **`id_empresa`**.
 mensagem → regras / estados (Node) + agente da marca (identidade)
          → Supabase (marca, acervo, campanhas)
          → LLM na conversa / briefing
-         → arte → legenda → aprovação → Instagram (n8n)
+         → arte → legenda → aprovação → Instagram (Meta Graph)
 ```
 
 | Camada | Caminho |
@@ -118,5 +115,5 @@ Após editar `instrucoes/*.txt`, reiniciar o backend.
 3. Painel estável; sem regressão no chat e na prévia de imagem
 4. Arquitetura alvo: [`docs/tcc-arquitetura.md`](docs/tcc-arquitetura.md)
 
-Evitar sem alinhamento prévio: workflows n8n de produção, migrations destrutivas, billing pago, reativar worker Python, apagar sessão WhatsApp ou `.env`.
+Evitar sem alinhamento prévio: migrations destrutivas, billing pago, reativar worker Python ou apagar `.env`.
 Não versionar rastros de IDE/assistente de código; o repositório deve parecer escrito pela equipe.

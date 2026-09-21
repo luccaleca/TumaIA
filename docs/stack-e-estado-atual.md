@@ -20,8 +20,8 @@ Documento de referência para humanos e IAs: **o que existe no código hoje** (m
 | Texto estruturado (Node) | Ollama / Replicate / OpenAI | Proposta de post, legenda (`TEXT_PROVIDER`) |
 | Imagem | **OpenAI gpt-image-2** ou **Replicate** (mesmo modelo) | `IMAGE_PROVIDER`; billing com flag explícita |
 | Imagem (legado/interno) | Replicate FLUX Schnell / 1.1 Pro | Rotas `/internal/replicate/*` |
-| WhatsApp (dev) | **WPPConnect Server** local | `tools/wppconnect/` → webhook no backend |
-| Automação externa | **n8n** (opcional) | `/internal/*`, publicação Instagram |
+| WhatsApp | **Cloud API (Meta)** | `GET/POST /whatsapp/cloud/webhook` |
+| Automação externa | — | Publicação Instagram via Meta Graph no backend |
 | Testes | `node --test` | `testes/backend/`, `testes/frontend/` |
 
 ---
@@ -43,9 +43,9 @@ Documento de referência para humanos e IAs: **o que existe no código hoje** (m
 - **Empresas** `/empresas/*` — CRUD empresa, contextos, mídias, identidade, membros
 - **Chat** `/chat/*` — conversas e mensagens (JWT + vínculo empresa)
 - **IA** `/ia/*` — chat, proposta de post, legenda, prévia/publicação de imagem
-- **Internal** `/internal/*` — webhooks n8n, WhatsApp legado, Replicate, brand-context
-- **WPPConnect** `/wppconnect/webhook` — mensagens WhatsApp direto (sem n8n no turno a turno)
-- **Health** `/health` — status API, worker Python, Supabase, WPPConnect
+- **Internal** `/internal/*` — webhooks internos, Replicate, brand-context
+- **WhatsApp Cloud** `/whatsapp/cloud/webhook` — mensagens Meta Graph
+- **Health** `/health` — status API e Supabase
 
 ### Camada de IA Tuma
 
@@ -65,18 +65,17 @@ Espelho frontend ↔ backend: buscar comentário `Espelha` em `frontend/lib/` (e
 
 ### WhatsApp
 
-Dois caminhos:
-
-1. **Direto (desenvolvimento)** — WPPConnect → `POST /wppconnect/webhook` → `whatsappBridge.js` → mesma IA do painel  
-   - Requer `WPPCONNECT_ENABLED=true` no `backend/.env`  
+1. **Cloud API (Meta)** — `GET/POST /whatsapp/cloud/webhook` → `whatsappBridge.js` → mesma IA do painel  
+   - Requer `WHATSAPP_CLOUD_ENABLED=true` + token + Phone number ID no `backend/.env`  
+   - Em lab: tunnel HTTPS (ngrok) para a Meta alcançar o backend  
    - Usuário com **telefone cadastrado** + **workspace ativo** no painel  
    - Comandos de texto: `gerar imagem`, `gerar legenda`, `publicar no instagram`, etc.
 
-2. **Via n8n** — `POST /internal/whatsapp/message` (secret interno)
+2. **Internal (teste)** — `POST /internal/whatsapp/message` (secret interno)
 
 ### Instagram
 
-- Publicação via webhook **n8n** (`N8N_INSTAGRAM_WEBHOOK_URL`)
+- Publicação Instagram direta (Meta Graph: `INSTAGRAM_GRAPH_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ACCOUNT_ID`)
 - Painel: `POST /ia/publish-instagram`
 - WhatsApp: comando `publicar no instagram` após legenda pronta
 - Imagem precisa de URL pública (Storage Supabase)
@@ -94,9 +93,8 @@ Dois caminhos:
 
 | Item | Situação |
 |------|----------|
-| Fluxo WhatsApp em produção | WPPConnect é setup local; produção pode usar API oficial ou n8n |
-| n8n workflows | Pasta `n8n-workflows/` — orquestração externa, não sobe com `npm run dev` |
-| Publicação Instagram | Exige n8n + credenciais Meta configurados |
+| Fluxo WhatsApp | Cloud API (Meta); lab com ngrok + `WHATSAPP_CLOUD_*` |
+| Publicação Instagram | Credenciais Meta Graph no backend |
 | Billing Replicate/OpenAI | Desligado por padrão; ativar só em ambiente intencional |
 | Demo `/demo` | Desativada (410) — usar painel Next.js |
 
@@ -112,12 +110,10 @@ cp backend/.env.example backend/.env   # preencher Supabase, secrets
 | Comando | Sobe |
 |---------|------|
 | `npm run dev` | Backend (estável) + frontend |
-| `npm run whats` | Só WPPConnect (WhatsApp) |
-| `npm run dev:mono` | WhatsApp + backend + frontend |
 | `npm run dev:status` | Diagnóstico de portas e Supabase |
 | `npm run test:all` | Testes backend + frontend |
 
-**Só WhatsApp no dia a dia:** `npm run dev:backend` + `npm run whats` (painel não precisa ficar aberto após configurar conta/workspace).
+**WhatsApp Cloud:** `WHATSAPP_CLOUD_ENABLED=true` + tunnel HTTPS para `/whatsapp/cloud/webhook`.
 
 **IA local:** Ollama com `ollama pull qwen2.5:3b`.
 

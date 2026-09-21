@@ -27,15 +27,15 @@ flowchart LR
   SB[(Supabase)]
   AGENTE[Agente Node]
   IMG[Geração de imagem]
-  N8N[n8n Instagram]
+  GRAPH[Meta Graph]
 
-  WA -->|WPPConnect webhook| API
+  WA -->|Cloud API webhook| API
   PAINEL -->|JWT| API
   API --> SB
   API --> AGENTE
   API --> IMG
-  API -->|publicar| N8N
-  N8N --> IG[Instagram]
+  API -->|publicar| GRAPH
+  GRAPH --> IG[Instagram]
 ```
 
 1. O usuário pede um post no **WhatsApp** ou no **painel** (chat).
@@ -45,9 +45,9 @@ flowchart LR
 5. O usuário confirma e pede **gerar imagem** → provedor configurado (OpenAI gpt-image-2 ou Replicate).
 6. Gera **legenda e hashtags** alinhadas ao pedido e à marca.
 7. Usuário aprova ou pede ajustes (comandos no WhatsApp ou UI no painel).
-8. **Publicação no Instagram** via webhook n8n (quando configurado).
+8. **Publicação no Instagram** via Meta Graph no backend (quando configurado).
 
-> **Nota:** Em desenvolvimento, o caminho direto **WPPConnect → backend** já está implementado. O worker Python/RAG é legado e fica fora do caminho feliz (`TUMAIA_NODE_CHAT=true`).
+> **Nota:** WhatsApp usa **Cloud API (Meta)** → `/whatsapp/cloud/webhook`. O worker Python/RAG é legado e fica fora do caminho feliz (`TUMAIA_NODE_CHAT=true`).
 
 ## Exemplo de pedido
 
@@ -67,7 +67,7 @@ Cadastro, identidade de marca, acervo de mídias, chat persistido, fluxo visual 
 
 ### Backend Express
 
-Autenticação, multi-tenant, rotas `/ia`, `/chat`, `/empresas`, `/plataforma`, webhooks `/internal` e `/wppconnect`, orquestração do agente em Node.
+Autenticação, multi-tenant, rotas `/ia`, `/chat`, `/empresas`, `/plataforma`, webhooks `/internal` e `/whatsapp/cloud`, orquestração do agente em Node.
 
 ### Supabase
 
@@ -80,9 +80,9 @@ Fonte de verdade: empresas, usuários, identidade, mídias, conversas, storage d
 - **Proposta e legenda** — serviços Node com LLM conforme env.
 - **Imagem** — GPT Image 2 / Replicate com referências do acervo.
 
-### n8n
+### Instagram (Meta Graph)
 
-Opcional: publicação Instagram (`N8N_INSTAGRAM_WEBHOOK_URL`) e integrações `/internal/*`.
+Publicação direta no backend (`INSTAGRAM_GRAPH_ACCESS_TOKEN` + `INSTAGRAM_BUSINESS_ACCOUNT_ID`).
 
 ## O que outra pessoa deve assumir
 

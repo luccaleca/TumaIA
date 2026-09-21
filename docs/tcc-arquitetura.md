@@ -9,7 +9,7 @@ Documento de **decisões fechadas** para o TumaIA como protótipo de TCC e pilot
 **Site = repositório da marca.**  
 **WhatsApp = canal do pedido.**  
 **Backend Node = cérebro do fluxo (monólito).**  
-**n8n na VPS = só publicar no Instagram após aprovação.**  
+**Instagram = Meta Graph no backend após aprovação.**  
 **LLM = camada de exceção** — não o motor de cada mensagem.
 
 **Núcleo do produto:**
@@ -27,13 +27,13 @@ O TumaIA **não precisa ser** um chatbot genérico com RAG. O desenho alvo é um
 ```text
 ┌─────────────────────────────────────────────────────────┐
 │                        VPS                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ Backend Tuma │  │ WPPConnect   │  │ n8n          │  │
-│  │ (Node 24h)   │  │ ou Meta API  │  │ self-hosted  │  │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘  │
-│         │                 │                  │          │
-│         └──── webhook / comandos ────────────┘          │
-│              (chat direto)        (só publicar)         │
+│  ┌──────────────┐  ┌──────────────┐                     │
+│  │ Backend Tuma │  │ WhatsApp     │                     │
+│  │ (Node 24h)   │  │ Cloud API    │                     │
+│  └──────┬───────┘  └──────┬───────┘                     │
+│         │                 │                             │
+│         └──── webhook Meta ─────────────────────────────┤
+│              (chat + publicar Instagram via Graph)      │
 └─────────────────────────────────────────────────────────┘
                               │
                     ┌─────────┴─────────┐
@@ -45,35 +45,26 @@ O TumaIA **não precisa ser** um chatbot genérico com RAG. O desenho alvo é um
 
 | Componente | Papel | Quando liga |
 |------------|-------|-------------|
-| **Backend Node** | Conversa, estados, briefing, arte, legenda | Sempre |
-| **WPPConnect** (TCC) ou **WhatsApp Cloud API** (piloto) | Entrada WhatsApp | Sempre |
-| **n8n self-hosted** | Publicar no Instagram | 1 execução por post aprovado |
+| **Backend Node** | Conversa, estados, briefing, arte, legenda, Instagram | Sempre |
+| **WhatsApp Cloud API** | Entrada/saída WhatsApp (Meta) | Sempre |
 | **Supabase** | Dados da marca, auth, storage de imagens | Sempre |
 | **Ollama / LLM** (opcional na VPS) | Perguntas complexas, legenda criativa | Só quando regras não resolvem |
-
-### n8n: não usar plano Starter (cloud)
-
-Se o n8n roda **na mesma VPS** (Community, grátis):
-
-- **Não precisa** do plano Starter (~US$ 20/mês).
-- **Não** colocar n8n no caminho de cada mensagem do WhatsApp (estouraria gatilhos e adiciona latência).
-- **Usar n8n só** para o workflow `publicar Instagram` (`N8N_INSTAGRAM_WEBHOOK_URL` apontando para a VPS).
 
 ---
 
 ## Fases de implantação
 
-| Fase | WhatsApp | n8n | LLM / RAG |
-|------|----------|-----|-----------|
-| **TCC (protótipo)** | WPPConnect + backend direto | Self-hosted na VPS ou manual na demo | Regras + painel; LLM mínima |
-| **Piloto (1 empresa)** | Migrar para **API oficial Meta** | Self-hosted na VPS | Mesma lógica; LLM opcional |
+| Fase | WhatsApp | Instagram | LLM / RAG |
+|------|----------|-----------|-----------|
+| **TCC (protótipo)** | Cloud API + backend | Meta Graph no backend | Regras + painel; LLM mínima |
+| **Piloto (1 empresa)** | Cloud API | Meta Graph | Mesma lógica; LLM opcional |
 
 ### Aquecimento do número (10–20 pessoas)
 
 - Opt-in: convidar testers, não disparo em massa.
 - Ideal que a **pessoa mande a primeira mensagem**.
 - Subir volume aos poucos (3–5 → 10–20).
-- Com WPPConnect no TCC o risco de ban é maior; no piloto real, preferir **Cloud API**.
+- Preferir **Cloud API** (oficial) em vez de clientes não oficiais.
 
 ---
 
@@ -105,7 +96,7 @@ A **LLM continua** onde fizer sentido; o que sai é o **subprocesso Python + RAG
 
 1. **Fase 1** — WhatsApp nunca chama Python (`TUMAIA_WHATSAPP_FAST_PATH` / `TUMAIA_NODE_CHAT`).
 2. **Fase 2** — Painel no mesmo motor Node (`TUMAIA_NODE_CHAT=true`, padrão do protótipo).
-3. **Fase 3** — Remover ou arquivar `backend/ia/python/`; deploy VPS = Node + Ollama + n8n.
+3. **Fase 3** — Remover ou arquivar `backend/ia/python/`; deploy VPS = Node + Ollama.
 
 Espelhos Node já existentes (não recomeçar do zero):
 
@@ -173,7 +164,7 @@ ready_for_image
 has_image
   → comando "gerar legenda"
 has_caption
-  → comando "publicar no instagram" → n8n na VPS
+  → comando "publicar no instagram" → Meta Graph
 ```
 
 Comandos explícitos (sem IA):
@@ -209,11 +200,16 @@ POST_CONTEXT_USE_LLAMA=false
 REPLICATE_ALLOW_BILLING=false
 OPENAI_ALLOW_BILLING=false
 
-# n8n na VPS (não cloud Starter)
-N8N_INSTAGRAM_WEBHOOK_URL=https://sua-vps/webhook/instagram-post
+# Instagram (Meta Graph)
+INSTAGRAM_GRAPH_ACCESS_TOKEN=
+INSTAGRAM_BUSINESS_ACCOUNT_ID=
+
+# WhatsApp Cloud API
+WHATSAPP_CLOUD_ENABLED=true
+# WHATSAPP_CLOUD_ACCESS_TOKEN=
+# WHATSAPP_CLOUD_PHONE_NUMBER_ID=
 
 # Protótipo funcional — Node only (painel + WhatsApp)
-WPPCONNECT_ENABLED=true
 TUMAIA_NODE_CHAT=true
 # OLLAMA_FAST_CHAT_MODEL=llama3.2:1b
 
@@ -234,7 +230,7 @@ TUMAIA_NODE_CHAT=true
 | Fluxo WhatsApp | `backend/src/services/whatsappInboundService.js` | Implementado |
 | Briefing sem Llama | `postContextProposalService.js` | Implementado |
 | Publicação Instagram | `instagramPublishService.js` | Implementado |
-| Bridge WPPConnect | `whatsappBridge.js` | Implementado |
+| Bridge WhatsApp Cloud | `whatsappBridge.js` | Implementado |
 | LLM leve no Node | `chatNodeLlmLight.js` | Implementado |
 | Chat Node (sem RAG) | `TUMAIA_NODE_CHAT` (padrão `true`) | Implementado |
 | RAG Python | `backend/ia/python/` | Legado — fora do fluxo principal |
@@ -246,12 +242,10 @@ TUMAIA_NODE_CHAT=true
 
 | Evitar | Motivo |
 |--------|--------|
-| n8n a cada mensagem | Gatilhos / latência |
 | RAG no WhatsApp / painel (protótipo) | Lento e pesado na VPS |
 | Disparo em massa | Ban |
 | Billing ao vivo na demo | Falha ou custo inesperado |
 | Ollama 3b como protagonista de toda mensagem | Demo trava no notebook |
-| n8n Starter com VPS própria | Custo desnecessário |
 
 ---
 
@@ -260,17 +254,17 @@ TUMAIA_NODE_CHAT=true
 | # | Tarefa | Prioridade |
 |---|--------|------------|
 | 1 | ~~`TUMAIA_WHATSAPP_FAST_PATH` / `TUMAIA_NODE_CHAT`~~ | Feito |
-| 2 | Checklist deploy VPS (backend + n8n + WPPConnect) | Alta |
+| 2 | Checklist deploy VPS (backend + Cloud API + Graph Instagram) | Alta |
 | 3 | ~~Painel sem Python (Node → Ollama para exceções)~~ | Feito (`TUMAIA_NODE_CHAT=true`) |
 | 4 | `TUMAIA_DEMO_MODE` (roteiro + artes pré-geradas) | Média |
-| 5 | Migrar piloto para WhatsApp Cloud API | Pós-TCC |
+| 5 | ~~WhatsApp Cloud API~~ | Feito |
 | 6 | Remover `backend/ia/python/` após migração | Pós-TCC |
 
 ---
 
 ## Texto para monografia (TCC)
 
-> O protótipo TumaIA adota uma arquitetura em camadas para automação de marketing via WhatsApp: o painel web funciona como repositório estruturado da identidade da marca (produtos, tom, mídias e campanhas); o canal WhatsApp opera como interface de pedido, com roteamento determinístico de intenção e máquina de estados para o fluxo transacional (briefing, geração de arte, legenda e aprovação); a publicação no Instagram ocorre por automação pontual (n8n self-hosted) após confirmação do usuário. O modelo de linguagem foi reservado como camada opcional para consultas de maior complexidade semântica, com exclusão do RAG e do worker Python do caminho crítico do WhatsApp a fim de reduzir latência, custo computacional e complexidade de deploy em servidor monolítico Node.js.
+> O protótipo TumaIA adota uma arquitetura em camadas para automação de marketing via WhatsApp: o painel web funciona como repositório estruturado da identidade da marca (produtos, tom, mídias e campanhas); o canal WhatsApp opera como interface de pedido (Cloud API), com roteamento determinístico de intenção e máquina de estados para o fluxo transacional (briefing, geração de arte, legenda e aprovação); a publicação no Instagram ocorre via Meta Graph API no backend após confirmação do usuário. O modelo de linguagem foi reservado como camada opcional para consultas de maior complexidade semântica, com exclusão do RAG e do worker Python do caminho crítico do WhatsApp a fim de reduzir latência, custo computacional e complexidade de deploy em servidor monolítico Node.js.
 
 ---
 

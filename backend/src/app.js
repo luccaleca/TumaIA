@@ -6,7 +6,6 @@ import auth from "./routes/auth.js";
 import empresas from "./routes/empresas.js";
 import ia from "./routes/ia.js";
 import chat from "./routes/chat.js";
-import wppconnect from "./routes/wppconnect.js";
 import whatsappCloud from "./routes/whatsappCloud.js";
 import plataforma from "./routes/plataforma.js";
 import tumacoreEmpresa from "./routes/tumacoreEmpresa.js";
@@ -41,7 +40,6 @@ export function createApp() {
   app.use("/plataforma", plataforma);
   app.use("/tumacore/empresa", tumacoreEmpresa);
   app.use("/internal", internal);
-  app.use("/wppconnect", wppconnect);
   app.use("/whatsapp/cloud", whatsappCloud);
 
   return app;

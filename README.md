@@ -13,8 +13,8 @@ O painel Next.js é a **retaguarda**: cadastro da empresa, identidade, mídias, 
 | Dados | Supabase (Postgres, Auth, Storage) |
 | Chat IA | **Node** (regras + estados + Ollama em exceções) · Python/RAG legado fora do caminho feliz |
 | Imagem | OpenAI gpt-image-2 ou Replicate (configurável) |
-| WhatsApp (dev) | WPPConnect → webhook no backend |
-| Instagram | n8n self-hosted na VPS (só publicar; não no chat) |
+| WhatsApp | **Cloud API (Meta)** → webhook no backend |
+| Instagram | Meta Graph API no backend (após aprovação) |
 
 Detalhes do **código hoje**: [`docs/stack-e-estado-atual.md`](./docs/stack-e-estado-atual.md)  
 **Arquitetura do protótipo** (TCC, piloto 1 empresa, VPS): [`docs/tcc-arquitetura.md`](./docs/tcc-arquitetura.md)
@@ -26,7 +26,7 @@ O protótipo existe para **mostrar que funciona** com ~10–20 pessoas no WhatsA
 - **Site** = repositório da marca (Supabase); **WhatsApp** = canal do pedido, não chatbot genérico.
 - **Interpretação por regras + máquina de estados** no Node (briefing → arte → legenda → publicar), **sem RAG** no caminho crítico.
 - **LLM** só em conversa aberta / exceção — não a cada “oi”.
-- **n8n na VPS** só para publicar no Instagram (sem plano cloud Starter).
+- **Instagram** via Graph API no backend (sem orquestrador externo no turno a turno).
 - **Runtime:** monólito Node (`TUMAIA_NODE_CHAT=true`); `backend/ia/python/` fica legado até arquivar.
 
 ## Estrutura do monorepo
@@ -37,8 +37,6 @@ O protótipo existe para **mostrar que funciona** com ~10–20 pessoas no WhatsA
 | `backend/` | API Express + worker Python em `backend/ia/python/` |
 | `testes/` | Testes `node --test` (fora de backend/frontend) |
 | `docs/` | Produto, arquitetura, IA |
-| `tools/wppconnect/` | WPPConnect local (clone em `setup`) |
-| `n8n-workflows/` | Automação externa (referência) |
 
 ## Desenvolvimento
 
@@ -52,14 +50,10 @@ cp backend/.env.example backend/.env   # preencher Supabase e secrets
 | Comando | O que sobe |
 |---------|------------|
 | `npm run dev` | Backend + frontend |
-| `npm run whats` | Só WPPConnect (WhatsApp) |
-| `npm run dev:mono` | WhatsApp + backend + frontend |
 | `npm run dev:status` | Status das portas e Supabase |
 | `npm run test:all` | Testes |
 
-**Só WhatsApp:** em dois terminais — `npm run dev:backend` e `npm run whats`. O site não precisa ficar aberto depois de configurar conta e workspace.
-
-**Primeira vez no WhatsApp:** `npm run wppconnect:setup` → `npm run whats` → `npm run whats:session` (QR).
+**WhatsApp Cloud:** `WHATSAPP_CLOUD_ENABLED=true` no `backend/.env`, token/Phone number ID da Meta, e tunnel HTTPS (ex.: ngrok) apontando para `/whatsapp/cloud/webhook`.
 
 **IA local:** [Ollama](https://ollama.com) com `ollama pull qwen2.5:3b`.
 

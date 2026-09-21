@@ -1,6 +1,5 @@
 import { env } from "../config.js";
 import { handleWhatsappInbound } from "./whatsappInboundService.js";
-import { isPlausibleAuthPhone } from "./whatsappPhoneAuth.js";
 import {
   isWhatsappCloudConfigured,
   isWhatsappCloudEnabled,
@@ -8,13 +7,6 @@ import {
   whatsappCloudSendText,
 } from "./whatsappCloudClient.js";
 import { parseWhatsappCloudWebhookMessages } from "./whatsappCloudWebhookParser.js";
-import {
-  isWppconnectEnabled,
-  wppconnectResolvePnLid,
-  wppconnectSendImageUrl,
-  wppconnectSendText,
-} from "./wppconnectClient.js";
-import { parseWppconnectWebhookMessage, pickLidRecipient } from "./wppconnectWebhookParser.js";
 
 /**
  * @typedef {{
@@ -23,12 +15,6 @@ import { parseWppconnectWebhookMessage, pickLidRecipient } from "./wppconnectWeb
  *   sendImageUrl: (to: string, url: string, caption?: string) => Promise<{ ok?: boolean, error?: string }>,
  * }} WhatsappOutboundChannel
  */
-
-const wppChannel = /** @type {WhatsappOutboundChannel} */ ({
-  label: "wppconnect",
-  sendText: wppconnectSendText,
-  sendImageUrl: wppconnectSendImageUrl,
-});
 
 const cloudChannel = /** @type {WhatsappOutboundChannel} */ ({
   label: "whatsapp-cloud",
@@ -56,13 +42,10 @@ function rememberMessageId(id) {
 }
 
 /** Só para testes. */
-export function clearWppconnectDedupCache() {
+export function clearWhatsappDedupCache() {
   recentMessageIds.clear();
 }
 
-/**
- * @param {import("./wppconnectWebhookParser.js").ReturnType<typeof parseWppconnectWebhookMessage>} msg
- */
 function buildOutboundText(out) {
   let text = String(out.reply || "").trim();
   const hints = String(out.hints || "").trim();
@@ -71,7 +54,7 @@ function buildOutboundText(out) {
 }
 
 /**
- * @param {{ chat_id?: string, from?: string, sender_ids?: string[] }} msg
+ * @param {{ chat_id?: string, from?: string }} msg
  * @param {any} out
  * @param {WhatsappOutboundChannel} channel
  */
@@ -81,7 +64,7 @@ async function deliverWhatsappReply(msg, out, channel) {
   if (!out.ok) {
     if (out.status === 403) {
       console.warn(
-        `[${tag}] acesso negado (${out.reason || "?"}): ${out.phone_detected || msg.from} sender_ids=${JSON.stringify(msg.sender_ids || [])}`,
+        `[${tag}] acesso negado (${out.reason || "?"}): ${out.phone_detected || msg.from}`,
       );
       const text =
         out.reason === "not_registered"
@@ -92,9 +75,9 @@ async function deliverWhatsappReply(msg, out, channel) {
               ? out.error ||
                 "Não consegui identificar seu número no WhatsApp. Envie a mensagem de novo ou confira o telefone no cadastro do TumaIA."
               : out.reason === "no_workspace"
-              ? out.error ||
-                "Abra o painel TumaIA e entre no workspace da empresa — isso define qual marca o bot usa no WhatsApp."
-              : out.error || "Você não pode usar este atendimento agora.";
+                ? out.error ||
+                  "Abra o painel TumaIA e entre no workspace da empresa — isso define qual marca o bot usa no WhatsApp."
+                : out.error || "Você não pode usar este atendimento agora.";
       await channel.sendText(chatId, text);
       return;
     }
@@ -129,45 +112,16 @@ async function deliverWhatsappReply(msg, out, channel) {
 }
 
 /**
- * @param {import("./wppconnectWebhookParser.js").ReturnType<typeof parseWppconnectWebhookMessage>} msg
- */
-async function resolveInboundAuthPhone(msg) {
-  if (isPlausibleAuthPhone(msg.from)) return msg.from;
-
-  const lid = pickLidRecipient(msg.sender_ids) || (/@lid$/i.test(String(msg.chat_id)) ? msg.chat_id : null);
-  if (lid) {
-    const resolved = await wppconnectResolvePnLid(lid);
-    if (resolved) {
-      console.info(`[wppconnect] @lid resolvido para telefone ${resolved.slice(0, 4)}…`);
-      return resolved;
-    }
-  }
-
-  return msg.from || "";
-}
-
-/**
  * @param {{
  *   from: string,
  *   chat_id: string,
  *   body: string,
  *   message_id?: string | null,
- *   from_me?: boolean,
- *   is_group?: boolean,
- *   sender_ids?: string[],
  * }} msg
  * @param {WhatsappOutboundChannel} channel
- * @param {{ resolveAuthPhone?: boolean }} [opts]
  */
-async function processInboundMessage(msg, channel, opts = {}) {
-  if (msg.from_me) return;
-  if (msg.is_group && !env.WPPCONNECT_PROCESS_GROUPS) return;
+async function processInboundMessage(msg, channel) {
   if (msg.message_id && rememberMessageId(msg.message_id)) return;
-
-  const authPhone =
-    opts.resolveAuthPhone === false
-      ? msg.from
-      : await resolveInboundAuthPhone(/** @type {any} */ (msg));
 
   const isImageCmd = /^gerar\s+imagem/i.test(msg.body);
   const isCaptionCmd = /^gerar\s+legenda/i.test(msg.body);
@@ -184,7 +138,7 @@ async function processInboundMessage(msg, channel, opts = {}) {
   let out;
   try {
     out = await handleWhatsappInbound({
-      from: authPhone,
+      from: msg.from,
       body: msg.body,
       message_id: msg.message_id || undefined,
     });
@@ -201,51 +155,6 @@ async function processInboundMessage(msg, channel, opts = {}) {
     `[${channel.label}] resposta pronta em ${Date.now() - startedAt}ms imgs=${out.image_urls?.length || 0}`,
   );
   await deliverWhatsappReply(msg, out, channel);
-}
-
-/**
- * Webhook do WPPConnect Server → IA → resposta no WhatsApp.
- * @param {unknown} body
- */
-export async function handleWppconnectWebhook(body) {
-  if (!isWppconnectEnabled()) {
-    return { ok: false, status: 503, error: "WPPCONNECT_ENABLED não está ativo no backend." };
-  }
-
-  const root = body && typeof body === "object" ? /** @type {Record<string, unknown>} */ (body) : null;
-  const eventHint = root ? String(root.event || root.Event || "").trim() : "";
-
-  const msg = parseWppconnectWebhookMessage(body);
-  if (!msg) {
-    if (eventHint) {
-      console.info(`[wppconnect] webhook ignorado (evento=${eventHint}) — só processamos onmessage`);
-    }
-    return { ok: true, skipped: true, reason: "evento ignorado" };
-  }
-
-  if (msg.from_me) {
-    console.info("[wppconnect] webhook ignorado (fromMe) — mensagem do próprio número da sessão");
-    return { ok: true, skipped: true, reason: "fromMe" };
-  }
-
-  if (msg.is_group && !env.WPPCONNECT_PROCESS_GROUPS) {
-    console.info("[wppconnect] webhook ignorado (grupo)");
-    return { ok: true, skipped: true, reason: "grupo" };
-  }
-
-  console.info(
-    `[wppconnect] mensagem recebida de ${msg.from || "?"} chat=${msg.chat_id || "?"} body=${String(msg.body || "").slice(0, 80)}`,
-  );
-
-  void processInboundMessage(msg, wppChannel).catch((err) => {
-    console.error("[wppconnect] erro ao processar mensagem:", err);
-    void wppChannel.sendText(
-      msg.chat_id || msg.from,
-      "Algo deu errado ao consultar a IA. Tente de novo em instantes.",
-    );
-  });
-
-  return { ok: true, accepted: true, from: msg.from };
 }
 
 /**
@@ -284,7 +193,7 @@ export async function handleWhatsappCloudWebhook(body) {
     );
 
     accepted += 1;
-    void processInboundMessage(msg, cloudChannel, { resolveAuthPhone: false }).catch((err) => {
+    void processInboundMessage(msg, cloudChannel).catch((err) => {
       console.error("[whatsapp-cloud] erro ao processar mensagem:", err);
       void cloudChannel.sendText(
         msg.chat_id || msg.from,

@@ -6,7 +6,7 @@ const OWNER = "black-forest-labs";
 const MODEL = "flux-schnell";
 const MODEL_PATH = `${OWNER}/${MODEL}`;
 
-/** Uma geração por vez evita rajadas paralelas (duplo clique / n8n) somando custo. */
+/** Uma geração por vez evita rajadas paralelas (duplo clique / webhook) somando custo. */
 let generationChain = Promise.resolve();
 
 export const fluxSchnellInputSchema = z.object({

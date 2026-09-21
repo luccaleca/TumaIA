@@ -7,7 +7,7 @@ import { generatePostContextProposal } from "./postContextProposalService.js";
 import { generatePostCaption } from "./postCaptionService.js";
 import { runImagePreviewInternal } from "./imagePreviewInternal.js";
 import { persistWhatsappGeneratedImages } from "./chatGeneratedImageStorage.js";
-import { publishToInstagramViaN8n } from "./instagramPublishService.js";
+import { publishToInstagram } from "./instagramPublishService.js";
 import { buildWhatsappPostConfirmation } from "./postConfirmationWhatsapp.js";
 import { resolveWhatsappUsuarioEmpresa } from "./whatsappUsuarioEmpresa.js";
 import {
@@ -216,7 +216,7 @@ async function handleDeliveryCommand(session, body) {
     }
 
     appendWhatsappTurn(session, body, "Publicando no Instagram…");
-    const published = await publishToInstagramViaN8n(db, {
+    const published = await publishToInstagram(db, {
       idEmpresa: session.id_empresa,
       caption: session.last_caption,
       imageStoragePath: storagePath || undefined,
