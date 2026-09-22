@@ -16,7 +16,7 @@ Guia para quem desenvolve neste repositório. O TumaIA é um produto em produç�
 | Pasta | Papel |
 |-------|--------|
 | `frontend/` | Next.js 16 — painel |
-| `backend/` | Express + serviços Node + worker Python em `backend/ia/python/` |
+| `backend/` | Express + serviços Node (caminho feliz); `backend/ia/python/` = RAG legado + prompts `.txt` |
 | `testes/` | Testes Node (`node --test`); fora de `backend/` e `frontend/` |
 | `docs/` | Produto, arquitetura, IA do produto |
 
@@ -24,7 +24,7 @@ Stack: ES modules (`"type": "module"`), Zod, Supabase (Postgres + Auth).
 
 ## Como rodar
 
-Pré-requisitos: Node.js, `backend/.env` (a partir de `backend/.env.example`), Supabase. Chat local: Ollama (ver `backend/ia/python/README.md`).
+Pré-requisitos: Node.js, `backend/.env` (a partir de `backend/.env.example`), Supabase. Chat: motor Node (`TUMAIA_NODE_CHAT=true`); Ollama opcional para exceções. Worker Python/RAG: só legado (`backend/ia/python/README.md`).
 
 ```bash
 npm install
