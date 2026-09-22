@@ -12,14 +12,14 @@ Documento de referência para humanos e IAs: **o que existe no código hoje** (m
 | Painel | **Next.js 16** · React 19 · Tailwind 4 | App Router — `frontend/` |
 | API | **Node.js** · Express 4 · **ES modules** · Zod | `backend/src/` |
 | Banco / auth | **Supabase** (Postgres + Auth + Storage) | Multi-tenant por `id_empresa` |
-| Chat IA (legado) | **Python 3** · Chroma | `backend/ia/python/` — **fora do fluxo principal** |
-| Chat IA | **Node** · regras + estados + **agente cloud** | `CHAT_LLM_PROVIDER=cloud` (padrão) |
+| Chat IA | **Node** · regras + estados + LLM (cloud/Ollama em exceções) | `TUMAIA_NODE_CHAT=true` (padrão) — caminho feliz |
+| Chat IA (legado) | **Python 3** · Chroma / RAG | `backend/ia/python/` — só com `TUMAIA_NODE_CHAT=false` |
 | LLM chat | Agente cloud · modelo em `CHAT_CLOUD_MODEL` | `CHAT_CLOUD_API_KEY` + `CHAT_CLOUD_MODEL` |
-| LLM local (legado / opcional) | **Ollama** · `qwen2.5:3b` | Só se `CHAT_LLM_PROVIDER=ollama` |
-| LLM nuvem (opcional) | OpenRouter | Via env no worker Python |
+| LLM local (opcional) | **Ollama** · `qwen2.5:3b` | Só se `CHAT_LLM_PROVIDER=ollama` |
+| LLM nuvem (opcional / legado) | OpenRouter | Via env; também no worker Python legado |
 | Texto estruturado (Node) | Ollama / Replicate / OpenAI | Proposta de post, legenda (`TEXT_PROVIDER`) |
 | Imagem | **OpenAI gpt-image-2** ou **Replicate** (mesmo modelo) | `IMAGE_PROVIDER`; billing com flag explícita |
-| Imagem (legado/interno) | Replicate FLUX Schnell / 1.1 Pro | Rotas `/internal/replicate/*` |
+| Imagem (legado/interno) | Rotas `/internal/replicate/*` | Testes / uso interno — não é o pipeline principal de produto |
 | WhatsApp | **Cloud API (Meta)** | `GET/POST /whatsapp/cloud/webhook` |
 | Automação externa | — | Publicação Instagram via Meta Graph no backend |
 | Testes | `node --test` | `testes/backend/`, `testes/frontend/` |
