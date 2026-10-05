@@ -22,7 +22,7 @@ import {
   trimChatHistoryForApi,
 } from "../services/chatHistoryLimit.js";
 import { generatePostCaption } from "../services/postCaptionService.js";
-import { publishToInstagramViaN8n } from "../services/instagramPublishService.js";
+import { publishToInstagram } from "../services/instagramPublishService.js";
 
 const r = Router();
 
@@ -340,7 +340,7 @@ const publishInstagramBodySchema = z.object({
   }
 });
 
-/** Publica post no Instagram via n8n (imagem pública no Supabase + legenda). */
+/** Publica post no Instagram via Meta Graph API (imagem pública no Supabase + legenda). */
 r.post("/publish-instagram", requireUserJwt, requireUsuario, async (req, res) => {
   const parsed = publishInstagramBodySchema.safeParse(req.body);
   if (!parsed.success) {
@@ -361,15 +361,14 @@ r.post("/publish-instagram", requireUserJwt, requireUsuario, async (req, res) =>
   }
 
   try {
-    const out = await publishToInstagramViaN8n(db, {
+    const out = await publishToInstagram(db, {
       idEmpresa: parsed.data.id_empresa,
       caption: parsed.data.caption,
       imageStoragePath: parsed.data.image_storage_path,
       imageUrl: parsed.data.image_url,
-      clientId: parsed.data.client_id,
     });
     if (!out.ok) {
-      res.status(out.status || 500).json({ error: out.error, ...(out.n8n_response ? { n8n: out.n8n_response } : {}) });
+      res.status(out.status || 500).json({ error: out.error, ...(out.graph_response ? { graph: out.graph_response } : {}) });
       return;
     }
     res.json({
