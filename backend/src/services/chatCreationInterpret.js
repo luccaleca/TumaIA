@@ -1336,10 +1336,17 @@ export function isCatalogListingRequest(question) {
   const n = normalizeCreationText(question);
   if (!n) return false;
   if (/\b(quais|que)\s+produtos?\b/.test(n)) return true;
-  if (/\blista\s+(de\s+)?produtos?\b/.test(n)) return true;
+  if (/\b(quais|que|quantas?)\s+(imagens?|fotos?|midias?)\b/.test(n)) return true;
+  if (/\blista\s+(de\s+)?(produtos?|imagens?|fotos?|midias?)\b/.test(n)) return true;
+  if (/\bo\s+que\s+(eu\s+)?(tenho|temos)\b/.test(n)) return true;
   if (/\bo\s+que\s+temos\b/.test(n)) return true;
   if (/\btodos\s+(os\s+)?produtos?\b/.test(n)) return true;
   if (/\bprodutos?\s+que\s+(tem|temos|contem)\b/.test(n)) return true;
+  if (/\b(temos|tem)\s+(imagem|foto|midia)\b/.test(n)) return true;
+  if (/\bme\s+(mostra|lista|liste)\s+(os\s+)?(produtos?|imagens?|fotos?|midias?)\b/.test(n)) return true;
+  if (/\b(mostrar|mostra)\s+(os\s+)?(produtos?|imagens?|fotos?|midias?)\b/.test(n)) return true;
+  if (/\bcadastr(e|ar|ado|ados)\b/.test(n) && !/\b(post|arte|gerar|criar)\b/.test(n)) return true;
+  if (/\bno\s+(acervo|estoque|cadastro)\b/.test(n)) return true;
   if (/\bentram\s+na\s+(promo|campanha)\b/.test(n)) return true;
   if (/\btudo\s+que\s+tem\b/.test(n)) return true;
   if (/\bno\s+nome\b/.test(n) && /\b(whey|produto|item)\b/.test(n)) return true;
@@ -1709,6 +1716,7 @@ export function hasRichCreationBrief(question, history = []) {
 export function shouldPreferImageBriefingOverAcervo(question, history = []) {
   const q = String(question || "").trim();
   if (!q) return false;
+  // Listagem/consulta de acervo nunca vira briefing de arte.
   if (isCatalogListingRequest(q)) return false;
   return hasRichCreationBrief(q, history);
 }

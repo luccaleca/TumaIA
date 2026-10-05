@@ -29,7 +29,10 @@ import {
   shouldUseOpenConversation,
 } from "./chatConversaNatural.js";
 import { env, isCloudChatLlm } from "../config.js";
-import { shouldPreferImageBriefingOverAcervo } from "./chatCreationInterpret.js";
+import {
+  shouldPreferImageBriefingOverAcervo,
+  isCatalogListingRequest,
+} from "./chatCreationInterpret.js";
 
 
 
@@ -124,8 +127,10 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
 
   const acervoEarly = classifyChatAcervoIntent(q, history);
   // Briefing rico (produto + tema/oferta/visual): abre arte, não lista catálogo.
+  // Consulta pura de acervo (quais produtos/imagens…) permanece em route=acervo.
   if (
     acervoEarly.kind !== "NONE" &&
+    !isCatalogListingRequest(q) &&
     (wantsImageRoute || shouldPreferImageBriefingOverAcervo(q, history))
   ) {
     return {
@@ -148,7 +153,7 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
       chat_mode: null,
       includeAcervoInPrompt: false,
       needsProductGuard: false,
-      wantsImageRoute,
+      wantsImageRoute: false,
     };
   }
 
@@ -215,30 +220,17 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
   }
 
   if (topics.includes("EMPRESA") && topics.length === 1) {
-
     return {
-
       route: "empresa",
-
       topics,
-
       identityAnswer: null,
-
       acervo: null,
-
       chat_mode: null,
-
       includeAcervoInPrompt: false,
-
       needsProductGuard: false,
-
-      wantsImageRoute,
-
+      wantsImageRoute: false,
     };
-
   }
-
-
 
   if (topics.includes("CONTEXTOS") && topics.length === 1) {
     return {
@@ -253,32 +245,19 @@ export function analyzeChatTurn(question, history = [], ctx = {}) {
     };
   }
 
-
-
   const acervo = classifyChatAcervoIntent(q, history);
 
   if (acervo.kind !== "NONE") {
-
     return {
-
       route: "acervo",
-
       topics,
-
       identityAnswer: null,
-
       acervo,
-
       chat_mode: null,
-
       includeAcervoInPrompt: false,
-
       needsProductGuard: false,
-
-      wantsImageRoute,
-
+      wantsImageRoute: false,
     };
-
   }
 
 

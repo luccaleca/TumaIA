@@ -199,41 +199,29 @@ export async function processChatMessage(input) {
     return { ok: false, status: 400, error: "question obrigatória" };
   }
 
-  const dbEarly = getSupabaseAdmin();
-  const route_image_generation_early =
-    Boolean(id_empresa) && Boolean(dbEarly) && detectImageGenerationIntentFromHistory(history, question);
-
-  // Demo: deixa o LLM interpretar o pedido; ainda marca route_image_generation depois.
-  // Fora do demo: early return silencioso abre só o fluxo de briefing no painel.
-  if (route_image_generation_early && !isDemoAgentMode()) {
-    return {
-      ok: true,
-      data: {
-        answer: "",
-        source_documents: [],
-        chat_route: "post_briefing",
-        route_image_generation: true,
-        offer_post_context: true,
-        image_provider: env.IMAGE_PROVIDER || "grok",
-        image_pipeline: env.IMAGE_PIPELINE || "raw",
-      },
-    };
-  }
-
   try {
     const db = getSupabaseAdmin();
     const turnQuick = analyzeChatTurn(question, history, { nomeFantasia: null });
+    // Intent de imagem NÃO corta a LLM: marca flag para o painel abrir briefing
+    // depois da resposta. Rotas identity/acervo/empresa/conversa têm prioridade.
     const route_image_generation_quick =
-      Boolean(id_empresa) && Boolean(db) && detectImageGenerationIntentFromHistory(history, question);
-    const postExtrasQuick =
-      turnQuick.wantsImageRoute || route_image_generation_quick || route_image_generation_early
-        ? {
-            route_image_generation: true,
-            offer_post_context: true,
-            image_provider: env.IMAGE_PROVIDER || "grok",
-            image_pipeline: env.IMAGE_PIPELINE || "raw",
-          }
-        : {};
+      Boolean(id_empresa) &&
+      Boolean(db) &&
+      turnQuick.route !== "identity" &&
+      turnQuick.route !== "acervo" &&
+      turnQuick.route !== "empresa" &&
+      turnQuick.route !== "conversa_natural" &&
+      turnQuick.route !== "out_of_scope" &&
+      (turnQuick.wantsImageRoute ||
+        detectImageGenerationIntentFromHistory(history, question));
+    const postExtrasQuick = route_image_generation_quick
+      ? {
+          route_image_generation: true,
+          offer_post_context: true,
+          image_provider: env.IMAGE_PROVIDER || "grok",
+          image_pipeline: env.IMAGE_PIPELINE || "raw",
+        }
+      : {};
 
     const demo = isDemoAgentMode();
 
@@ -272,13 +260,17 @@ export async function processChatMessage(input) {
     }
     const nomeFantasia = facts?.nomeFantasia ?? null;
 
+    let turn = analyzeChatTurn(question, history, { nomeFantasia });
     const route_image_generation =
       Boolean(id_empresa) &&
       Boolean(db) &&
-      (route_image_generation_early ||
-        detectImageGenerationIntentFromHistory(history, question));
+      turn.route !== "identity" &&
+      turn.route !== "acervo" &&
+      turn.route !== "empresa" &&
+      turn.route !== "conversa_natural" &&
+      turn.route !== "out_of_scope" &&
+      (turn.wantsImageRoute || detectImageGenerationIntentFromHistory(history, question));
 
-    let turn = analyzeChatTurn(question, history, { nomeFantasia });
     // Demo: pedidos criativos vão ao LLM (não template de catálogo), salvo seleção bare.
     if (
       demo &&

@@ -30,9 +30,9 @@ const HAS_PRODUCT_OR_SCENE =
 const POST_MODEL_CREATE_REQUEST =
   /\b(post(agem|ar)?|arte|imagem)\b.{0,48}\bmodelo\s+de\s+(produto|promo[cç][aã]o|lan[cç]amento|mensagens?)\b|\bmodelo\s+de\s+(produto|promo[cç][aã]o|lan[cç]amento|mensagens?)\b.{0,48}\b(com|do|da|usando|whey|creatina|produto)\b|\bgostaria\s+de\s+(uma\s+)?post(agem|ar)?\b/i;
 
-/** Pedido claro de criar arte/post agora (não “pode fazer um post?”). */
+/** Pedido claro de criar arte/post agora (não “pode fazer um post?”; não “temos foto do”). */
 const EXPLICIT_CREATE_REQUEST =
-  /\b(quero|preciso|vamos|bora|gostaria\s+de)\s+(de\s+)?(fazer|criar|montar|gerar|publicar|uma?)?\s*(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+(um|uma|minha|meu)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+de\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(gere|gera|gerar|monta|montar|cria|criar|crie|faz|faça|manda|mandar)\s+(um|uma|a|o|minha|meu|pra|para)?\s*(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\bfazer\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer)\b|\bme\s+ajuda\s+a\s+(fazer|criar|montar|gerar|publicar)\s+(um|uma)?\s*(arte|imagem|foto|fotos|post(agem)?|banner)?\b|\bcri(e|ar)\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|visual)\b|\bmont(a|ar)\s+(um|uma|a)\s+(arte|imagem|foto|fotos|post(agem)?|banner)\b|\bgera(r|ç)[aã]o\s+(de\s+)?(imagem|arte|foto|visual)\b|\bgera(r)?\s+(imagem|foto)\b|\bpode\s+fazer\b.{0,40}\b(pessoa|academia|usando|whey|creatina|produto)\b/i;
+  /\b(quero|preciso|vamos|bora|gostaria\s+de)\s+(de\s+)?(fazer|criar|montar|gerar|publicar)\s+(um|uma|a|o)?\s*(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+(um|uma|minha|meu)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(quero|preciso)\s+de\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\b(gere|gera|gerar|monta|montar|cria|criar|crie)\s+(um|uma|a|o|minha|meu|pra|para)?\s*(arte|imagem|foto|fotos|post(agem)?|banner|flyer|pr[eé]via|visual)\b|\bfazer\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|banner|flyer)\b|\bme\s+ajuda\s+a\s+(fazer|criar|montar|gerar|publicar)\s+(um|uma)?\s*(arte|imagem|foto|fotos|post(agem)?|banner)?\b|\bcri(e|ar)\s+(um|uma)\s+(arte|imagem|foto|fotos|post(agem)?|visual)\b|\bmont(a|ar)\s+(um|uma|a)\s+(arte|imagem|foto|fotos|post(agem)?|banner)\b|\bgera(r|ç)[aã]o\s+(de\s+)?(imagem|arte|foto|visual)\b|\bgera(r)?\s+(imagem|foto)\b/i;
 
 const INTENT_NOW =
   /\b(quero|preciso|vamos|bora|gere|gera|gerar|monta|montar|cria|criar|faz|faça|manda|gostaria\s+de)\b/i;
@@ -172,6 +172,19 @@ export function isReportedSpeechOrHowQuestion(text) {
   return isNonExecutorySpeechAct(text);
 }
 
+/** Consulta a acervo/estoque/cadastro — nunca abrir fluxo de arte. */
+const ACERVO_OR_INVENTORY_QUERY =
+  /\b(quais|que|quantas?)\s+(imagens?|fotos?|m[ií]dias?|produtos?)\b|\b(temos|tem)\s+(imagem|foto|m[ií]dia)\b.{0,40}\b(do|da|de)\b|\b(temos|tem)\s+(o\s+)?(produto|imagem|foto)\b|\bno\s+(meu\s+)?(acervo|estoque|cadastro)\b|\bo\s+que\s+(eu\s+)?(tenho|temos)\b.{0,24}\b(acervo|m[ií]dias?|produtos?|cadastrad)\b|\bme\s+(mostra|lista|liste)\s+(os\s+)?(produtos?|imagens?|fotos?|m[ií]dias?)\b|\b(mostrar|mostra|listar|lista)\s+(os\s+)?(produtos?|imagens?|fotos?|m[ií]dias?)\b|\bcadastr(e|ar|ado|ados)\b|\bprodutos?\s+(cadastrad|dispon[ií]ve)/i;
+
+/**
+ * @param {string} text
+ */
+export function isAcervoOrInventoryQuery(text) {
+  const q = normalizeIntentText(text);
+  if (!q) return false;
+  return ACERVO_OR_INVENTORY_QUERY.test(q);
+}
+
 /**
  * Pedido claro de criar arte/post/imagem agora.
  * @param {string} text
@@ -179,6 +192,7 @@ export function isReportedSpeechOrHowQuestion(text) {
 export function hasExplicitCreateRequest(text) {
   const q = normalizeIntentText(text);
   if (!q) return false;
+  if (isAcervoOrInventoryQuery(q)) return false;
   if (isNonExecutorySpeechAct(q)) return false;
   if (PEDIDO_META_NAO_ARTE.test(q) && !HAS_PRODUCT_OR_SCENE.test(q)) return false;
   if (POST_MODEL_CREATE_REQUEST.test(q)) return true;
@@ -305,6 +319,7 @@ export function detectImageGenerationIntent(text) {
   if (isPostDeliveryTypedCommand(q)) return false;
   if (isImageRevisionRequest(q)) return false;
   if (q.length < 6) return false;
+  if (isAcervoOrInventoryQuery(q)) return false;
   if (isConversationalMessage(q)) return false;
   if (isMetaOrHypotheticalQuestion(q)) return false;
   return hasExplicitCreateRequest(q);

@@ -91,6 +91,19 @@ describe("imageGenerationIntent / interpretação", () => {
     assert.equal(detectImageGenerationIntent(q), false);
   });
 
+  it("consulta de acervo/mídias/produto NÃO abre fluxo de arte", () => {
+    assert.equal(detectImageGenerationIntent("quais imagens temos em mídias?"), false);
+    assert.equal(detectImageGenerationIntent("quais produtos temos cadastrados?"), false);
+    assert.equal(detectImageGenerationIntent("me mostra os produtos que temos"), false);
+    assert.equal(detectImageGenerationIntent("temos foto do Monster?"), false);
+    assert.equal(detectImageGenerationIntent("o que eu tenho no meu acervo?"), false);
+    assert.equal(detectImageGenerationIntent("cadastre esse produto"), false);
+    assert.equal(
+      detectImageGenerationIntentFromHistory([], "quais imagens temos em mídias?"),
+      false,
+    );
+  });
+
   it("atalhos digitados pós-prévia não abrem fluxo de briefing", () => {
     assert.equal(detectImageGenerationIntent("Gerar legenda"), false);
     assert.equal(detectImageGenerationIntent("Publicar no Instagram"), false);

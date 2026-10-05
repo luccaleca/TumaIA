@@ -7,6 +7,7 @@ export {
   isConversationalMessage,
   isMetaOrHypotheticalQuestion,
   hasExplicitCreateRequest,
+  isAcervoOrInventoryQuery,
   mentionsVisualTopic,
   isImageRevisionRequest,
   isPostDeliveryTypedCommand,
