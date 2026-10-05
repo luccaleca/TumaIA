@@ -89,6 +89,38 @@ ${revision ? "6) Aplique os ajustes pedidos pelo cliente mantendo tom da marca."
 `.trim();
 }
 
+function normalizarHashtag(h) {
+  const t = String(h ?? "").trim().replace(/\s+/g, "");
+  if (!t) return "";
+  return `#${t.replace(/^#+/, "")}`;
+}
+
+/**
+ * O modelo às vezes repete as hashtags no fim do texto da legenda e também na lista.
+ * Tira o bloco final de hashtags do texto e junta tudo numa lista sem repetição.
+ * @param {string} legenda
+ * @param {unknown} hashtags
+ * @param {number} [limite]
+ */
+export function separarHashtagsDaLegenda(legenda, hashtags, limite = 12) {
+  const texto = String(legenda ?? "").trim();
+  const bloco = texto.match(/(?:\s+|^)(?:#[\p{L}\p{N}_]+\s*)+$/u);
+  const doTexto = bloco ? bloco[0].match(/#[\p{L}\p{N}_]+/gu) || [] : [];
+  const corpo = bloco ? texto.slice(0, bloco.index).trim() : texto;
+
+  const lista = Array.isArray(hashtags) ? hashtags : [];
+  const vistas = new Set();
+  const unicas = [];
+  for (const h of [...lista, ...doTexto]) {
+    const tag = normalizarHashtag(h);
+    const chave = tag.toLowerCase();
+    if (!tag || vistas.has(chave)) continue;
+    vistas.add(chave);
+    unicas.push(tag);
+  }
+  return { legenda: corpo || texto, hashtags: unicas.slice(0, limite) };
+}
+
 /**
  * @param {{
  *   history: Array<{ role: string, content: string }>,
@@ -139,18 +171,11 @@ export async function generatePostCaption(opts) {
   });
 
   const result = await chatCompletionJson(prompt, { temperature: 0.75 });
-  const legenda = String(result?.parsed?.legenda ?? result?.parsed?.copy ?? "").trim();
-  const hashtags = Array.isArray(result?.parsed?.hashtags)
-    ? result.parsed.hashtags
-        .map((h) => {
-          let t = String(h ?? "").trim();
-          if (!t) return "";
-          if (!t.startsWith("#")) t = `#${t.replace(/^#+/, "")}`;
-          return t.replace(/\s+/g, "");
-        })
-        .filter(Boolean)
-        .slice(0, opts.limiteHashtags ?? 12)
-    : [];
+  const { legenda, hashtags } = separarHashtagsDaLegenda(
+    String(result?.parsed?.legenda ?? result?.parsed?.copy ?? ""),
+    result?.parsed?.hashtags,
+    opts.limiteHashtags ?? 12,
+  );
   const model = result?.model || env.LLAMA_MODEL || DEFAULT_OLLAMA_CHAT_MODEL;
 
   if (!legenda) {
