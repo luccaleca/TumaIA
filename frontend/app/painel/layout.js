@@ -56,6 +56,16 @@ function IconMidias() {
   );
 }
 
+function IconAgendados() {
+  return (
+    <NavIcon>
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="h-[18px] w-[18px]">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      </svg>
+    </NavIcon>
+  );
+}
+
 function IconConfiguracao() {
   return (
     <NavIcon>
@@ -167,6 +177,7 @@ function PainelShell({ children }) {
       { href: "/painel/chat", label: "Chat", icon: IconChat },
       { href: "/painel/empresa", label: "Empresa", icon: IconEmpresa },
       { href: "/painel/midias", label: "Mídias", icon: IconMidias },
+      { href: "/painel/agendados", label: "Agendados", icon: IconAgendados },
     ],
     [],
   );

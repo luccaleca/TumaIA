@@ -66,7 +66,21 @@ const POST_IMAGE_UI = [
 const POST_CAPTION_UI = [
   { id: "adjust_caption", label: "Mudar legenda" },
   { id: "publish_instagram", label: "Publicar no Instagram" },
+  { id: "schedule_instagram", label: "Agendar" },
 ];
+
+/** Valor de <input type="datetime-local"> no horário do navegador. */
+function valorDatetimeLocal(data) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${data.getFullYear()}-${p(data.getMonth() + 1)}-${p(data.getDate())}T${p(data.getHours())}:${p(data.getMinutes())}`;
+}
+
+/** Próxima hora cheia, com pelo menos 5 minutos de folga. */
+function sugestaoHorarioAgendamento() {
+  const data = new Date(Date.now() + 65 * 60 * 1000);
+  data.setMinutes(0, 0, 0);
+  return valorDatetimeLocal(data);
+}
 /**
  * POST /ia/chat: boot do worker (Chroma, até ~8 min) + pergunta (até ~6 min) + margem.
  * Alinhar com CHAT_WORKER_* no backend/.env e proxyTimeout no next.config.mjs.
@@ -108,6 +122,7 @@ function friendlyUiActionLabel(action) {
   if (action?.id === "revise_image") return "Alterar imagem";
   if (action?.id === "adjust_caption") return "Mudar legenda";
   if (action?.id === "publish_instagram") return "Publicar no Instagram";
+  if (action?.id === "schedule_instagram") return "Agendar";
   const label = String(action?.label ?? "").trim();
   return label.replace(/\s*\(Replicate\s*\/\s*créditos\)\s*/gi, "").trim() || "Continuar";
 }
@@ -696,6 +711,10 @@ export default function PainelChatPage() {
   const [brandColors, setBrandColors] = useState([]);
   const [arteBriefLoading, setArteBriefLoading] = useState(false);
   const [captionEditingId, setCaptionEditingId] = useState(null);
+  const [agendandoId, setAgendandoId] = useState(null);
+  const [agendarQuando, setAgendarQuando] = useState("");
+  const [agendarErro, setAgendarErro] = useState("");
+  const [agendarMin, setAgendarMin] = useState("");
   const [captionEditDraft, setCaptionEditDraft] = useState("");
   const messagesRef = useRef(messages);
   const arteBriefDraftRef = useRef(arteBriefDraft);
@@ -1608,6 +1627,76 @@ export default function PainelChatPage() {
     [conversaId, empresaId, syncMensagens, showErr],
   );
 
+  const confirmarAgendamento = useCallback(
+    async function confirmarAgendamentoFn(captionMessageId) {
+      const idChat = conversaId;
+      if (!idChat || !empresaId) return;
+
+      const msgs = messagesRef.current;
+      const captionMsg = msgs.find((m) => m.id === captionMessageId);
+      const captionText = typeof captionMsg?.content === "string" ? captionMsg.content.trim() : "";
+      if (!captionText) {
+        setAgendarErro("Legenda vazia — gere a legenda antes de agendar.");
+        return;
+      }
+      const imageStoragePath = findLatestImageStoragePathInMessages(msgs);
+      const imageUrl = findLatestImageUrlInMessages(msgs);
+      if (!imageStoragePath && !imageUrl) {
+        setAgendarErro("Não encontrei a imagem do post. Gere a arte antes de agendar.");
+        return;
+      }
+      const quando = new Date(agendarQuando);
+      if (!agendarQuando || Number.isNaN(quando.getTime())) {
+        setAgendarErro("Escolha a data e a hora.");
+        return;
+      }
+      if (quando.getTime() < Date.now() + 60_000) {
+        setAgendarErro("Escolha um horário pelo menos 1 minuto no futuro.");
+        return;
+      }
+
+      setAgendarErro("");
+      setActionBusy(`${captionMessageId}:schedule_instagram`);
+      const result = await authApiFetchWithToken("/ia/agendamentos", {
+        method: "POST",
+        body: JSON.stringify({
+          id_empresa: empresaId,
+          caption: captionText,
+          ...(imageStoragePath ? { image_storage_path: imageStoragePath } : {}),
+          ...(!imageStoragePath && imageUrl ? { image_url: imageUrl } : {}),
+          agendada_para: quando.toISOString(),
+        }),
+        timeoutMs: 120_000,
+        timeoutLabel: "agendar-instagram",
+      });
+      if (!result.ok || result.networkError) {
+        setAgendarErro(
+          result.networkError?.message ||
+            (typeof result.json?.error === "string" ? result.json.error : null) ||
+            formatAuthError(result.json) ||
+            "Não foi possível agendar agora.",
+        );
+        setActionBusy(null);
+        return;
+      }
+
+      const quandoTexto = quando.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+      // Os botões da legenda ficam: dá para agendar o mesmo post de novo, em outro horário.
+      const aviso = {
+        id: newMessageId(),
+        role: "assistant",
+        content: `Post agendado para ${quandoTexto}. Você acompanha ou cancela em Agendados.`,
+        sources: [],
+      };
+      const finais = [...msgs, aviso];
+      setMessages(finais);
+      await syncMensagens(idChat, finais);
+      setAgendandoId(null);
+      setActionBusy(null);
+    },
+    [conversaId, empresaId, agendarQuando, syncMensagens],
+  );
+
   const cancelCaptionEdit = useCallback(() => {
     setCaptionEditingId(null);
     setCaptionEditDraft("");
@@ -1663,6 +1752,14 @@ export default function PainelChatPage() {
         await syncMensagens(idChat, msgsWithUser);
         setInput("Quero alterar a imagem: ");
         requestAnimationFrame(() => inputRef.current?.focus());
+        return;
+      }
+
+      if (actionId === "schedule_instagram") {
+        setAgendarErro("");
+        setAgendarQuando(sugestaoHorarioAgendamento());
+        setAgendarMin(valorDatetimeLocal(new Date(Date.now() + 60_000)));
+        setAgendandoId(fromAssistantMessageId);
         return;
       }
 
@@ -2663,6 +2760,40 @@ export default function PainelChatPage() {
                               {friendlyUiActionLabel(a)}
                             </button>
                           ))}
+                        </div>
+                      ) : null}
+                      {agendandoId === message.id ? (
+                        <div className="mt-3 space-y-2 rounded-xl border border-accent/35 bg-surface-elevated/50 px-3 py-3 text-sm">
+                          <p className="font-semibold text-foreground">Quando publicar no Instagram?</p>
+                          <input
+                            type="datetime-local"
+                            value={agendarQuando}
+                            min={agendarMin || undefined}
+                            onChange={(e) => setAgendarQuando(e.target.value)}
+                            className="w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none focus:border-accent/55 focus:ring-2 focus:ring-accent/15 sm:w-auto"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Vale o horário do seu computador. O post só sai se o servidor estiver ligado nessa hora.
+                          </p>
+                          {agendarErro ? <p className="text-xs text-red-500">{agendarErro}</p> : null}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={!!actionBusy || sending}
+                              onClick={() => void confirmarAgendamento(message.id)}
+                              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground shadow-sm hover:opacity-90 disabled:opacity-50"
+                            >
+                              Confirmar agendamento
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!!actionBusy}
+                              onClick={() => setAgendandoId(null)}
+                              className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
                         </div>
                       ) : null}
                       {hasSources ? (
