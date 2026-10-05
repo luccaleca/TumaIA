@@ -8,8 +8,11 @@ import {
   whatsappCloudSubscribeApp,
 } from "./services/whatsappCloudClient.js";
 import { looksLikeCrsrPrefixedApiKey, resolveGrokImageApiKey } from "./services/grokImageService.js";
+import { getSupabaseAdmin } from "./supabaseAdmin.js";
+import { criarPublicadorWhatsappDeTeste, iniciarAgendador } from "./services/agendamentoPublicacao.js";
 
 const app = createApp();
+let pararAgendador = null;
 
 const imageProvider = env.IMAGE_PROVIDER || "replicate";
 if (imageProvider === "grok") {
@@ -102,6 +105,28 @@ const server = app.listen(env.PORT, () => {
       "[whatsapp-cloud] no Meta: Callback URL HTTPS apontando para /whatsapp/cloud/webhook (ngrok em lab)",
     );
   }
+  if (env.AGENDADOR_ATIVO) {
+    const dbAgendador = getSupabaseAdmin();
+    if (dbAgendador) {
+      const destinoTeste = env.AGENDADOR_DESTINO === "whatsapp_teste";
+      pararAgendador = iniciarAgendador(dbAgendador, {
+        intervaloMs: env.AGENDADOR_INTERVALO_MS,
+        ...(destinoTeste ? { publicar: criarPublicadorWhatsappDeTeste() } : {}),
+      });
+      console.info(
+        `[agendador] ativo — confere posts agendados a cada ${Math.round(env.AGENDADOR_INTERVALO_MS / 1000)}s`,
+      );
+      if (destinoTeste) {
+        console.warn(
+          "[agendador] DESTINO DE TESTE: os posts vencidos vão para o WhatsApp de WHATSAPP_CLOUD_TEST_TO, não para o Instagram.",
+        );
+      }
+    } else {
+      console.warn("[agendador] Supabase não configurado — posts agendados não serão publicados.");
+    }
+  } else {
+    console.info("[agendador] desligado (AGENDADOR_ATIVO=true no .env para publicar posts agendados)");
+  }
   if (isCloudChatLlm()) {
     const runtime = String(env.CHAT_CLOUD_RUNTIME || "local").trim().toLowerCase();
     console.info(
@@ -138,6 +163,7 @@ function shutdown(signal) {
   }
   shuttingDown = true;
   console.log(`\n${signal}, encerrando servidor...`);
+  pararAgendador?.();
   shutdownChatWorker();
   // Encerra sockets abertos de uma vez (libera a porta mais rápido no Windows).
   if (typeof server.closeAllConnections === "function") {

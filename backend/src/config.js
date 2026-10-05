@@ -307,6 +307,24 @@ const envSchema = z.object({
     z.number().int().min(15_000).max(300_000),
   ),
   /**
+   * Liga o relógio que publica os posts agendados. Desligado por padrão: com o mesmo banco em
+   * mais de uma máquina, só a que tiver `AGENDADOR_ATIVO=true` dispara os posts.
+   */
+  AGENDADOR_ATIVO: z.preprocess((v) => parseEnvBool(v, false), z.boolean()),
+  /**
+   * Para onde o relógio manda o post na hora: `instagram` (padrão) ou `whatsapp_teste`, que envia
+   * imagem + legenda para WHATSAPP_CLOUD_TEST_TO. Serve para testar o agendamento sem token do Instagram.
+   */
+  AGENDADOR_DESTINO: z.preprocess(
+    (v) => (String(v ?? "").trim().toLowerCase() === "whatsapp_teste" ? "whatsapp_teste" : "instagram"),
+    z.enum(["instagram", "whatsapp_teste"]),
+  ),
+  WHATSAPP_CLOUD_TEST_TO: z.preprocess(empty, z.string().min(1).optional()),
+  AGENDADOR_INTERVALO_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 30_000 : Number(v)),
+    z.number().int().min(5_000).max(600_000),
+  ),
+  /**
    * Allowlist de e-mails com acesso ao TumaCore Plataforma (`/plataforma/*`).
    * Separados por vírgula. Não usar domínio genérico. Independente do cargo
    * administrador da empresa (TumaCore Empresa / workspace do cliente).

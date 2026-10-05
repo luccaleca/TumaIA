@@ -23,6 +23,11 @@ import {
 } from "../services/chatHistoryLimit.js";
 import { generatePostCaption } from "../services/postCaptionService.js";
 import { publishToInstagram } from "../services/instagramPublishService.js";
+import {
+  cancelarAgendamento,
+  criarAgendamento,
+  listarAgendamentos,
+} from "../services/agendamentoPublicacao.js";
 
 const r = Router();
 
@@ -384,6 +389,114 @@ r.post("/publish-instagram", requireUserJwt, requireUsuario, async (req, res) =>
       error: err instanceof Error ? err.message : "Erro ao publicar no Instagram.",
     });
   }
+});
+
+const agendarPublicacaoBodySchema = z
+  .object({
+    id_empresa: z.string().uuid(),
+    caption: z.string().trim().min(1).max(2200),
+    image_storage_path: z.string().trim().min(3).max(500).optional(),
+    image_url: z.string().url().max(4000).optional(),
+    /** Data e hora com fuso (ISO 8601). O navegador manda em UTC. */
+    agendada_para: z.string().trim().min(10).max(40),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.image_storage_path?.trim() && !data.image_url?.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Informe image_storage_path ou image_url",
+        path: ["image_storage_path"],
+      });
+    }
+  });
+
+const agendamentoQuerySchema = z.object({ id_empresa: z.string().uuid() });
+const agendamentoParamsSchema = z.object({ id: z.string().uuid() });
+
+/** Agenda um post do Instagram para depois (publica o relógio do servidor, se estiver ligado). */
+r.post("/agendamentos", requireUserJwt, requireUsuario, async (req, res) => {
+  const parsed = agendarPublicacaoBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+  try {
+    const out = await criarAgendamento(db, {
+      idEmpresa: parsed.data.id_empresa,
+      idUsuario: req.usuario.id_usuario,
+      legenda: parsed.data.caption,
+      imageStoragePath: parsed.data.image_storage_path,
+      imageUrl: parsed.data.image_url,
+      agendadaPara: parsed.data.agendada_para,
+    });
+    if (!out.ok) {
+      res.status(out.status).json({ error: out.error });
+      return;
+    }
+    res.status(201).json({ agendamento: out.agendamento });
+  } catch (err) {
+    console.error("[ia/agendamentos]", err);
+    res.status(500).json({ error: err instanceof Error ? err.message : "Erro ao agendar o post." });
+  }
+});
+
+r.get("/agendamentos", requireUserJwt, requireUsuario, async (req, res) => {
+  const parsed = agendamentoQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const v = await assertEmpresaVinculo(req, parsed.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+  const out = await listarAgendamentos(db, parsed.data.id_empresa);
+  if (!out.ok) {
+    res.status(out.status).json({ error: out.error });
+    return;
+  }
+  res.json({ agendamentos: out.agendamentos });
+});
+
+r.post("/agendamentos/:id/cancelar", requireUserJwt, requireUsuario, async (req, res) => {
+  const params = agendamentoParamsSchema.safeParse(req.params);
+  const body = agendamentoQuerySchema.safeParse(req.body);
+  if (!params.success || !body.success) {
+    res.status(400).json({ error: "Informe id do agendamento e id_empresa." });
+    return;
+  }
+  const v = await assertEmpresaVinculo(req, body.data.id_empresa);
+  if (!v.ok) {
+    res.status(v.status).json({ error: v.error });
+    return;
+  }
+  const db = getSupabaseAdmin();
+  if (!db) {
+    res.status(503).json({ error: "Supabase não configurado no servidor" });
+    return;
+  }
+  const out = await cancelarAgendamento(db, { id: params.data.id, idEmpresa: body.data.id_empresa });
+  if (!out.ok) {
+    res.status(out.status).json({ error: out.error });
+    return;
+  }
+  res.json({ agendamento: out.agendamento });
 });
 
 export default r;
