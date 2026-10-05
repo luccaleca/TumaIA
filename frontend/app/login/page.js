@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import {
   authApiFetch,
+  clearDevDashboardPreview,
   DEV_DASHBOARD_PREVIEW_KEY,
   formatAuthError,
   hasValidSession,
@@ -75,6 +76,7 @@ function LoginForm() {
         saveToken(null, null);
         return;
       }
+      clearDevDashboardPreview();
       saveToken(token, refreshToken);
       router.push("/painel");
     } catch (err) {
