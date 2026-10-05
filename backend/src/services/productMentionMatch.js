@@ -260,6 +260,7 @@ export function normalizeProductSearchText(value) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
+    .replace(/\br\$\s*/g, " ")
     .replace(/\bwaffer\b/g, "wafer")
     .replace(/\s+/g, " ")
     .trim();

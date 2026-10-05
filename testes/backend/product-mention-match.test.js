@@ -343,3 +343,19 @@ describe("productMentionMatch — whey de * no acervo", () => {
     assert.match(String(gate.confirmation_message || ""), /não encontrei|nao encontrei|mídias|midias|unicornio/i);
   });
 });
+
+describe("símbolo de moeda no pedido", () => {
+  const ROWS_PIZZA = [
+    { id_midia: "m1", nome_exibicao: "pizza 1.png", nome_arquivo: "pizza 1.png", tipo: "imagem" },
+    { id_midia: "m2", nome_exibicao: "pizza 2.png", nome_arquivo: "pizza 2.png", tipo: "imagem" },
+  ];
+
+  it("R$ não vira nome de produto fora do acervo", () => {
+    const gate = applyProductMediaGate(
+      { midias_referenced: [] },
+      ROWS_PIZZA,
+      "faz um post da promoção de terça: 2 pizzas grandes por R$ 79",
+    );
+    assert.doesNotMatch(String(gate.confirmation_message || ""), /«r»|«pizza r»/i);
+  });
+});
