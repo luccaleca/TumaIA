@@ -51,3 +51,22 @@ describe("tumaInterpretation", () => {
     assert.equal(detectImageGenerationIntent("quero um post do whey"), true);
   });
 });
+
+describe("tumaInterpretation — imperativo «faz/faça»", () => {
+  it("«faz um post…» com oferta abre o fluxo de arte", () => {
+    assert.equal(
+      detectImageGenerationIntent(
+        "Faz um post da pizza de calabresa para a promoção de terça: 2 pizzas grandes por R$ 79",
+      ),
+      true,
+    );
+    assert.equal(detectImageGenerationIntent("Faça um post da promoção de terça"), true);
+  });
+
+  it("perguntas e hipóteses com «faz» continuam sendo conversa", () => {
+    assert.equal(detectImageGenerationIntent("como faz um post?"), false);
+    assert.equal(detectImageGenerationIntent("dá pra fazer um post?"), false);
+    assert.equal(detectImageGenerationIntent("o que você faz?"), false);
+    assert.equal(detectImageGenerationIntent("Se eu pedir um post de Dia dos Pais, como ficaria?"), false);
+  });
+});
