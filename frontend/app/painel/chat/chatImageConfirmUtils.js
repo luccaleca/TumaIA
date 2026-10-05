@@ -84,6 +84,141 @@ export function midiaItemsFromProposal(proposal, supplementLinks = []) {
     });
 }
 
+const HEX_COR = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Descrição em linguagem simples de como a arte vai ficar, montada só com o que já está
+ * na proposta (formato, produto, texto, cores, estilo). Serve para conferir antes de gerar
+ * sem gastar crédito; não entra no prompt da imagem.
+ *
+ * @returns {{ rotulo: string, texto: string, cores?: string[] }[]}
+ */
+export function descreverComoFicaAArte(proposal, supplementLinks = []) {
+  if (!proposal || typeof proposal !== "object") return [];
+  const brief = proposal.arte_brief && typeof proposal.arte_brief === "object" ? proposal.arte_brief : {};
+  const itens = [];
+
+  const formato = brief.formato && typeof brief.formato === "object" ? brief.formato : null;
+  if (formato?.ratio) {
+    const forma =
+      formato.orientation === "vertical" ? "vertical" : formato.orientation === "horizontal" ? "horizontal" : "quadrado";
+    itens.push({ rotulo: "Formato", texto: `${formato.label || "Post"} ${forma} (${formato.ratio})` });
+  }
+
+  const nomes = midiaItemsFromProposal(proposal, supplementLinks)
+    .map((m) => String(m.label || "").split(" · ")[0].trim())
+    .filter(Boolean);
+  if (nomes.length) {
+    itens.push({
+      rotulo: "Produto",
+      texto: `A foto do acervo «${nomes.join("», «")}» fica em destaque, sem ser redesenhada.`,
+    });
+  }
+
+  const frase = formatFraseNaImagemFromProposal(proposal);
+  if (frase) itens.push({ rotulo: "Texto na arte", texto: `«${frase}»` });
+
+  const fonteOferta = [proposal.intent_summary, brief.tema, brief.texto].filter((v) => typeof v === "string").join(" ");
+  const preco = fonteOferta.match(/R\$\s?\d+(?:[.,]\d+)*/i)?.[0];
+  if (preco) itens.push({ rotulo: "Preço", texto: `${preco.replace(/R\$\s?/i, "R$ ")} em destaque na arte` });
+
+  const cores = (Array.isArray(brief.cores) ? brief.cores : []).filter((c) => HEX_COR.test(String(c)));
+  if (cores.length) itens.push({ rotulo: "Cores", texto: cores.join(" · "), cores });
+
+  const estilo = [brief.estilo, preco ? String(brief.observacoes ?? "").replace(/pre[cç]o em destaque\.?/i, "") : brief.observacoes]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter(Boolean)
+    .join(". ");
+  if (estilo) itens.push({ rotulo: "Estilo", texto: estilo });
+
+  const marca = proposal.identidade_resumo && typeof proposal.identidade_resumo === "object" ? proposal.identidade_resumo : {};
+  const estiloMarca = typeof marca.estilo === "string" ? marca.estilo.trim() : "";
+  const evitarMarca = typeof marca.evitar === "string" ? marca.evitar.trim() : "";
+  if (estiloMarca) itens.push({ rotulo: "Clima da marca", texto: estiloMarca });
+  if (evitarMarca) itens.push({ rotulo: "Evitar", texto: evitarMarca });
+
+  return itens;
+}
+
+/** Mesmo limite que o backend usa para o texto que aparece na arte. */
+export const FRASE_NA_ARTE_MAX = 56;
+
+const PRECO_RE = /R\$\s?\d+(?:[.,]\d+)*/gi;
+const semEspaco = (s) => String(s).replace(/\s+/g, "").toLowerCase();
+
+function trocarPreco(texto, de, para) {
+  if (typeof texto !== "string" || !texto) return texto;
+  return texto.replace(PRECO_RE, (achado) => {
+    if (semEspaco(achado) !== semEspaco(de)) return achado;
+    return /\s/.test(achado) ? para.replace(/R\$\s?/i, "R$ ") : para.replace(/R\$\s?/i, "R$");
+  });
+}
+
+/**
+ * Aplica a edição do cliente no cartão de confirmação. O preço aparece em vários campos
+ * da proposta (frase, tema, resumo), então um valor novo na frase troca o antigo em todos.
+ *
+ * @param {Record<string, unknown>} supplement
+ * @param {{ frase?: string, detalhes?: string, cores?: string[] }} edits
+ */
+export function aplicarEdicaoNoSuplemento(supplement, edits = {}) {
+  if (!supplement || typeof supplement !== "object") return supplement;
+  const atual =
+    supplement.post_context_proposal && typeof supplement.post_context_proposal === "object"
+      ? supplement.post_context_proposal
+      : {};
+  const brief = atual.arte_brief && typeof atual.arte_brief === "object" ? atual.arte_brief : {};
+
+  let frase = String(edits.frase ?? "").trim().replace(/\s+/g, " ");
+  if (frase.length > FRASE_NA_ARTE_MAX) frase = `${frase.slice(0, FRASE_NA_ARTE_MAX - 1).trim()}…`;
+  const detalhes = String(edits.detalhes ?? "").trim().slice(0, 300);
+  const cores = (Array.isArray(edits.cores) ? edits.cores : []).filter((c) => HEX_COR.test(String(c)));
+
+  const precoAntigo = [atual.frase_na_imagem, brief.tema, atual.intent_summary]
+    .map((t) => String(t ?? "").match(/R\$\s?\d+(?:[.,]\d+)*/i)?.[0])
+    .find(Boolean);
+  const precoNovo = frase.match(/R\$\s?\d+(?:[.,]\d+)*/i)?.[0];
+  const sincronizar = (t) =>
+    precoAntigo && precoNovo && semEspaco(precoAntigo) !== semEspaco(precoNovo)
+      ? trocarPreco(t, precoAntigo, precoNovo)
+      : t;
+
+  // O backend lê o pedido original do histórico; estes ajustes dizem o que mudou desde então.
+  // O preço «de» é sempre o que está na mensagem original, mesmo após várias edições.
+  const anteriores =
+    atual.ajustes_do_cliente && typeof atual.ajustes_do_cliente === "object" ? atual.ajustes_do_cliente : {};
+  const precoOriginal = String(anteriores.preco_de || precoAntigo || "");
+  const precoFinal = String(precoNovo || anteriores.preco_para || "");
+  const trocouPreco = Boolean(precoOriginal && precoFinal && semEspaco(precoOriginal) !== semEspaco(precoFinal));
+
+  const proposta = { ...atual };
+  proposta.ajustes_do_cliente = {
+    frase: frase || String(atual.frase_na_imagem ?? ""),
+    detalhes,
+    cores,
+    preco_de: trocouPreco ? precoOriginal : "",
+    preco_para: trocouPreco ? precoFinal : "",
+  };
+  if (typeof proposta.intent_summary === "string") proposta.intent_summary = sincronizar(proposta.intent_summary);
+  if (typeof proposta.resumo_visual === "string") proposta.resumo_visual = sincronizar(proposta.resumo_visual);
+
+  if (frase) {
+    proposta.frase_na_imagem = frase;
+    proposta.facts_for_image = {
+      ...(atual.facts_for_image && typeof atual.facts_for_image === "object" ? atual.facts_for_image : {}),
+      frase_na_imagem: frase,
+    };
+  }
+  proposta.arte_brief = {
+    ...brief,
+    ...(frase ? { texto: frase } : {}),
+    tema: sincronizar(typeof brief.tema === "string" ? brief.tema : ""),
+    observacoes: sincronizar(detalhes),
+    ...(cores.length ? { cores } : {}),
+  };
+  return { ...supplement, post_context_proposal: proposta };
+}
+
 function normalizeLiteText(value) {
   return String(value || "")
     .normalize("NFD")

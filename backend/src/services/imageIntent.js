@@ -7,6 +7,42 @@ import {
 import { pruneProposalMidiasToPedido } from "./productMentionMatch.js";
 import { pickCreationUserMessage } from "./productAcervoResolve.js";
 
+const PRECO_BRL = /R\$\s?\d+(?:[.,]\d+)*/gi;
+const semEspacos = (s) => String(s).replace(/\s+/g, "").toLowerCase();
+
+/**
+ * Edição que o cliente fez no cartão de confirmação vale mais que a mensagem original:
+ * troca o preço antigo, fixa a frase da arte e acrescenta detalhes e cores ao pedido.
+ *
+ * @param {string} pedido
+ * @param {string} fraseNaImagem
+ * @param {Record<string, unknown> | null | undefined} ajustes
+ */
+export function aplicarAjustesDoCliente(pedido, fraseNaImagem, ajustes) {
+  if (!ajustes || typeof ajustes !== "object") return { pedido, fraseNaImagem };
+  const de = typeof ajustes.preco_de === "string" ? ajustes.preco_de.trim() : "";
+  const para = typeof ajustes.preco_para === "string" ? ajustes.preco_para.trim() : "";
+  const frase = typeof ajustes.frase === "string" ? ajustes.frase.trim() : "";
+  const detalhes = typeof ajustes.detalhes === "string" ? ajustes.detalhes.trim() : "";
+  const cores = Array.isArray(ajustes.cores)
+    ? ajustes.cores.filter((c) => /^#[0-9a-f]{6}$/i.test(String(c)))
+    : [];
+
+  let texto = String(pedido || "");
+  if (de && para && semEspacos(de) !== semEspacos(para)) {
+    texto = texto.replace(PRECO_BRL, (achado) => (semEspacos(achado) === semEspacos(de) ? para : achado));
+  }
+  const extras = [
+    frase ? `Texto na arte (ajuste do cliente, vale mais que o pedido acima): «${frase}».` : "",
+    detalhes ? `Detalhes pedidos pelo cliente: ${detalhes}.` : "",
+    cores.length ? `Cores da arte: ${cores.join(", ")}.` : "",
+  ].filter(Boolean);
+  return {
+    pedido: [texto, ...extras].filter(Boolean).join("\n"),
+    fraseNaImagem: frase || fraseNaImagem,
+  };
+}
+
 function contextIdFromRow(row) {
   return String(row?.id_contexto_empresa ?? "").trim();
 }
@@ -142,9 +178,14 @@ export function buildConfirmedImageIntent(opts = {}) {
 
   const prioritizedContextRows = contextoRows;
   const rawPedido = pickCreationUserMessage(history, "");
-  const pedido =
+  const pedidoBase =
     rawPedido || pedidoHint || resolvePedidoCliente(postContextProposal, history, 2000) || "";
-  const fraseNaImagem = resolveFraseNaImagem(postContextProposal, history, prioritizedContextRows) || "";
+  const fraseBase = resolveFraseNaImagem(postContextProposal, history, prioritizedContextRows) || "";
+  const { pedido, fraseNaImagem } = aplicarAjustesDoCliente(
+    pedidoBase,
+    fraseBase,
+    postContextProposal.ajustes_do_cliente,
+  );
   const resumoVisual = buildResumoVisual(postContextProposal, history, pedido);
   const selectionHint = buildSelectionHint(postContextProposal, pedido, fraseNaImagem, matchedContexto);
 

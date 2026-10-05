@@ -729,6 +729,13 @@ function finalizePostContextProposal(proposal, midiaRows, history, userHint, cad
     identidadeDados: cadastro.identidadeDados || null,
   });
   p.montagem_resumo = buildMontagemResumo(p);
+  // Só para exibir no cartão de confirmação; não entra no prompt da imagem.
+  const identidade = cadastro.identidadeDados || {};
+  const estiloMarca = String(identidade.estilo_visual ?? "").trim();
+  const evitarMarca = String(identidade.evitar ?? "").trim();
+  if (estiloMarca || evitarMarca) {
+    p.identidade_resumo = { estilo: estiloMarca.slice(0, 300), evitar: evitarMarca.slice(0, 300) };
+  }
   return p;
 }
 

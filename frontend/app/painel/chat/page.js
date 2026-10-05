@@ -48,6 +48,7 @@ import {
   CHAT_PEDIDO_AGUARDE_MSG,
   CHAT_PEDIDO_COLETANDO_INTRO,
   CHAT_PEDIDO_RESUMO_MSG,
+  aplicarEdicaoNoSuplemento,
 } from "./chatImageConfirmUtils";
 
 /** Alinhado a REPLICATE_GPT_IMAGE_TIMEOUT_MS no backend (300s) + margem. */
@@ -1324,6 +1325,29 @@ export default function PainelChatPage() {
       }
     },
     [empresaId, syncMensagens, brandColors],
+  );
+
+  // Edição do cliente no cartão de resumo: atualiza a mensagem e o rascunho da arte
+  // (o rascunho é mesclado por cima da proposta na hora de gerar a imagem).
+  const salvarEdicaoResumo = useCallback(
+    function salvarEdicaoResumoFn(messageId, edits) {
+      let proposalNova = null;
+      const next = messagesRef.current.map((m) => {
+        if (m.id !== messageId || !m.post_supplement) return m;
+        const post_supplement = aplicarEdicaoNoSuplemento(m.post_supplement, edits);
+        proposalNova = post_supplement.post_context_proposal;
+        return { ...m, post_supplement };
+      });
+      if (!proposalNova) return;
+      setMessages(next);
+      if (proposalNova.arte_brief) {
+        const merged = normalizeArteBrief(proposalNova.arte_brief, brandColors);
+        setArteBriefDraft(merged);
+        persistArteBriefDraft(merged);
+      }
+      if (conversaId) void syncMensagens(conversaId, next);
+    },
+    [brandColors, conversaId, syncMensagens],
   );
 
   const runGenerateCaptionForImage = useCallback(
@@ -2603,6 +2627,12 @@ export default function PainelChatPage() {
                           collecting={message.post_supplement?.briefing_status === "collecting"}
                           hasArteBrief={Boolean(hasArteBrief)}
                           disabled={!!actionBusy || sending}
+                          canEdit={
+                            Array.isArray(message.ui_actions) &&
+                            message.ui_actions.some((a) => a?.id === "confirm_generate_image")
+                          }
+                          brandColors={brandColors}
+                          onSaveEdit={(edits) => salvarEdicaoResumo(message.id, edits)}
                         />
                       ) : null}
                       {hasArteBrief && supplementMsg && !hasSupplement ? (
