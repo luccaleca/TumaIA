@@ -98,17 +98,36 @@ function parseFollowerMilestone(text) {
   return null;
 }
 
+/** Vírgula seguida disto já é outra instrução do pedido, não continuação da frase. */
+const INICIO_DE_INSTRUCAO =
+  /^(fundo|estilo|cor(es)?|tom|formato|logo|use|usa|usar|quero|sem|com\s+fundo|em\s+tom|deixa|deixe|fa[cç]a|faz|coloca|coloque|mostra|tipografia|letra|foto|imagem|arte|visual|bem|bastante|e\s+(?:o|a|um|uma)\s)/i;
+
+/**
+ * Frase pedida: vai até «;», fim de frase ou fim do texto. Vírgula faz parte da frase
+ * («Terça da pizza, 2 grandes por R$ 79»), exceto quando começa outra instrução.
+ * @param {string} raw
+ */
+function cortarFraseNaInstrucao(raw) {
+  const [primeiro, ...resto] = String(raw).split(",");
+  const partes = [primeiro];
+  for (const parte of resto) {
+    if (INICIO_DE_INSTRUCAO.test(parte.trim())) break;
+    partes.push(parte);
+  }
+  return partes.join(",").trim();
+}
+
 export function extractFraseFromUserText(text) {
   const t = String(text || "");
   const patterns = [
-    /frase\s*:\s*(.+?)(?:\s*[,;]|$)/i,
-    /texto\s+(?:na\s+)?(?:imagem|arte)\s*:\s*(.+?)(?:\s*[,;]|$)/i,
-    /frase\s+(?:na\s+)?(?:imagem|arte)\s*(?:é|seria|será)\s*[«"]?(.+?)[«"]?(?:\s*[,;]|$)/i,
+    /frase\s*:\s*(.+?)(?:\s*;|\.\s|$)/i,
+    /texto\s+(?:na\s+)?(?:imagem|arte)\s*:\s*(.+?)(?:\s*;|\.\s|$)/i,
+    /frase\s+(?:na\s+)?(?:imagem|arte)\s*(?:é|seria|será)\s*[«"]?(.+?)[«"]?(?:\s*;|\.\s|$)/i,
   ];
   for (const re of patterns) {
     const m = t.match(re);
     if (!m?.[1]) continue;
-    const n = normalizeFraseNaImagem(m[1]);
+    const n = normalizeFraseNaImagem(cortarFraseNaInstrucao(m[1]));
     if (n) return n;
   }
   return null;

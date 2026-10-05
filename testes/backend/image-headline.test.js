@@ -168,3 +168,22 @@ describe("imageHeadline — frase na imagem", () => {
     assert.ok(frase === null || !/^promoção$/i.test(frase));
   });
 });
+
+describe("extractFraseFromUserText — vírgula dentro da frase", () => {
+  it("mantém a frase inteira quando a vírgula é parte dela", () => {
+    assert.equal(
+      extractFraseFromUserText(
+        "Faz um post da pizza para a promoção de terça. Frase: Terça da pizza, 2 grandes por R$ 79",
+      ),
+      "Terça da pizza, 2 grandes por R$ 79",
+    );
+  });
+
+  it("para na vírgula quando começa outra instrução do pedido", () => {
+    assert.equal(
+      extractFraseFromUserText("frase: Terça da pizza, fundo vermelho e logo grande"),
+      "Terça da pizza",
+    );
+    assert.equal(extractFraseFromUserText("frase: Terça da pizza; foto de perto"), "Terça da pizza");
+  });
+});
