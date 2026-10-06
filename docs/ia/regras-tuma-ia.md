@@ -8,7 +8,7 @@ Documentação legível das regras de comportamento. O arquivo **canônico** inj
 
 Treino dinâmico (empresa + mídias): `papel_funcionario_empresa.txt` e treinos em `instrucoes/treino_*.txt`.
 
-Após alterar `.txt`: reiniciar o backend (worker Python recarrega na subida).
+Após alterar `.txt`: reiniciar o backend (o motor Node e, se ativo, o worker Python legado recarregam as instruções na subida).
 
 ## Blocos
 
@@ -43,7 +43,11 @@ Exemplo: *"se eu fazer um pedido de uma postagem vc me ajuda?"* → conversa (n�
 
 ## Onde entra no código
 
-- Chat RAG: `backend/ia/python/conversa/instrucoes/__init__.py` → `REGRAS_TUMA_IA` + `REGRAS_INTERPRETACAO_TUMA`
-- Respostas rápidas (oi / quem é você): `backend/ia/python/conversa/identidade.py`
+**Caminho feliz (Node):** `TUMAIA_NODE_CHAT=true` — `processChatMessage.js`, `chatTurnIntent.js`, `tumaInterpretation.js`; as regras `.txt` alimentam o prompt/comportamento do monólito Node.
+
+**Legado (Python/RAG):** só com `TUMAIA_NODE_CHAT=false` — `backend/ia/python/conversa/instrucoes/__init__.py` → `REGRAS_TUMA_IA` + `REGRAS_INTERPRETACAO_TUMA`; respostas rápidas em `identidade.py`.
+
+Outros pontos Node:
+
 - Roteamento de imagem (regex): `backend/src/services/imageGenerationIntent.js`
-- Proposta de arte (Llama): `backend/src/services/postContextProposalService.js` + `tumaIaRegrasResumo.js`
+- Proposta de arte: `backend/src/services/postContextProposalService.js` + `tumaIaRegrasResumo.js`

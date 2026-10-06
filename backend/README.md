@@ -59,7 +59,7 @@ Empresas, membros, convites, contextos, mídias, identidade de marca. Sempre val
 
 | Método | Rota | Função |
 |--------|------|--------|
-| POST | `/chat` | Chat Tuma (worker Python + roteamento Node) |
+| POST | `/chat` | Chat Tuma — motor Node (`TUMAIA_NODE_CHAT=true`; Python/RAG só se desligado) |
 | POST | `/post-context-proposal` | Briefing / proposta de post |
 | POST | `/post-caption` | Legenda + hashtags |
 | POST | `/image-preview` | Gera prévia de imagem |
@@ -89,7 +89,7 @@ Auth: header `x-internal-secret` ou `Authorization: Bearer` = `INTERNAL_WEBHOOK_
 | `POST /internal/whatsapp/message` | Mensagem WhatsApp (teste / automação) |
 | `POST /internal/whatsapp/reset` | Limpa sessão em memória |
 | `GET /internal/supabase/ping` | Teste Supabase |
-| `GET/POST /internal/replicate/*` | FLUX legado, usage |
+| `GET/POST /internal/replicate/*` | Rotas internas Replicate (legado / testes), usage |
 | `POST /internal/social-content` | Conteúdo social (Llama JSON) |
 | `GET /internal/social-content/usage` | Uso diário de tokens |
 | `POST /internal/brand-context` | Contexto de marca (legado) |
@@ -103,13 +103,17 @@ Geração **só debita** com flag explícita:
 
 Limites: `imageBilling.js`, `replicateUsage.js` (rajada, teto diário).
 
-## Worker Python (chat RAG)
+## Chat Node (caminho feliz)
 
-Subprocesso iniciado por `chatPythonWorker.js`. Instruções em `ia/python/conversa/instrucoes/*.txt`.
+Padrão: `TUMAIA_NODE_CHAT=true` — regras + `processChatMessage` / `chatTurnIntent` / `tumaInterpretation`; LLM (Ollama ou cloud) em exceções.
 
-Após alterar `.txt`: **reiniciar o backend**.
+Os arquivos de instrução em `ia/python/conversa/instrucoes/*.txt` continuam sendo a fonte canônica de prompts/regras (também lidos pelo caminho Node). Após alterar `.txt`: **reiniciar o backend**.
 
-Documentação: [`ia/python/README.md`](./ia/python/README.md)
+## Worker Python (legado — chat RAG)
+
+Só quando `TUMAIA_NODE_CHAT=false`. Subprocesso via `chatPythonWorker.js` (Chroma + orquestrador). Fora do caminho feliz do produto.
+
+Documentação do legado: [`ia/python/README.md`](./ia/python/README.md)
 
 ## Testes
 

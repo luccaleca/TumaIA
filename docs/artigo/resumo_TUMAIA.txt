@@ -1,79 +1,79 @@
 RESUMO DO PROJETO - TumaIA
 
-O TumaIA e uma plataforma criada para ajudar pequenas e medias empresas a produzirem conteudo para Instagram de forma mais rapida e organizada. Em vez de gastar horas toda semana criando posts manualmente, a empresa usa o sistema para automatizar grande parte desse trabalho com inteligencia artificial.
-
-Na pratica, o projeto conecta WhatsApp, IA, automacao e Instagram em um unico fluxo. A empresa envia a solicitacao, o sistema entende o contexto da marca, gera texto e imagem do post, e prepara a publicacao automaticamente.
+O TumaIA é uma plataforma SaaS WhatsApp-first para pequenas e médias empresas produzirem conteúdo para Instagram com mais velocidade e consistência. Em vez de montar cada post do zero (texto, arte, hashtags e publicação), a empresa pede o conteúdo pelo WhatsApp ou pelo painel web; o sistema carrega o contexto da marca, gera imagem e legenda com IA, pede aprovação humana e só então publica no Instagram.
 
 PROBLEMA QUE O PROJETO RESOLVE
 
-Muitas PMEs nao conseguem manter constancia nas redes sociais porque:
-- Falta tempo para produzir conteudo com frequencia.
+Muitas PMEs não conseguem manter constância nas redes porque:
+- Falta tempo para produzir conteúdo com frequência.
 - Criar posts de qualidade exige escrita, design e planejamento.
-- O processo manual vira um gargalo para o marketing.
+- O processo manual vira gargalo de marketing.
 
-COMO O TumaIA FUNCIONA
+COMO O TumaIA FUNCIONA (fluxo real)
 
-1. A empresa cadastra informacoes da marca (tom de voz, publico, produtos e objetivos).
-2. O pedido de conteudo pode ser iniciado via WhatsApp.
-3. A IA gera sugestoes de legenda e arte com base no contexto cadastrado.
-4. Um fluxo de automacao (n8n) organiza e envia o conteudo para publicacao no Instagram.
-5. O processo pode ser repetido de forma rapida e com consistencia.
+1. A empresa cadastra no painel (Next.js) identidade de marca, produtos, mídias e objetivos.
+2. O pedido de post chega pelo WhatsApp (Cloud API da Meta) ou pelo chat do painel.
+3. O backend Node.js (Express) identifica a empresa, carrega o contexto no Supabase e interpreta a intenção (conversa, acervo, empresa ou pedido explícito de imagem).
+4. A IA gera proposta de post (imagem + legenda/hashtags) alinhada à marca.
+5. O usuário aprova ou pede ajustes (aprovação humana obrigatória).
+6. Com aprovação, o próprio backend publica no Instagram via Meta Graph API.
 
-O QUE JA FAZ PARTE DO PROJETO
+Não há orquestrador externo (n8n) no turno a turno: webhook WhatsApp → monólito Node → Supabase → provedores de IA → Meta Graph.
 
-- Integracao com WhatsApp para receber solicitacoes.
-- Website para configurar marca, contexto e catalogo.
-- Automacao com n8n para orquestrar o fluxo.
-- IA generativa para criacao de textos e imagens.
-- Documentacao para apoiar uso, implantacao e evolucao.
+O QUE JÁ FAZ PARTE DO PROJETO
+
+- Integração WhatsApp Cloud API (Meta) com webhook no backend.
+- Painel Next.js para marca, acervo, chat e fluxo de arte.
+- API monólito Node.js Express (auth, empresas, chat, IA, WhatsApp, Instagram).
+- Dados e autenticação no Supabase (Postgres, Auth, Storage).
+- Chat conversacional em Node (TUMAIA_NODE_CHAT=true): regras + analyzeChatTurn/processChatMessage; Ollama ou LLM cloud em exceções. Python/RAG/Chroma em backend/ia/python/ é legado, fora do caminho feliz.
+- Geração de imagem configurável (IMAGE_PROVIDER): OpenAI gpt-image-2 ou Replicate.
+- Publicação Instagram via Meta Graph no backend após aprovação.
 
 RESULTADO ESPERADO
 
 Com o TumaIA, a empresa consegue:
-- Produzir conteudo com mais frequencia.
-- Manter padrao visual e de comunicacao.
+- Produzir conteúdo com mais frequência.
+- Manter padrão visual e de comunicação.
 - Reduzir horas operacionais por semana.
-- Focar mais em estrategia e menos em tarefas repetitivas.
+- Focar mais em estratégia e menos em tarefas repetitivas.
 
 
+FLUXO EM PASSOS (visão simples)
 
 Cliente pede um post
 Pelo WhatsApp ou painel.
 
-Sistema vê quem é o cliente
-Descobre qual empresa está pedindo.
+Sistema identifica a empresa
+Telefone + workspace ativo (WhatsApp) ou JWT + id_empresa (painel).
 
-Sistema checa se ainda pode usar hoje
-Se acabou o limite do dia, para aqui e avisa:
-“Seu limite de hoje acabou.”
+Sistema monta o contexto da marca
+Nome, cores, logo, tom, acervo e o pedido do usuário (Supabase).
 
-Sistema monta as informações da marca
-Junta nome, cores, logo, estilo e o pedido do cliente.
+Roteamento de intenção (Node)
+tumaInterpretation + chatTurnIntent + processChatMessage
+decidem: conversa, acervo, dados da empresa ou geração explícita de imagem.
 
-IA escreve o texto do post
-Faz legenda e hashtags.
-Se a IA principal falhar, usa a reserva.
+IA gera texto e imagem
+Legenda/hashtags e prévia de arte (OpenAI ou Replicate conforme IMAGE_PROVIDER).
 
-Sistema cria a imagem em 3 passos
+Aprovação humana
+Usuário confirma, ajusta legenda/imagem ou pede nova versão.
 
-tira fundo da foto (se precisar)
-cria o cenário novo
-junta produto + cenário final
-Sistema conta o consumo em cada passo
-Toda vez que usa IA, já registra quanto gastou.
-
-Sistema salva tudo e entrega
-Guarda imagem/texto e envia o resultado para o cliente.
-
-No fim do dia, faz o resumo
-Mostra quanto cada cliente usou e quanto ainda teria no plano.
+Publicação
+Backend publica no Instagram via Meta Graph API.
 
 Resumo em 1 frase:
-Recebe pedido -> checa limite -> cria texto e imagem -> conta gasto -> entrega -> mostra consumo do dia.
+Recebe pedido → carrega marca no Supabase → IA gera post → aprovação → Instagram.
 
 
-Llama (principal de texto, via Ollama ou OpenRouter): escreve a legenda, descrição e hashtags do post.
-Remove.bg (principal de recorte): remove o fundo da foto do produto quando precisar.
-Photoroom API (reserva de imagem/recorte): substitui Remove.bg ou ajuda na parte visual se houver falha.
-FLUX (fal.ai) (principal de geração de cenário): cria o fundo/cenário novo da arte final.
-n8n + backend (não é IA): junta tudo, controla limite diário, registra consumo e entrega pro cliente.
+STACK ATUAL (produto)
+
+Painel: Next.js (frontend/).
+API: Node.js Express monólito (backend/src/).
+Dados: Supabase (Postgres, Auth, Storage).
+Chat: motor Node (regras + estados + LLM em exceções); Python/RAG legado opcional.
+WhatsApp: Cloud API Meta (webhook no backend).
+Instagram: Meta Graph API no backend após aprovação.
+Imagem: IMAGE_PROVIDER = OpenAI gpt-image-2 ou Replicate.
+Roteamento: tumaInterpretation + chatTurnIntent + processChatMessage.

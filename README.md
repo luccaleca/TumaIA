@@ -34,7 +34,7 @@ O protótipo existe para **mostrar que funciona** com ~10–20 pessoas no WhatsA
 | Pasta | Papel |
 |-------|--------|
 | `frontend/` | Painel web (Next.js) |
-| `backend/` | API Express + worker Python em `backend/ia/python/` |
+| `backend/` | API Express (chat Node); `backend/ia/python/` = RAG legado + prompts `.txt` |
 | `testes/` | Testes `node --test` (fora de backend/frontend) |
 | `docs/` | Produto, arquitetura, IA |
 

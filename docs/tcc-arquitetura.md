@@ -70,25 +70,27 @@ O TumaIA **não precisa ser** um chatbot genérico com RAG. O desenho alvo é um
 
 ## Runtime: monólito Node (sem Python no produto)
 
-### Situação hoje
+### Situação hoje (pré-V2)
 
 ```text
-Node (Express)  ← API, WhatsApp, briefing, legenda, imagem
+Node (Express)  ← API, WhatsApp, chat, briefing, legenda, imagem, Instagram
      │
-     └── subprocesso Python  ← chat RAG (Chroma + orquestrador)
+     └── backend/ia/python/  ← legado (Chroma/RAG); só se TUMAIA_NODE_CHAT=false
 ```
 
+O motor padrão já é **Node** (`TUMAIA_NODE_CHAT=true`): regras + estados + LLM em exceções.
 ### Alvo
 
 **Um único runtime Node** na VPS — sem `pip`, sem Chroma, sem boot longo do worker Python.
 
-| Camada | Hoje | Alvo TCC / VPS |
-|--------|------|----------------|
-| WhatsApp | Pode cair no Python | **Nunca** Python |
+| Camada | Hoje (protótipo) | Alvo VPS / pós-arquivo Python |
+|--------|------------------|-------------------------------|
+| WhatsApp | Node (`TUMAIA_NODE_CHAT`) | Node |
 | Briefing do post | Node (`POST_CONTEXT_USE_LLAMA=false`) | Node |
 | Legenda / imagem | Node → Ollama ou API | Node |
-| Chat do painel | Node → Python RAG | Node (regras + Ollama HTTP) |
-| Perguntas complexas | Python RAG | Node → Ollama (prompt curto) |
+| Chat do painel | Node (regras + LLM em exceções) | Node |
+| Perguntas complexas | Node → Ollama / cloud | Node → Ollama (prompt curto) |
+| Python / RAG | Legado opcional | Arquivar / remover |
 
 A **LLM continua** onde fizer sentido; o que sai é o **subprocesso Python + RAG vetorial** no caminho crítico.
 
