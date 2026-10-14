@@ -16,6 +16,7 @@ import { aspectRatioFromArteBrief, promptFromArteBrief } from "./rawImageArteBri
 import {
   formatBrandIdentityBlockForFlux,
   formatBrandIdentityCompact,
+  formatBrandIdentityForProductPrompt,
   formatBrandIdentityForRawPrompt,
   isIdentidadeMarcaContexto,
   partitionContextosIdentidade,
@@ -66,6 +67,7 @@ export function buildIntegratedProductImagePrompt(
     pedido,
     fraseNaImagem: frase,
     mandatoryTypography,
+    brandIdentity: identidadeDados ? formatBrandIdentityForProductPrompt(identidadeDados) : "",
     contextoNome: imageIntent?.matchedContexto?.nome || null,
     modeloPostPrompt: imageIntent?.playbookPromptBase || null,
     aspectRatio: opts?.aspectRatio || "1:1",

@@ -68,6 +68,7 @@ export function buildOfficialGptImage2Prompt(ctx = {}) {
   const modeloPost = String(ctx.modeloPostPrompt || "").trim();
   const aspect = String(ctx.aspectRatio || "1:1").trim();
   const hero = String(ctx.heroProductName || "").trim();
+  const brandIdentity = String(ctx.brandIdentity || "").trim();
   const logoInReferences = ctx.logoInReferences === true;
 
   const itemsPhrase = names.length
@@ -85,6 +86,7 @@ export function buildOfficialGptImage2Prompt(ctx = {}) {
       ? `${mandatory} These client-specified details must appear in the image typography and override any generic creative choices.`
       : "",
     pedido ? `Creative direction from the client: ${pedido}` : "",
+    brandIdentity,
     modeloPost
       ? `Post layout playbook${contexto ? ` (${contexto})` : ""} — follow this visual structure: ${modeloPost}`
       : contexto
