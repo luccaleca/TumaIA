@@ -371,6 +371,86 @@ export function formatBrandIdentityForRawPrompt(dados, maxLen = 900) {
   return s.trim();
 }
 
+/**
+ * Nome aproximado, em inglês, de uma cor #RRGGBB (o gerador segue melhor «blue» que só o código).
+ * @param {string} hex
+ */
+export function nomeAproximadoDaCor(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || "").trim());
+  if (!m) return "";
+  const n = parseInt(m[1], 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h = (h * 60 + 360) % 360;
+  }
+  if (l < 0.1) return "black";
+  if (l > 0.93) return "white";
+  if (s < 0.12) return l < 0.35 ? "dark gray" : l > 0.7 ? "light gray" : "gray";
+  let base;
+  if (h < 15 || h >= 345) base = "red";
+  else if (h < 40) base = l < 0.4 ? "brown" : "orange";
+  else if (h < 65) base = "yellow";
+  else if (h < 90) base = "lime green";
+  else if (h < 165) base = "green";
+  else if (h < 195) base = "teal";
+  else if (h < 255) base = "blue";
+  else if (h < 290) base = "purple";
+  else base = "pink";
+  if (base === "brown") return l < 0.2 ? "dark brown" : "brown";
+  return l < 0.25 ? `dark ${base}` : l > 0.75 ? `light ${base}` : base;
+}
+
+/**
+ * Identidade da marca para a imagem de PRODUTO do acervo: as cores e o estilo valem para fundo,
+ * tipografia, elementos gráficos e luz — nunca para a embalagem, que a referência já define.
+ * (O formatador do prompt «raw» proíbe cores fora da paleta, o que brigaria com rótulos coloridos.)
+ *
+ * @param {Record<string, unknown> | null} dados
+ * @param {number} [maxLen]
+ */
+export function formatBrandIdentityForProductPrompt(dados, maxLen = 1100) {
+  const d = normalizeIdentidadeDados(dados || {});
+  const cores = allBrandColorsFromIdentidade(d);
+  const evitar = String(d.evitar || "").trim() || EVITAR_PADRAO_IMAGEM;
+  const partes = [
+    "Brand identity: it governs the background, typography, graphic elements, lighting and mood. " +
+      "It NEVER changes the product packaging, which must stay exactly as in the reference pictures. " +
+      "If the client's request conflicts with the brand identity, the brand identity wins.",
+  ];
+  if (cores.length) {
+    const paleta = cores
+      .map((c) => {
+        const nome = nomeAproximadoDaCor(c);
+        return nome ? `${nome} (${c})` : c;
+      })
+      .join(", ");
+    partes.push(
+      `Brand color palette: ${paleta}. The background, headline text and graphic elements must be built mainly from these colors.`,
+    );
+  }
+  const semPontoFinal = (t, n) => compactPromptText(t, n).replace(/[.\s]+$/, "");
+  if (d.estilo_visual) partes.push(`Visual style: ${semPontoFinal(d.estilo_visual, 260)}.`);
+  if (d.assinatura_visual) partes.push(`Visual signature: ${semPontoFinal(d.assinatura_visual, 180)}.`);
+  if (d.tom_voz) partes.push(`Mood: ${semPontoFinal(d.tom_voz, 120)}.`);
+  const papel = String(d.papel_agente || "").trim();
+  if (papel) partes.push(`Brand notes: ${compactPromptText(papel, 300)}`);
+  partes.push(`Avoid: ${semPontoFinal(evitar, 300)}.`);
+  let s = partes.join(" ");
+  if (s.length > maxLen) s = `${s.slice(0, maxLen - 1)}…`;
+  return s.trim();
+}
+
 /** Há dados de identidade úteis para geração de imagem. */
 export function hasIdentidadeParaImagem(dados) {
   const d = normalizeIdentidadeDados(dados || {});
