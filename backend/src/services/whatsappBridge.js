@@ -7,6 +7,10 @@ import {
   whatsappCloudSendText,
 } from "./whatsappCloudClient.js";
 import { parseWhatsappCloudWebhookMessages } from "./whatsappCloudWebhookParser.js";
+import { createInboundGuard } from "./whatsappInboundGuard.js";
+
+/** Descarta mensagens velhas ou repetidas que a Meta reentrega (ver whatsappInboundGuard.js). */
+const inboundGuard = createInboundGuard({ maxAgeMs: env.WHATSAPP_MAX_MESSAGE_AGE_MS });
 
 /**
  * @typedef {{
@@ -46,10 +50,15 @@ export function clearWhatsappDedupCache() {
   recentMessageIds.clear();
 }
 
-function buildOutboundText(out) {
+/**
+ * Texto final enviado ao cliente: resposta + (opcional) bloco de ações. O bloco é limpo com
+ * trim(), que tira as linhas em branco de antes dele, então a separação é refeita aqui.
+ * @param {{ reply?: string, hints?: string }} out
+ */
+export function buildOutboundText(out) {
   let text = String(out.reply || "").trim();
   const hints = String(out.hints || "").trim();
-  if (hints && !text.includes(hints)) text = text ? `${text}${hints}` : hints;
+  if (hints && !text.includes(hints)) text = text ? `${text}\n\n${hints}` : hints;
   return text;
 }
 
@@ -180,11 +189,21 @@ export async function handleWhatsappCloudWebhook(body) {
   }
 
   let accepted = 0;
+  let ignored = 0;
   for (const msg of messages) {
     if (expectedPhoneId && msg.phone_number_id && msg.phone_number_id !== expectedPhoneId) {
       console.info(
         `[whatsapp-cloud] ignorado phone_number_id=${msg.phone_number_id} (esperado ${expectedPhoneId})`,
       );
+      continue;
+    }
+
+    const verdict = inboundGuard.check(msg);
+    if (!verdict.ok) {
+      ignored += 1;
+      const detalhe =
+        verdict.reason === "stale" ? `antiga (${Math.round((verdict.idadeMs || 0) / 60000)} min)` : "repetida";
+      console.info(`[whatsapp-cloud] mensagem ${detalhe} ignorada de ${msg.from || "?"} id=${msg.message_id || "?"}`);
       continue;
     }
 
@@ -202,5 +221,5 @@ export async function handleWhatsappCloudWebhook(body) {
     });
   }
 
-  return { ok: true, accepted: accepted > 0, count: accepted };
+  return { ok: true, accepted: accepted > 0, count: accepted, ...(ignored ? { ignored } : {}) };
 }

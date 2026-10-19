@@ -288,6 +288,14 @@ const envSchema = z.object({
   WHATSAPP_CLOUD_VERIFY_TOKEN: z.preprocess(empty, z.string().min(1).optional()),
   /** App Secret do app Meta — valida X-Hub-Signature-256 no POST do webhook (opcional em lab). */
   WHATSAPP_CLOUD_APP_SECRET: z.preprocess(empty, z.string().min(1).optional()),
+  /**
+   * Mensagens do WhatsApp mais velhas que isso são ignoradas (a Meta reentrega eventos antigos).
+   * Padrão 10 min; 0 desliga o filtro de idade.
+   */
+  WHATSAPP_MAX_MESSAGE_AGE_MS: z.preprocess(
+    (v) => (v === "" || v === undefined ? 600_000 : Number(v)),
+    z.number().int().min(0).max(86_400_000),
+  ),
   WHATSAPP_CLOUD_API_VERSION: z.preprocess(
     (v) => (v === "" || v === undefined ? "v21.0" : String(v).trim()),
     z.string().min(2).max(16),
