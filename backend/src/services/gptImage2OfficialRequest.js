@@ -19,6 +19,15 @@ export const REGRA_SEM_TEXTO_INVENTADO =
   "Do NOT invent or add any other text, slogans, badges, stickers, promises or claims " +
   "(for example delivery, free shipping, discounts, product descriptions, phone numbers or website addresses).";
 
+/**
+ * A fidelidade à embalagem protege rótulos, mas não comida: sem esta regra, uma foto de pizza
+ * cadastrada com o nome «queijo» virava uma pizza de queijo inventada, ignorando a foto.
+ */
+export const REGRA_FOTO_E_A_VERDADE =
+  "The reference pictures are the source of truth for how the product looks (shape, toppings, colors, portions, presentation). " +
+  "Reproduce the product exactly as shown in them. " +
+  "Do NOT replace it with a different version suggested by its name or by the client's text.";
+
 export const GPT_IMAGE_REFERENCE_MAX = 4;
 
 /** Com logo no array, reservamos 1 slot para ela. */
@@ -103,6 +112,7 @@ export function buildOfficialGptImage2Prompt(ctx = {}) {
         ? `Campaign context: ${contexto}.`
         : "",
     "Preserve the exact packaging design, labels, colors, proportions and brand details from every product reference — do not redraw or invent new labels.",
+    REGRA_FOTO_E_A_VERDADE,
     "Use professional studio lighting and a cohesive scene.",
     logoInReferences
       ? "Place the brand logo from the reference images as a small watermark in one corner (about 8% of frame height), semi-transparent."

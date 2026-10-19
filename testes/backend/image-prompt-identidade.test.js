@@ -64,3 +64,27 @@ describe("regra contra texto inventado na arte", () => {
     assert.match(prompt, /Include this campaign text prominently with correct spelling: «Sexta de Way Beer, 3 por R\$ 45»/);
   });
 });
+
+describe("a foto do acervo é a verdade sobre o produto", () => {
+  it("o prompt manda reproduzir o produto como na foto, sem trocar pelo que o nome sugere", () => {
+    const prompt = montar(IDENTIDADE);
+    assert.match(prompt, /source of truth for how the product looks/);
+    assert.match(prompt, /Reproduce the product exactly as shown/);
+    assert.match(prompt, /Do NOT replace it with a different version suggested by its name or by the client's text/);
+  });
+
+  it("a regra convive com a fidelidade da embalagem e com o texto pedido", () => {
+    const prompt = montar(IDENTIDADE);
+    assert.match(prompt, /Preserve the exact packaging design/);
+    assert.match(prompt, /Include this campaign text prominently with correct spelling/);
+  });
+
+  it("vale mesmo quando o pedido cita um sabor diferente do que a foto mostra", () => {
+    const pedido = [{ role: "user", content: "Faz um post da pizza de queijo: grande por R$ 49. Frase: Terça do queijo, grande por R$ 49" }];
+    const prompt = buildIntegratedProductImagePrompt(pedido, { intent_summary: "pizza" }, IDENTIDADE, {
+      productNames: ["Pizza de queijo"],
+    });
+    assert.match(prompt, /pizza de queijo/i);
+    assert.match(prompt, /Do NOT replace it with a different version suggested by its name/);
+  });
+});
