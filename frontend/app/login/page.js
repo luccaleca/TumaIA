@@ -133,7 +133,7 @@ function LoginForm() {
       <AuthMessage kind={displayKind}>{displayMsg}</AuthMessage>
 
       {process.env.NODE_ENV === "development" && (
-        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-center text-xs text-amber-200">
+        <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-center text-xs text-amber-900">
           <p className="mb-2">Supabase pausado ou sem conexão?</p>
           <button
             type="button"
@@ -159,9 +159,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="auth-page relative flex min-h-screen items-center justify-center">
-          <div className="auth-page-bg absolute inset-0" aria-hidden />
-          <p className="relative z-10 text-sm text-white/90">Carregando…</p>
+        <main className="auth-page auth-page--loading">
+          <p className="text-sm">Carregando…</p>
         </main>
       }
     >
