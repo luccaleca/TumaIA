@@ -12,8 +12,28 @@
   --muted-foreground: #64748b;
   --border: #d1d5db;
   --accent: #00b341;
-  --accent-foreground: #ffffff;
+  --accent-foreground: #06120c;
   --accent-muted: rgba(0, 179, 65, 0.12);
+
+  /* Landing design tokens (brand green mantido: #00b341) */
+  --ink-950: #06120c;
+  --ink-900: #0a1a12;
+  --forest-800: #0e2a1c;
+  --text: #0b1510;
+  --landing-muted: #55655b;
+  --line: #e1e7e0;
+  --paper: #f6f8f5;
+  --brand-400: #4ade80;
+  --brand-500: #00b341;
+  --brand-700: #15803d;
+  --mint-300: #6ee7b7;
+  --glow: 0 0 0 1px rgb(34 197 94 / 0.35), 0 12px 40px -12px rgb(34 197 94 / 0.45);
+  --shadow-sm: 0 1px 2px rgb(6 18 12 / 0.05), 0 4px 12px -4px rgb(6 18 12 / 0.08);
+  --shadow-lg: 0 2px 4px rgb(6 18 12 / 0.04), 0 24px 48px -16px rgb(6 18 12 / 0.18);
+}
+
+.landing-page {
+  --muted: var(--landing-muted);
 }
 
 /*
@@ -60,6 +80,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
+.landing-font-root {
+  --font-display: var(--font-geist-sans);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -71,64 +95,10 @@ html {
 }
 
 .landing-section {
-  scroll-margin-top: 110px;
-  transition: background-color 180ms ease;
-}
-
-.landing-section:target {
-  background: linear-gradient(to bottom, var(--accent-muted), transparent 55%);
-}
-
-.landing-section:target .section-title {
-  font-size: clamp(2.8rem, 5.4vw, 4.4rem);
-  line-height: 1.05;
+  scroll-margin-top: 108px;
 }
 
 /* —— Landing (página inicial) —— */
-.landing-page {
-  --landing-hero-image: url("/imagens/close-up-food-lover-eating.jpg");
-  --landing-page-bg-image: url("/imagens/imagem-de-fundo-site.jpg");
-}
-
-.landing-hero-bg {
-  background-image: var(--landing-hero-image);
-  background-size: cover;
-  background-position: center 35%;
-  background-repeat: no-repeat;
-}
-
-/* Hero inicial: imagem sobe para preencher o topo (atrás do header) */
-.landing-hero-bg--inicio {
-  background-position: 68% 0%;
-  transform: scale(1.06);
-  transform-origin: center top;
-}
-
-.landing-cta-bg {
-  background-image: url("/imagens/imagem-final-pronto-instagram.jpg");
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
-}
-
-.landing-page::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image: var(--landing-page-bg-image);
-  background-size: cover;
-  background-position: center;
-  opacity: 0.03;
-  filter: saturate(0.7) brightness(0.92);
-}
-
-.landing-page > * {
-  position: relative;
-  z-index: 1;
-}
-
 .landing-glass {
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(14px);
@@ -240,62 +210,91 @@ html {
 /* Scroll reveal */
 .landing-reveal {
   opacity: 0;
+  transform: translateY(16px);
+  filter: blur(4px);
   transition:
-    opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: opacity, transform;
-}
-
-.landing-reveal-up {
-  transform: translateY(32px);
-}
-
-.landing-reveal-down {
-  transform: translateY(-24px);
-}
-
-.landing-reveal-left {
-  transform: translateX(-28px);
-}
-
-.landing-reveal-right {
-  transform: translateX(28px);
-}
-
-.landing-reveal-fade {
-  transform: none;
-}
-
-.landing-reveal-scale {
-  transform: scale(0.94);
+    opacity 0.65s cubic-bezier(0.22, 0.8, 0.2, 1),
+    transform 0.65s cubic-bezier(0.22, 0.8, 0.2, 1),
+    filter 0.65s cubic-bezier(0.22, 0.8, 0.2, 1);
+  will-change: opacity, transform, filter;
 }
 
 .landing-reveal-visible {
   opacity: 1;
   transform: none;
+  filter: none;
+}
+
+@keyframes landing-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.landing-float {
+  animation: landing-float 4.5s ease-in-out infinite;
+}
+
+@keyframes landing-flow-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.landing-flow-progress {
+  transform-origin: left center;
+  animation: landing-flow-progress 3.5s linear forwards;
+}
+
+.landing-spotlight {
+  position: relative;
+  isolation: isolate;
+}
+
+.landing-spotlight::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(
+    320px circle at var(--mx, 50%) var(--my, 30%),
+    rgba(0, 179, 65, 0.12),
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+@media (pointer: fine) {
+  .landing-spotlight:hover::after {
+    opacity: 1;
+  }
+}
+
+.landing-cta-panel {
+  --mx: 70%;
+  --my: 40%;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-hero-enter,
-  .landing-reveal {
+  .landing-reveal,
+  .landing-float,
+  .landing-flow-progress {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+    filter: none !important;
     transition: none !important;
   }
-}
-
-.landing-step-num {
-  display: inline-flex;
-  height: 2rem;
-  width: 2rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: var(--accent-muted);
-  color: var(--accent);
-  font-size: 0.75rem;
-  font-weight: 700;
 }
 
 /* —— Login / Cadastro —— */
