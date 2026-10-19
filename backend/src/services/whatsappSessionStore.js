@@ -39,9 +39,14 @@ export function getOrCreateWhatsappSession(phone, idEmpresa) {
   pruneExpired();
   const key = String(phone || "").trim();
   const existing = sessions.get(key);
-  if (existing) {
+  if (existing && existing.id_empresa === idEmpresa) {
     existing.updated_at = Date.now();
     return existing;
+  }
+  // A pessoa trocou de empresa no painel: a sessão antiga (histórico, resumo, imagem) é da outra
+  // marca e contaminaria a nova. Recomeça do zero em vez de misturar as duas.
+  if (existing) {
+    console.info(`[whatsapp] empresa mudou para ${key}: sessão anterior descartada`);
   }
   const session = {
     phone: key,
