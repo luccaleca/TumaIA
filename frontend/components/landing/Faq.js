@@ -18,13 +18,15 @@ export default function Faq() {
     <Section id="faq" tone="surface">
       <div className="grid gap-10 lg:grid-cols-12 lg:gap-14">
         <Reveal className="lg:col-span-4">
-          <div className="lg:sticky lg:top-28">
+          <div className="flex flex-col lg:sticky lg:top-28">
             <SectionHeader eyebrow={copy.eyebrow} title={copy.title} />
-            <Mascot
-              image={landingImages.faqMascot}
-              className="mt-8 hidden h-40 w-40 lg:block"
-              sizes="160px"
-            />
+            <div className="mt-10 hidden flex-1 items-center justify-center lg:flex xl:mt-14">
+              <Mascot
+                image={landingImages.faqMascot}
+                className="mx-auto h-80 w-80 xl:h-96 xl:w-96"
+                sizes="384px"
+              />
+            </div>
           </div>
         </Reveal>
 
@@ -35,7 +37,7 @@ export default function Faq() {
             const buttonId = `${baseId}-button-${i}`;
             return (
               <Reveal key={item.q} delay={i * 50}>
-                <div className="overflow-hidden rounded-[20px] border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
+                <div className="overflow-hidden rounded-[20px] border border-[var(--line)] bg-[var(--surface-elevated)] shadow-[var(--shadow-sm)]">
                   <h3>
                     <button
                       id={buttonId}
@@ -46,7 +48,7 @@ export default function Faq() {
                       onClick={() => setOpen(isOpen ? -1 : i)}
                     >
                       <span>{item.q}</span>
-                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--paper)] text-[var(--brand-700)]">
+                      <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-muted)] text-[var(--brand-700)]">
                         {isOpen ? <Minus size={16} aria-hidden /> : <Plus size={16} aria-hidden />}
                       </span>
                     </button>

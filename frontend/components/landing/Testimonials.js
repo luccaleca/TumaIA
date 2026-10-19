@@ -38,7 +38,7 @@ export default function Testimonials() {
 
       <div className="mt-10 hidden gap-5 md:grid md:grid-cols-12">
         <Reveal className="md:col-span-7">
-          <article className="h-full rounded-[28px] border border-[var(--line)] bg-[var(--surface)] p-8 shadow-[var(--shadow-sm)]">
+          <article className="h-full rounded-[28px] border border-[var(--line)] bg-[var(--surface-elevated)] p-8 shadow-[var(--shadow-sm)]">
             <p className="font-[family-name:var(--font-display)] text-5xl leading-none text-[var(--brand-400)]" aria-hidden>
               “
             </p>
@@ -57,7 +57,7 @@ export default function Testimonials() {
         <div className="flex flex-col gap-5 md:col-span-5">
           {rest.map((d, i) => (
             <Reveal key={d.nome} delay={(i + 1) * 80}>
-              <article className="rounded-[24px] border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[var(--shadow-sm)]">
+              <article className="rounded-[24px] border border-[var(--line)] bg-[var(--surface-elevated)] p-6 shadow-[var(--shadow-sm)]">
                 <p className="text-[0.95rem] leading-relaxed text-[var(--muted)]">&ldquo;{d.texto}&rdquo;</p>
                 <div className="mt-5 flex items-center gap-3">
                   <Avatar name={d.nome} />
@@ -77,7 +77,7 @@ export default function Testimonials() {
           {copy.items.map((d) => (
             <article
               key={d.nome}
-              className="w-[85%] shrink-0 snap-center rounded-[24px] border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[var(--shadow-sm)]"
+              className="w-[85%] shrink-0 snap-center rounded-[24px] border border-[var(--line)] bg-[var(--surface-elevated)] p-6 shadow-[var(--shadow-sm)]"
             >
               <p className="text-[0.95rem] leading-relaxed text-[var(--muted)]">&ldquo;{d.texto}&rdquo;</p>
               <div className="mt-5 flex items-center gap-3">

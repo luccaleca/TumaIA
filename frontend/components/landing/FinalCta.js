@@ -6,7 +6,6 @@ import { landingCopy } from "../../content/landing-copy";
 import { landingImages } from "../../content/landing-images";
 import Button from "../ui/Button";
 import Container from "../ui/Container";
-import Mascot from "../ui/Mascot";
 import Reveal from "../ui/Reveal";
 
 export default function FinalCta() {
@@ -51,12 +50,6 @@ export default function FinalCta() {
                 aria-hidden
               />
             </div>
-
-            <Mascot
-              image={landingImages.ctaMascot}
-              className="pointer-events-none absolute -top-16 left-6 z-20 h-28 w-28 sm:left-10 sm:h-32 sm:w-32 md:-top-20 md:h-36 md:w-36"
-              sizes="144px"
-            />
 
             <div className="relative z-10 px-6 py-16 text-center md:px-12 md:py-20">
               <h2 className="mx-auto max-w-[18ch] text-balance font-[family-name:var(--font-display)] text-[clamp(1.8rem,1.2rem+2vw,2.75rem)] font-bold tracking-tight text-white">

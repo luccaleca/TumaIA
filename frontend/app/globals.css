@@ -65,6 +65,64 @@
   color-scheme: dark;
 }
 
+/*
+  Landing dark: DEPOIS de `.dark` para não herdar --muted de fundo do painel
+  (lá --muted é superfície; na landing --muted é texto secundário).
+ */
+.landing-page.dark,
+.dark.landing-page {
+  --background: #050a08;
+  --foreground: #eef3ef;
+  --paper: #050a08;
+  --surface: #121c17;
+  --surface-elevated: #1c2923;
+  --text: #eef3ef;
+  --landing-muted: #b4c0b9;
+  --muted: #b4c0b9;
+  --muted-foreground: #b4c0b9;
+  --line: rgba(180, 200, 188, 0.22);
+  --border: rgba(180, 200, 188, 0.22);
+  --brand-400: #6ee7b7;
+  --brand-500: #2ecf6a;
+  --brand-700: #86efac;
+  --mint-300: #a7f3d0;
+  --accent: #2ecf6a;
+  --accent-foreground: #04140c;
+  --accent-muted: rgba(46, 207, 106, 0.18);
+  --ink-950: #030806;
+  --ink-900: #0c1612;
+  --forest-800: #143226;
+  --glow: 0 0 0 1px rgb(46 207 106 / 0.4), 0 16px 48px -14px rgb(46 207 106 / 0.35);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.35), 0 8px 24px -10px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.3), 0 28px 56px -18px rgb(0 0 0 / 0.65);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-muted: var(--surface-elevated);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-muted: var(--accent-muted);
+  color-scheme: dark;
+}
+
+.landing-page.dark .landing-card,
+.dark.landing-page .landing-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.landing-page.dark .landing-spotlight::after,
+.dark.landing-page .landing-spotlight::after {
+  background: radial-gradient(
+    320px circle at var(--mx, 50%) var(--my, 30%),
+    rgba(46, 207, 106, 0.16),
+    transparent 55%
+  );
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

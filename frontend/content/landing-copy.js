@@ -203,5 +203,10 @@ export const landingCopy = {
     blurb:
       "O TumaIA transforma mensagens, áudios e fotos do WhatsApp em posts profissionais para o Instagram — com a identidade da sua marca e sem complicação técnica.",
     backToTop: "Voltar ao topo",
+    socialTitle: "Redes sociais",
+    instagram: {
+      label: "@tumaiaoficial",
+      href: "https://www.instagram.com/tumaiaoficial",
+    },
   },
 };

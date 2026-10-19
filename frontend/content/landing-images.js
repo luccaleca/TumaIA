@@ -59,11 +59,4 @@ export const landingImages = {
     height: 900,
     objectPosition: "50% 50%",
   },
-  ctaMascot: {
-    src: "/imagens/IMAGEM2.1.png",
-    alt: "Tuma, mascote do TumaIA",
-    width: 400,
-    height: 400,
-    objectPosition: "50% 100%",
-  },
 };

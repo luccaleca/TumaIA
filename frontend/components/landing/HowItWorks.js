@@ -46,9 +46,9 @@ export default function HowItWorks() {
             const Icon = stepIcons[i] || Wifi;
             return (
               <Reveal key={passo.num} delay={i * 90}>
-                <article className="relative rounded-[22px] border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[var(--shadow-sm)]">
+                <article className="relative rounded-[22px] border border-[var(--line)] bg-[var(--surface-elevated)] p-6 shadow-[var(--shadow-sm)]">
                   <div className="flex items-center justify-between">
-                    <span className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-tight text-[var(--brand-500)]/35">
+                    <span className="font-[family-name:var(--font-display)] text-4xl font-bold tracking-tight text-[var(--brand-500)]/45">
                       {passo.num}
                     </span>
                     <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--accent-muted)] text-[var(--brand-700)]">
@@ -66,7 +66,7 @@ export default function HowItWorks() {
 
       <div className="mt-8 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Reveal>
-          <Card variant="flat" className="h-full bg-[var(--paper)] p-7 md:p-8">
+          <Card variant="flat" className="h-full bg-[var(--surface-elevated)] p-7 md:p-8">
             <div className="mb-4 h-1.5 w-16 rounded-full bg-[var(--brand-500)]" aria-hidden />
             <h3 className="text-xl font-semibold text-[var(--text)] md:text-2xl">{copy.automation.title}</h3>
             <p className="mt-3 text-[0.95rem] leading-relaxed text-[var(--muted)] md:text-[1.05rem]">

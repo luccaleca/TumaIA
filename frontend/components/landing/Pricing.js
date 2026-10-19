@@ -36,7 +36,7 @@ export default function Pricing() {
             <Reveal key={plan.id} delay={i * 90} className="h-full">
               <Card
                 variant={plan.featured ? "spotlight" : "elevated"}
-                className={`relative flex h-full flex-col p-7 ${
+                className={`relative flex h-full flex-col bg-[var(--surface-elevated)] p-7 ${
                   plan.featured
                     ? "border-2 border-[var(--brand-500)] shadow-[var(--glow)] lg:-translate-y-2 lg:scale-[1.02]"
                     : ""
@@ -80,7 +80,7 @@ export default function Pricing() {
 
       <Reveal delay={120}>
         <div className="mt-10 overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-sm)]">
-          <div className="border-b border-[var(--line)] bg-[var(--paper)] px-6 py-4">
+          <div className="border-b border-[var(--line)] bg-[var(--surface-elevated)] px-6 py-4">
             <h3 className="text-lg font-semibold text-[var(--text)]">{copy.tableTitle}</h3>
           </div>
 
@@ -102,13 +102,13 @@ export default function Pricing() {
               </thead>
               <tbody>
                 {copy.tableRows.map((row) => (
-                  <tr key={row[0]} className="even:bg-[var(--paper)]/70 hover:bg-[var(--accent-muted)]/40">
+                  <tr key={row[0]} className="even:bg-[var(--surface-elevated)]/80 hover:bg-[var(--accent-muted)]/50">
                     {row.map((cell, idx) => (
                       <td
                         key={`${row[0]}-${idx}`}
                         className={`border-b border-[var(--line)] px-5 py-3.5 ${
                           idx === 0 ? "font-medium text-[var(--text)]" : "text-[var(--muted)]"
-                        } ${idx === 2 ? "bg-[var(--accent-muted)]/35" : ""}`}
+                        } ${idx === 2 ? "bg-[var(--accent-muted)]/40" : ""}`}
                       >
                         {idx > 0 ? (
                           <span className="inline-flex items-center gap-1.5">
@@ -127,7 +127,7 @@ export default function Pricing() {
           </div>
 
           <div className="space-y-4 p-4 md:hidden">
-            <div className="grid grid-cols-3 gap-1 rounded-full bg-[var(--paper)] p-1">
+            <div className="grid grid-cols-3 gap-1 rounded-full bg-[var(--surface-elevated)] p-1">
               {copy.plans.map((plan) => (
                 <button
                   key={plan.id}
@@ -147,7 +147,7 @@ export default function Pricing() {
               {mobileRows.map((row) => (
                 <li
                   key={row.label}
-                  className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--line)] px-4 py-3"
+                  className="flex items-start justify-between gap-3 rounded-2xl border border-[var(--line)] bg-[var(--surface-elevated)] px-4 py-3"
                 >
                   <span className="text-sm font-medium text-[var(--text)]">{row.label}</span>
                   <span className="text-right text-sm text-[var(--muted)]">{row.value}</span>

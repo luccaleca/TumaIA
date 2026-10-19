@@ -1,8 +1,9 @@
 "use client";
 
-import { Menu, X } from "lucide-react";
+import { Menu, Moon, Sun, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useTheme } from "../../app/components/ThemeProvider";
 import { clearToken, fetchMe } from "../../lib/auth";
 import { landingCopy } from "../../content/landing-copy";
 import { useActiveSection } from "../../hooks/useActiveSection";
@@ -11,12 +12,35 @@ import Button from "../ui/Button";
 
 const SECTION_IDS = landingCopy.nav.map((n) => n.id);
 
+function ThemeToggle({ onHero }) {
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-full transition ${
+        onHero
+          ? "border border-white/20 bg-white/10 text-white hover:bg-white/18"
+          : "border border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--brand-500)]/40"
+      }`}
+      aria-label={isDark ? "Ativar tema claro" : "Ativar tema escuro"}
+      title={isDark ? "Tema claro" : "Tema escuro"}
+    >
+      {isDark ? <Sun size={18} aria-hidden /> : <Moon size={18} aria-hidden />}
+    </button>
+  );
+}
+
 export default function Header() {
   const [authReady, setAuthReady] = useState(false);
   const [usuarioNome, setUsuarioNome] = useState("");
   const [scrolled, setScrolled] = useState(false);
   const [onHero, setOnHero] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const activeNav = useActiveSection(SECTION_IDS);
   const progress = useScrollProgress();
 
@@ -75,7 +99,9 @@ export default function Header() {
     ? "bg-transparent border-transparent shadow-none"
     : onHero
       ? "border-white/15 bg-black/35 shadow-[0_8px_30px_-12px_rgba(0,0,0,0.45)] backdrop-blur-xl"
-      : "border-[var(--line)] bg-white/90 shadow-[var(--shadow-sm)] backdrop-blur-xl";
+      : isDark
+        ? "border-[var(--line)] bg-[var(--surface)]/90 shadow-[var(--shadow-sm)] backdrop-blur-xl"
+        : "border-[var(--line)] bg-white/90 shadow-[var(--shadow-sm)] backdrop-blur-xl";
 
   const linkIdle = onHero ? "text-white/75 hover:text-white" : "text-[var(--muted)] hover:text-[var(--text)]";
   const linkActive = onHero
@@ -117,6 +143,7 @@ export default function Header() {
           </nav>
 
           <div className="hidden items-center gap-2 md:flex">
+            <ThemeToggle onHero={onHero} />
             {authReady && usuarioNome ? (
               <>
                 <span className={`text-sm ${onHero ? "text-white/80" : "text-[var(--muted)]"}`}>
@@ -141,18 +168,21 @@ export default function Header() {
             )}
           </div>
 
-          <button
-            type="button"
-            className={`inline-flex h-11 w-11 items-center justify-center rounded-full md:hidden ${
-              onHero ? "text-white" : "text-[var(--text)]"
-            }`}
-            aria-expanded={menuOpen}
-            aria-controls="landing-mobile-drawer"
-            aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
-            onClick={() => setMenuOpen((v) => !v)}
-          >
-            {menuOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
+          <div className="flex items-center gap-1 md:hidden">
+            <ThemeToggle onHero={onHero} />
+            <button
+              type="button"
+              className={`inline-flex h-11 w-11 items-center justify-center rounded-full ${
+                onHero ? "text-white" : "text-[var(--text)]"
+              }`}
+              aria-expanded={menuOpen}
+              aria-controls="landing-mobile-drawer"
+              aria-label={menuOpen ? "Fechar menu" : "Abrir menu"}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              {menuOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+          </div>
         </div>
       </header>
 
@@ -185,6 +215,7 @@ export default function Header() {
               ))}
             </nav>
             <div className="mt-auto flex flex-col gap-3">
+              <ThemeToggle onHero />
               {authReady && usuarioNome ? (
                 <>
                   <Link href="/painel" onClick={closeMenu} className="rounded-full border border-white/25 px-4 py-3 text-center font-semibold">

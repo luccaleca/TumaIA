@@ -1,9 +1,9 @@
 const variants = {
   flat: "border border-[var(--line)] bg-[var(--surface)]",
   elevated:
-    "border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-lg)]",
+    "border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-sm)] hover:border-[var(--brand-500)]/35 hover:shadow-[var(--shadow-lg)]",
   spotlight:
-    "landing-spotlight border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-sm)]",
+    "landing-spotlight border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-sm)] hover:border-[var(--brand-500)]/40",
 };
 
 export default function Card({ children, variant = "elevated", className = "", as: Tag = "article" }) {

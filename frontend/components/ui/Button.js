@@ -4,10 +4,10 @@ const variants = {
   primary:
     "bg-[var(--brand-500)] text-[var(--ink-950)] shadow-[var(--glow)] hover:opacity-95 hover:-translate-y-0.5",
   secondary:
-    "border border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--brand-500)]/40 hover:bg-[var(--paper)]",
+    "border border-[var(--line)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--brand-500)]/50 hover:bg-[var(--surface-elevated)]",
   ghost:
     "border border-white/25 bg-white/10 text-white backdrop-blur-sm hover:bg-white/18",
-  dark: "border border-[var(--ink-900)] bg-[var(--ink-900)] text-white hover:bg-[var(--ink-950)]",
+  dark: "border border-[var(--line)] bg-[var(--ink-900)] text-white hover:bg-[var(--surface-elevated)]",
   outlineLight:
     "border border-white/35 bg-transparent text-white hover:bg-white/10",
 };
@@ -29,7 +29,7 @@ export default function Button({
   ...rest
 }) {
   const classes = [
-    "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition duration-200 ease-[cubic-bezier(.22,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-500)] focus-visible:ring-offset-2 active:scale-[0.98]",
+    "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition duration-200 ease-[cubic-bezier(.22,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-500)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--paper)] active:scale-[0.98]",
     variants[variant] || variants.primary,
     sizes[size] || sizes.md,
     className,
