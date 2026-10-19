@@ -8,6 +8,7 @@ import { registerEmpresaCoreRoutes } from "./empresa.routes.js";
 import { registerMembrosRoutes } from "./membros.routes.js";
 import { registerMidiasRoutes } from "./midias.routes.js";
 import { registerPastasRoutes } from "./pastas.routes.js";
+import { registerPlanoRoutes } from "./plano.routes.js";
 
 const r = Router();
 
@@ -16,6 +17,7 @@ r.use(requireUsuario);
 
 /** Ordem importa: rotas literais (`/convites/resgatar`, `/minhas`) antes de `/:idEmpresa`. */
 registerConvitesRoutes(r);
+registerPlanoRoutes(r);
 registerEmpresaCoreRoutes(r);
 registerMembrosRoutes(r);
 registerContextosRoutes(r);

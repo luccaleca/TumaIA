@@ -11,6 +11,7 @@ import {
   clearToken,
   fetchMe,
 } from "../../lib/auth";
+import { EMPRESA_ATIVA_CHANGE_EVENT, getEmpresaAtivaId } from "../../lib/empresaAtiva";
 import { isDonoPlataformaUsuario } from "../../lib/plataformaAdmin";
 import { isAdminTumaCoreEmpresa } from "../../lib/tumacoreEmpresa";
 
@@ -109,17 +110,53 @@ function NavLink({ item, active }) {
   return (
     <Link
       href={item.href}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+      className={`group relative flex shrink-0 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
         active
-          ? "bg-accent font-semibold text-accent-foreground shadow-sm"
+          ? "bg-accent text-[#06120c] shadow-[0_8px_20px_-10px] shadow-accent/70"
           : "text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
       aria-current={active ? "page" : undefined}
     >
       <Icon />
-      <span>{item.label}</span>
+      <span className="whitespace-nowrap">{item.label}</span>
     </Link>
   );
+}
+
+function PlanoBadge({ plano, carregado }) {
+  if (!carregado) return null;
+  if (!plano) {
+    return (
+      <span
+        className="hidden shrink-0 rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground sm:inline"
+        title="Esta empresa ainda não tem um plano ativo"
+      >
+        Sem plano
+      </span>
+    );
+  }
+  const vigente = plano.vigente !== false;
+  return (
+    <span
+      className={`hidden shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold sm:inline ${
+        vigente
+          ? "bg-accent/15 text-accent ring-1 ring-accent/30"
+          : "bg-muted text-muted-foreground ring-1 ring-border"
+      }`}
+      title={vigente ? `Plano ${plano.nome}` : `Plano ${plano.nome} (assinatura inativa)`}
+    >
+      Plano {plano.nome}
+      {vigente ? "" : " · inativo"}
+    </span>
+  );
+}
+
+function iniciaisDoNome(nome) {
+  const partes = String(nome || "").trim().split(/\s+/).filter(Boolean);
+  if (!partes.length) return "?";
+  const first = partes[0][0] || "";
+  const last = partes.length > 1 ? partes[partes.length - 1][0] : "";
+  return `${first}${last}`.toUpperCase();
 }
 
 function PainelShell({ children }) {
@@ -129,6 +166,8 @@ function PainelShell({ children }) {
   const [ready, setReady] = useState(false);
   const [donoPlataforma, setDonoPlataforma] = useState(false);
   const [adminEmpresa, setAdminEmpresa] = useState(false);
+  const [plano, setPlano] = useState(null);
+  const [planoCarregado, setPlanoCarregado] = useState(false);
   const { theme } = useTheme();
 
   useEffect(() => {
@@ -172,6 +211,31 @@ function PainelShell({ children }) {
     };
   }, [router]);
 
+  useEffect(() => {
+    if (!ready) return undefined;
+    if (
+      process.env.NODE_ENV === "development" &&
+      sessionStorage.getItem(DEV_DASHBOARD_PREVIEW_KEY) === "1"
+    ) {
+      return undefined;
+    }
+    let active = true;
+    async function carregarPlano() {
+      const idEmpresa = getEmpresaAtivaId();
+      const qs = idEmpresa ? `?id_empresa=${encodeURIComponent(idEmpresa)}` : "";
+      const r = await authApiFetchWithToken(`/empresas/plano-atual${qs}`);
+      if (!active) return;
+      setPlano(r.ok ? r.json?.plano ?? null : null);
+      setPlanoCarregado(true);
+    }
+    void carregarPlano();
+    window.addEventListener(EMPRESA_ATIVA_CHANGE_EVENT, carregarPlano);
+    return () => {
+      active = false;
+      window.removeEventListener(EMPRESA_ATIVA_CHANGE_EVENT, carregarPlano);
+    };
+  }, [ready]);
+
   const mainNav = useMemo(
     () => [
       { href: "/painel/chat", label: "Chat", icon: IconChat },
@@ -208,20 +272,32 @@ function PainelShell({ children }) {
         <main className="p-8 text-sm text-muted-foreground">Carregando sessão...</main>
       ) : (
         <>
-          <header className="border-b border-border bg-background/90 backdrop-blur-md">
-            <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-              <Link href="/painel/chat" className="text-lg font-bold tracking-tight">
+          <header className="sticky top-0 z-40 border-b border-border/80 bg-background/80 backdrop-blur-xl">
+            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+              <Link
+                href="/painel/chat"
+                className="font-[family-name:var(--font-display)] text-xl font-bold tracking-tight"
+              >
                 <span className="text-foreground">Tuma</span>
                 <span className="text-accent">IA</span>
               </Link>
               <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">
-                  Olá, <strong className="text-foreground">{nome}</strong>
-                </span>
+                <div className="flex items-center gap-2.5 rounded-full border border-border bg-surface p-1 sm:pr-3.5">
+                  <span
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/15 text-xs font-bold text-accent"
+                    aria-hidden
+                  >
+                    {iniciaisDoNome(nome)}
+                  </span>
+                  <span className="hidden max-w-[14rem] truncate text-sm text-muted-foreground sm:inline">
+                    Olá, <strong className="font-semibold text-foreground">{nome}</strong>
+                  </span>
+                  <PlanoBadge plano={plano} carregado={planoCarregado} />
+                </div>
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground transition-colors hover:border-foreground/25 hover:bg-surface-elevated"
+                  className="inline-flex min-h-10 items-center rounded-full border border-border bg-surface px-4 text-sm font-medium text-foreground transition-colors hover:border-foreground/25 hover:bg-surface-elevated"
                 >
                   Sair
                 </button>
@@ -229,50 +305,52 @@ function PainelShell({ children }) {
             </div>
           </header>
 
-          <div className="mx-auto flex w-full max-w-6xl flex-col items-stretch gap-6 px-6 py-6 md:flex-row md:items-start">
-            <aside className="mx-auto flex w-full max-w-[240px] shrink-0 flex-col rounded-xl border border-border bg-surface p-2 md:mx-0 md:w-[240px]">
-              <nav className="flex flex-col gap-0.5 pt-1" aria-label="Menu principal">
-                {mainNav.map((item) => (
-                  <NavLink key={item.href} item={item} active={isActive(item.href)} />
-                ))}
-              </nav>
+          <div className="mx-auto flex w-full max-w-6xl flex-col items-stretch gap-5 px-4 py-5 sm:px-6 md:flex-row md:items-start md:gap-8 md:py-8">
+            <aside className="w-full shrink-0 md:sticky md:top-24 md:w-[250px]">
+              <div className="flex gap-1 overflow-x-auto rounded-2xl border border-border bg-surface p-2 shadow-sm [scrollbar-width:none] md:flex-col md:overflow-visible md:p-3 [&::-webkit-scrollbar]:hidden">
+                <nav className="flex gap-1 md:flex-col" aria-label="Menu principal">
+                  {mainNav.map((item) => (
+                    <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                  ))}
+                </nav>
 
-              {donoPlataforma || adminEmpresa ? (
-                <>
-                  <div className="my-2 border-t border-border" role="separator" />
-                  {donoPlataforma ? (
-                    <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Plataforma
-                    </p>
-                  ) : null}
-                  <nav className="flex flex-col gap-0.5" aria-label="Área TumaCore">
-                    <NavLink
-                      item={{
-                        href: donoPlataforma ? TUMACORE_PLATAFORMA_HREF : TUMACORE_EMPRESA_HREF,
-                        label: "TumaCore",
-                        icon: IconTumaCore,
-                      }}
-                      active={
-                        donoPlataforma
-                          ? isActive("/painel/tumacore") &&
-                            !pathname.startsWith("/painel/tumacore/empresa")
-                          : isActive("/painel/tumacore/empresa")
-                      }
-                    />
-                  </nav>
-                </>
-              ) : null}
+                {donoPlataforma || adminEmpresa ? (
+                  <>
+                    <div className="mx-1 my-1 hidden border-t border-border md:block" role="separator" />
+                    {donoPlataforma ? (
+                      <p className="hidden px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:block">
+                        Plataforma
+                      </p>
+                    ) : null}
+                    <nav className="flex gap-1 md:flex-col" aria-label="Área TumaCore">
+                      <NavLink
+                        item={{
+                          href: donoPlataforma ? TUMACORE_PLATAFORMA_HREF : TUMACORE_EMPRESA_HREF,
+                          label: "TumaCore",
+                          icon: IconTumaCore,
+                        }}
+                        active={
+                          donoPlataforma
+                            ? isActive("/painel/tumacore") &&
+                              !pathname.startsWith("/painel/tumacore/empresa")
+                            : isActive("/painel/tumacore/empresa")
+                        }
+                      />
+                    </nav>
+                  </>
+                ) : null}
 
-              <div className="my-2 border-t border-border" role="separator" />
+                <div className="mx-1 my-1 hidden border-t border-border md:block" role="separator" />
 
-              <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Sua conta
-              </p>
-              <nav className="flex flex-col gap-0.5" aria-label="Conta e configurações">
-                {accountNav.map((item) => (
-                  <NavLink key={item.href} item={item} active={isActive(item.href)} />
-                ))}
-              </nav>
+                <p className="hidden px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:block">
+                  Sua conta
+                </p>
+                <nav className="flex gap-1 md:flex-col" aria-label="Conta e configurações">
+                  {accountNav.map((item) => (
+                    <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                  ))}
+                </nav>
+              </div>
             </aside>
 
             <section className="min-w-0 flex-1">{children}</section>

@@ -112,58 +112,74 @@ export default function ContaPage() {
 
   if (loading) {
     return (
-      <main className="rounded-xl border border-border bg-background p-6">
-        <div className="h-7 w-48 animate-pulse rounded-md bg-muted" aria-hidden />
-        <div className="mt-2 h-4 w-72 max-w-full animate-pulse rounded-md bg-muted/80" aria-hidden />
-        <div className="mt-8 space-y-4">
-          <div className="h-10 w-full animate-pulse rounded-lg bg-muted/70" aria-hidden />
-          <div className="h-10 w-full animate-pulse rounded-lg bg-muted/70" aria-hidden />
-          <div className="h-10 w-full animate-pulse rounded-lg bg-muted/70" aria-hidden />
+      <main className="space-y-6" aria-busy="true">
+        <div className="rounded-3xl border border-border bg-surface p-6 sm:p-8">
+          <div className="h-8 w-48 animate-pulse rounded-lg bg-muted" aria-hidden />
+          <div className="mt-3 h-4 w-80 max-w-full animate-pulse rounded-md bg-muted/80" aria-hidden />
         </div>
-        <p className="mt-6 text-sm text-muted-foreground">Carregando seus dados…</p>
+        <div className="space-y-4 rounded-3xl border border-border bg-surface p-6 sm:p-8">
+          <div className="h-12 w-full animate-pulse rounded-xl bg-muted/70" aria-hidden />
+          <div className="h-12 w-full animate-pulse rounded-xl bg-muted/70" aria-hidden />
+          <div className="h-12 w-full animate-pulse rounded-xl bg-muted/70" aria-hidden />
+          <p className="pt-2 text-sm text-muted-foreground">Carregando seus dados…</p>
+        </div>
       </main>
     );
   }
 
   const initials = contaIniciais(form.nome, form.email);
+  const inputClass =
+    "min-h-12 w-full rounded-xl border border-border bg-surface-elevated px-4 text-[15px] text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground/70 hover:border-foreground/25 focus:border-accent focus:ring-4 focus:ring-accent/20";
+  const labelClass = "mb-1.5 block text-sm font-medium text-foreground";
 
   return (
-    <main className="rounded-xl border border-border bg-background p-6 transition-colors">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Sua conta</h1>
-          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Nome, e-mail e telefone usados no painel e nas comunicações. Alterar o e-mail também
-            atualiza o login no sistema de autenticação.
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
-          <div
-            className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent"
-            aria-hidden
-          >
-            {initials}
+    <main className="space-y-6">
+      <section className="relative overflow-hidden rounded-3xl border border-border bg-surface p-6 sm:p-8">
+        <div
+          className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-accent/15 blur-3xl"
+          aria-hidden
+        />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Painel</p>
+            <h1 className="mt-2 font-[family-name:var(--font-display)] text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+              Sua conta
+            </h1>
+            <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted-foreground">
+              Nome, e-mail e telefone usados no painel e nas comunicações. Alterar o e-mail também
+              atualiza o login no sistema de autenticação.
+            </p>
           </div>
-          <div className="min-w-0 text-sm">
-            <p className="truncate font-medium text-foreground">{form.nome.trim() || "—"}</p>
-            <p className="truncate text-muted-foreground">{form.email || "—"}</p>
-            {dataContaLabel ? (
-              <p className="mt-0.5 text-xs text-muted-foreground">Conta desde {dataContaLabel}</p>
-            ) : null}
+          <div className="flex shrink-0 items-center gap-4 rounded-2xl border border-border bg-background/60 px-5 py-4 backdrop-blur">
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-accent to-emerald-700 text-base font-bold text-white shadow-lg shadow-accent/25"
+              aria-hidden
+            >
+              {initials}
+            </div>
+            <div className="min-w-0 text-sm">
+              <p className="truncate text-base font-semibold text-foreground">{form.nome.trim() || "—"}</p>
+              <p className="truncate text-muted-foreground">{form.email || "—"}</p>
+              {dataContaLabel ? (
+                <p className="mt-1 text-xs text-muted-foreground">Conta desde {dataContaLabel}</p>
+              ) : null}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="mt-8 space-y-6">
-        <section className="rounded-lg border border-border bg-surface/40 px-4 py-5 dark:bg-surface/20">
-          <h2 className="text-sm font-medium text-foreground">Dados pessoais</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] lg:items-start">
+        <section className="rounded-3xl border border-border bg-surface p-6 sm:p-8">
+          <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-foreground">
+            Dados pessoais
+          </h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
             O telefone deve ser o mesmo do WhatsApp — é assim que o TumaIA reconhece você no bot.
           </p>
 
-          <form className="mt-5 space-y-4" onSubmit={onSubmit}>
+          <form className="mt-6 space-y-5" onSubmit={onSubmit}>
             <div>
-              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="contaNome">
+              <label className={labelClass} htmlFor="contaNome">
                 Nome completo
               </label>
               <input
@@ -172,55 +188,57 @@ export default function ContaPage() {
                 autoComplete="name"
                 value={form.nome}
                 onChange={(e) => setForm((s) => ({ ...s, nome: e.target.value }))}
-                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
+                className={inputClass}
                 maxLength={150}
               />
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="contaEmail">
-                E-mail
-              </label>
-              <input
-                id="contaEmail"
-                type="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
-              />
+            <div className="grid gap-5 md:grid-cols-2">
+              <div>
+                <label className={labelClass} htmlFor="contaEmail">
+                  E-mail
+                </label>
+                <input
+                  id="contaEmail"
+                  type="email"
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className={labelClass} htmlFor="contaTelefone">
+                  Telefone (WhatsApp)
+                </label>
+                <input
+                  id="contaTelefone"
+                  type="tel"
+                  autoComplete="tel"
+                  required
+                  value={form.telefone}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, telefone: e.target.value.slice(0, 20) }))
+                  }
+                  className={inputClass}
+                  placeholder="Ex.: (11) 99999-9999"
+                  maxLength={20}
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="contaTelefone">
-                Telefone (WhatsApp)
-              </label>
-              <input
-                id="contaTelefone"
-                type="tel"
-                autoComplete="tel"
-                required
-                value={form.telefone}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, telefone: e.target.value.slice(0, 20) }))
-                }
-                className="w-full rounded-lg border border-border bg-surface-elevated px-3 py-2 text-foreground outline-none ring-accent/0 transition-[border-color,box-shadow] focus:border-accent focus:ring-2 focus:ring-accent/25"
-                placeholder="Ex.: (11) 99999-9999"
-                maxLength={20}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3 pt-1">
+            <div className="flex flex-wrap items-center gap-4 pt-2">
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition duration-200 ease-out will-change-transform disabled:opacity-60 enabled:hover:scale-[1.03] enabled:hover:shadow-md enabled:hover:shadow-accent/25 enabled:active:scale-[0.98]"
+                className="inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-7 text-[15px] font-bold text-[#06120c] shadow-[0_10px_24px_-12px] shadow-accent/80 transition duration-200 ease-out disabled:opacity-60 enabled:hover:-translate-y-0.5 enabled:hover:shadow-[0_14px_28px_-12px] enabled:active:scale-[0.98]"
               >
                 {saving ? "Salvando…" : "Salvar alterações"}
               </button>
               <Link
                 href="/painel/configuracao"
-                className="text-sm font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                className="inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
               >
                 Preferências do painel
               </Link>
@@ -229,7 +247,7 @@ export default function ContaPage() {
 
           {msg ? (
             <p
-              className={`mt-4 rounded-lg border px-3 py-2 text-sm ${
+              className={`mt-5 rounded-xl border px-4 py-3 text-sm ${
                 msgKind === "err"
                   ? "border-red-300 bg-red-50 font-medium text-red-900 dark:border-red-500/35 dark:bg-red-950/40 dark:font-normal dark:text-red-100"
                   : "border-accent/30 bg-accent-muted text-foreground"
@@ -241,9 +259,30 @@ export default function ContaPage() {
           ) : null}
         </section>
 
-        <section className="rounded-lg border border-border bg-background px-4 py-4">
-          <h2 className="text-sm font-medium text-foreground">Senha e segurança</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <section className="rounded-3xl border border-border bg-surface p-6 sm:p-8">
+          <div
+            className="flex h-11 w-11 items-center justify-center rounded-2xl bg-accent/15 text-accent"
+            aria-hidden
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.75}
+              stroke="currentColor"
+              className="h-6 w-6"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
+              />
+            </svg>
+          </div>
+          <h2 className="mt-4 font-[family-name:var(--font-display)] text-xl font-semibold text-foreground">
+            Senha e segurança
+          </h2>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             A senha de acesso não é alterada nesta tela. Use recuperação de senha na página de{" "}
             <Link href="/login" className="font-medium text-accent underline-offset-2 hover:underline">
               entrar
