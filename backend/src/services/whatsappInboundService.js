@@ -9,6 +9,9 @@ import { runImagePreviewInternal } from "./imagePreviewInternal.js";
 import { persistWhatsappGeneratedImages } from "./chatGeneratedImageStorage.js";
 import { publishToInstagram } from "./instagramPublishService.js";
 import { buildWhatsappPostConfirmation } from "./postConfirmationWhatsapp.js";
+import { aplicarEdicaoNaProposta, interpretarAjustesDoWhatsapp } from "./ajustesDoCliente.js";
+import { criarAgendamento } from "./agendamentoPublicacao.js";
+import { interpretarDataHoraBrasil } from "./dataHoraPtBr.js";
 import { resolveWhatsappUsuarioEmpresa } from "./whatsappUsuarioEmpresa.js";
 import {
   appendWhatsappTurn,
@@ -20,10 +23,9 @@ import {
 const CHAT_PEDIDO_RESUMO_MSG = "Resumo do pedido para a arte:";
 const CHAT_PEDIDO_COLETANDO_INTRO = "Falta só completar o pedido:";
 
-const WHATSAPP_HINT_GENERATE_IMAGE = "\n\n_Digite *gerar imagem* quando quiser a arte._";
 const WHATSAPP_HINT_GENERATE_CAPTION = "\n\n_Digite *gerar legenda* para montar o texto do post._";
 const WHATSAPP_HINT_PUBLISH =
-  "\n\n_Se não gostar de algo, envie: *Quero alterar a legenda:* e diga o que mudar._\n\n_Digite *publicar no instagram* quando estiver pronta._";
+  "\n\n_Se não gostar de algo, envie: *Quero alterar a legenda:* e diga o que mudar._\n\n_Digite *publicar no instagram* quando estiver pronta, ou *agendar amanhã 18h* para marcar a publicação._";
 
 /**
  * @param {Array<{ id?: string, label?: string }>} uiActions
@@ -44,6 +46,107 @@ function formatUiActionsForWhatsapp(uiActions) {
     .filter(Boolean);
   if (!lines.length) return "";
   return `\n\n*Ações:*\n${lines.join("\n")}`;
+}
+
+/**
+ * Ajustes no resumo antes de gerar a imagem: «texto:», «cores:» e «detalhes:».
+ * Só vale enquanto o resumo está pronto e a imagem ainda não foi gerada. O ajuste fica na
+ * proposta da sessão (é ela que gera a imagem) e não entra no histórico, que guarda o pedido original.
+ *
+ * @param {import("./whatsappSessionStore.js").WhatsappSession} session
+ * @param {string} body
+ * @returns {{ reply: string, estado: string } | null}
+ */
+export function ajustarResumoPeloWhatsapp(session, body) {
+  if (session.estado !== "ready_for_image") return null;
+  const proposta = session.post_context_proposal;
+  if (!proposta || !Object.keys(proposta).length) return null;
+
+  const ajustes = interpretarAjustesDoWhatsapp(body);
+  if (!ajustes) return null;
+
+  const { coresNaoEntendidas, ...edits } = ajustes;
+  const avisos = [];
+  if (coresNaoEntendidas?.length) {
+    avisos.push(
+      `Não reconheci a cor «${coresNaoEntendidas.join("», «")}». Use nomes como azul, vermelho, verde, preto, branco ou um código #RRGGBB.`,
+    );
+  }
+  if (!Object.keys(edits).length) {
+    return { reply: avisos.join("\n") || "Não entendi o ajuste.", estado: session.estado };
+  }
+
+  const nova = aplicarEdicaoNaProposta(proposta, edits);
+  patchWhatsappSession(session, { post_context_proposal: nova });
+
+  const confirmacao = buildWhatsappPostConfirmation(nova, session.post_supplement_links, {
+    briefingStatus: "ready",
+  });
+  return {
+    reply: ["✅ Atualizei o resumo.", ...avisos, "", confirmacao].join("\n"),
+    estado: "ready_for_image",
+  };
+}
+
+const AGENDAR_RE = /^\s*agendar\b(.*)$/is;
+const EXEMPLOS_AGENDAR =
+  "Exemplos: *agendar amanhã 18h*, *agendar 25/10 14:30*, *agendar sexta 9h*.";
+
+/**
+ * «agendar amanhã 18h»: marca a publicação do post (legenda + imagem da sessão) no Instagram,
+ * pela mesma fila do painel. Horário de Brasília. Devolve `null` se a mensagem não for esse comando.
+ *
+ * @param {import("./whatsappSessionStore.js").WhatsappSession} session
+ * @param {string} body
+ * @param {{ id_usuario: string }} auth
+ * @param {{ db?: any, criar?: typeof criarAgendamento, agora?: Date, agendadorLigado?: boolean }} [deps]
+ * @returns {Promise<{ reply: string, estado: string, error_code?: number } | null>}
+ */
+export async function agendarPostPeloWhatsapp(session, body, auth, deps = {}) {
+  const m = AGENDAR_RE.exec(String(body ?? ""));
+  if (!m) return null;
+
+  if (!session.last_caption) {
+    return { reply: "Gere a legenda antes com *gerar legenda*.", estado: session.estado };
+  }
+  const storagePath = session.last_image_storage_paths?.[0] || "";
+  const imageUrl = session.last_image_urls?.[0] || "";
+  if (!storagePath && !imageUrl) {
+    return {
+      reply: "Não encontrei a imagem do post. Gere a arte de novo com *gerar imagem*.",
+      estado: session.estado,
+    };
+  }
+
+  const quando = interpretarDataHoraBrasil(m[1], deps.agora);
+  if (!quando.ok) {
+    return { reply: `${quando.motivo}\n\n${EXEMPLOS_AGENDAR}`, estado: session.estado };
+  }
+
+  const db = deps.db ?? getSupabaseAdmin();
+  if (!db) return { reply: "Não consegui agendar agora (banco indisponível). Tente de novo.", estado: session.estado, error_code: 503 };
+
+  const criar = deps.criar ?? criarAgendamento;
+  const out = await criar(db, {
+    idEmpresa: session.id_empresa,
+    idUsuario: auth.id_usuario,
+    legenda: session.last_caption,
+    imageStoragePath: storagePath || undefined,
+    imageUrl: storagePath ? undefined : imageUrl,
+    agendadaPara: quando.iso,
+  });
+  if (!out.ok) {
+    return { reply: out.error || "Não foi possível agendar agora.", estado: session.estado, error_code: out.status };
+  }
+
+  const ligado = deps.agendadorLigado ?? env.AGENDADOR_ATIVO;
+  const aviso = ligado
+    ? ""
+    : "\n\n⚠️ O agendador está desligado neste servidor: o post só será publicado quando ele for ligado.";
+  return {
+    reply: `✅ Post agendado para ${quando.rotulo}.\nPara ver ou cancelar, abra a tela *Agendados* no painel.${aviso}`,
+    estado: session.estado,
+  };
 }
 
 /**
@@ -324,6 +427,28 @@ export async function handleWhatsappInbound(input) {
 
   const session = getOrCreateWhatsappSession(auth.phone, auth.id_empresa);
 
+  const ajuste = ajustarResumoPeloWhatsapp(session, body);
+  if (ajuste) {
+    return {
+      ok: true,
+      from: auth.phone,
+      id_empresa: auth.id_empresa,
+      message_id: messageId,
+      ...ajuste,
+    };
+  }
+
+  const agendamento = await agendarPostPeloWhatsapp(session, body, auth);
+  if (agendamento) {
+    return {
+      ok: true,
+      from: auth.phone,
+      id_empresa: auth.id_empresa,
+      message_id: messageId,
+      ...agendamento,
+    };
+  }
+
   const commandResult = await handleDeliveryCommand(session, body);
   if (commandResult) {
     return {
@@ -403,9 +528,7 @@ export async function handleWhatsappInbound(input) {
       reply = CHAT_PEDIDO_RESUMO_MSG;
     }
 
-    if (estado === "ready_for_image") {
-      reply += WHATSAPP_HINT_GENERATE_IMAGE;
-    }
+    // Em «ready_for_image» a própria confirmação já diz «Digite gerar imagem»: sem aviso extra.
   }
 
   appendWhatsappTurn(session, body, reply);
@@ -425,7 +548,9 @@ export async function handleWhatsappInbound(input) {
     route_image_generation: routeImage,
     estado,
     ui_actions: ui_actions?.length ? ui_actions : undefined,
-    hints: ui_actions?.length ? formatUiActionsForWhatsapp(ui_actions) : undefined,
+    // A única ação em «ready_for_image» é gerar a imagem, que a confirmação já explica.
+    hints:
+      ui_actions?.length && estado !== "ready_for_image" ? formatUiActionsForWhatsapp(ui_actions) : undefined,
   };
 }
 
