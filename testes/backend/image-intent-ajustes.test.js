@@ -10,6 +10,7 @@ const AJUSTES = {
   frase: "Quinta da pizza, grande por R$ 59",
   detalhes: "fundo mais claro",
   cores: ["#112233"],
+  cores_alteradas: true,
   preco_de: "R$ 49",
   preco_para: "R$ 59",
 };
@@ -27,6 +28,11 @@ describe("ajustes do cliente no cartão de confirmação", () => {
     assert.match(out.pedido, /fundo mais claro/);
     assert.match(out.pedido, /#112233/);
     assert.equal(out.fraseNaImagem, "Quinta da pizza, grande por R$ 59");
+  });
+
+  it("cores que o cliente não trocou não entram no pedido (a paleta da marca já vai no bloco da identidade)", () => {
+    const out = aplicarAjustesDoCliente(PEDIDO, "x", { ...AJUSTES, cores_alteradas: false });
+    assert.doesNotMatch(out.pedido, /#112233/);
   });
 
   it("sem ajustes devolve pedido e frase como estavam", () => {

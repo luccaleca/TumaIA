@@ -397,6 +397,8 @@ export function nomeAproximadoDaCor(hex) {
   if (l < 0.1) return "black";
   if (l > 0.93) return "white";
   if (s < 0.12) return l < 0.35 ? "dark gray" : l > 0.7 ? "light gray" : "gray";
+  // Tons claros de amarelo/laranja são creme/bege, não «laranja claro».
+  if (h >= 20 && h < 60 && l > 0.8) return "cream";
   let base;
   if (h < 15 || h >= 345) base = "red";
   else if (h < 40) base = l < 0.4 ? "brown" : "orange";
@@ -418,15 +420,23 @@ export function nomeAproximadoDaCor(hex) {
  *
  * @param {Record<string, unknown> | null} dados
  * @param {number} [maxLen]
+ * @param {{ coresDoCliente?: string[] | null }} [opts] cores que o cliente escolheu para ESTE post:
+ *   valem no lugar da paleta padrão da marca, só nesse post.
  */
-export function formatBrandIdentityForProductPrompt(dados, maxLen = 1100) {
+export function formatBrandIdentityForProductPrompt(dados, maxLen = 1100, opts = {}) {
   const d = normalizeIdentidadeDados(dados || {});
-  const cores = allBrandColorsFromIdentidade(d);
+  const coresDoCliente = (Array.isArray(opts?.coresDoCliente) ? opts.coresDoCliente : []).filter((c) =>
+    /^#[0-9a-f]{6}$/i.test(String(c)),
+  );
+  const cores = coresDoCliente.length ? coresDoCliente : allBrandColorsFromIdentidade(d);
   const evitar = String(d.evitar || "").trim() || EVITAR_PADRAO_IMAGEM;
   const partes = [
     "Brand identity: it governs the background, typography, graphic elements, lighting and mood. " +
       "It NEVER changes the product packaging, which must stay exactly as in the reference pictures. " +
-      "If the client's request conflicts with the brand identity, the brand identity wins.",
+      (coresDoCliente.length
+        ? "If the client's request conflicts with the brand identity, the brand identity wins, " +
+          "except for the color palette that the client chose for this post."
+        : "If the client's request conflicts with the brand identity, the brand identity wins."),
   ];
   if (cores.length) {
     const paleta = cores
@@ -436,7 +446,9 @@ export function formatBrandIdentityForProductPrompt(dados, maxLen = 1100) {
       })
       .join(", ");
     partes.push(
-      `Brand color palette: ${paleta}. The background, headline text and graphic elements must be built mainly from these colors.`,
+      coresDoCliente.length
+        ? `Color palette for THIS post (chosen by the client; it replaces the brand's default palette): ${paleta}. The background, headline text and graphic elements must be built mainly from these colors.`
+        : `Brand color palette: ${paleta}. The background, headline text and graphic elements must be built mainly from these colors.`,
     );
   }
   const semPontoFinal = (t, n) => compactPromptText(t, n).replace(/[.\s]+$/, "");

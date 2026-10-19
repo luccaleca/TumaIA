@@ -26,7 +26,7 @@ import { clipAgenteMarcaForPrompt, renderAgenteMarcaMarkdown } from "./brandAgen
 /** Limite legado FLUX. */
 export const FLUX_IMAGE_PROMPT_MAX = 2000;
 
-import { buildOfficialGptImage2Prompt } from "./gptImage2OfficialRequest.js";
+import { REGRA_SEM_TEXTO_INVENTADO, buildOfficialGptImage2Prompt } from "./gptImage2OfficialRequest.js";
 import {
   looksLikeYoutubePointerThumbnail,
   youtubePointerThumbnailPromptBlock,
@@ -67,7 +67,12 @@ export function buildIntegratedProductImagePrompt(
     pedido,
     fraseNaImagem: frase,
     mandatoryTypography,
-    brandIdentity: identidadeDados ? formatBrandIdentityForProductPrompt(identidadeDados) : "",
+    brandIdentity: identidadeDados
+      ? formatBrandIdentityForProductPrompt(identidadeDados, undefined, {
+          coresDoCliente:
+            proposal?.ajustes_do_cliente?.cores_alteradas === true ? proposal.ajustes_do_cliente.cores : null,
+        })
+      : "",
     contextoNome: imageIntent?.matchedContexto?.nome || null,
     modeloPostPrompt: imageIntent?.playbookPromptBase || null,
     aspectRatio: opts?.aspectRatio || "1:1",
@@ -302,6 +307,8 @@ export function buildRawImagePrompt(history, postContextProposal, identidadeDado
   if (identidadeDados?.id_midia_logo && !opts?.logoAsHero) {
     base = `${base}\n\nA logo real será aplicada depois como MARCA D'ÁGUA discreta num canto livre (~7–9% da altura, semitransparente): identifica a empresa, mas o foco é a campanha e os produtos. Não desenhe logo, wordmark nem lettering na arte gerada — deixe canto inferior livre de textos grandes.`;
   }
+
+  base = `${base}\n\n${REGRA_SEM_TEXTO_INVENTADO}`;
 
   const brand = identidadeDados ? formatBrandIdentityForRawPrompt(identidadeDados) : "";
   const agente = identidadeDados

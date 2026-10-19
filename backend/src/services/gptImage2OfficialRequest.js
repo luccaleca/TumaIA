@@ -10,6 +10,15 @@ import {
  */
 
 /** Máximo de referências por chamada (API oficial). */
+/**
+ * Sem esta regra o gerador enfeita a arte com selos e promessas que o cliente não pediu
+ * («delivery rápido», «massa crocante»…), o que contraria a regra de nunca inventar.
+ */
+export const REGRA_SEM_TEXTO_INVENTADO =
+  "Use ONLY the text the client asked for (the campaign text, the prices and the brand name). " +
+  "Do NOT invent or add any other text, slogans, badges, stickers, promises or claims " +
+  "(for example delivery, free shipping, discounts, product descriptions, phone numbers or website addresses).";
+
 export const GPT_IMAGE_REFERENCE_MAX = 4;
 
 /** Com logo no array, reservamos 1 slot para ela. */
@@ -86,6 +95,7 @@ export function buildOfficialGptImage2Prompt(ctx = {}) {
       ? `${mandatory} These client-specified details must appear in the image typography and override any generic creative choices.`
       : "",
     pedido ? `Creative direction from the client: ${pedido}` : "",
+    REGRA_SEM_TEXTO_INVENTADO,
     brandIdentity,
     modeloPost
       ? `Post layout playbook${contexto ? ` (${contexto})` : ""} — follow this visual structure: ${modeloPost}`

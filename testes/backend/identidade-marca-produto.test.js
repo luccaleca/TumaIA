@@ -30,6 +30,12 @@ describe("nomeAproximadoDaCor", () => {
     assert.match(nomeAproximadoDaCor("#9ECBFF"), /light blue/);
   });
 
+  it("tons claros quentes são creme, e não laranja claro", () => {
+    assert.equal(nomeAproximadoDaCor("#F3E6D0"), "cream");
+    assert.equal(nomeAproximadoDaCor("#FFC107"), "yellow");
+    assert.equal(nomeAproximadoDaCor("#FF8C00"), "orange");
+  });
+
   it("valor inválido devolve vazio", () => {
     assert.equal(nomeAproximadoDaCor("azul"), "");
     assert.equal(nomeAproximadoDaCor(""), "");

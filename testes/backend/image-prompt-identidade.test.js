@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildIntegratedProductImagePrompt } from "../../backend/src/services/imagePreviewPrompt.js";
+import { buildIntegratedProductImagePrompt, buildRawImagePrompt } from "../../backend/src/services/imagePreviewPrompt.js";
 
 const HISTORY = [
   { role: "user", content: "Faz um post com a linha de cervejas para a promoção de sexta: 3 garrafas por R$ 45. Frase: Sexta de Way Beer, 3 por R$ 45" },
@@ -44,5 +44,23 @@ describe("identidade da marca no prompt de produto do acervo", () => {
     assert.doesNotMatch(prompt, /Brand identity/);
     assert.doesNotMatch(prompt, /Brand color palette/);
     assert.match(prompt, /Preserve the exact packaging design/);
+  });
+});
+
+describe("regra contra texto inventado na arte", () => {
+  it("o prompt com foto do acervo manda usar só o texto pedido, sem selos nem promessas", () => {
+    const prompt = montar(IDENTIDADE);
+    assert.match(prompt, /Use ONLY the text the client asked for/);
+    assert.match(prompt, /Do NOT invent or add any other text, slogans, badges, stickers, promises or claims/);
+  });
+
+  it("a regra também vale sem foto do acervo (caminho «raw»)", () => {
+    const prompt = buildRawImagePrompt(HISTORY, { intent_summary: "cervejas" }, IDENTIDADE, {});
+    assert.match(prompt, /Use ONLY the text the client asked for/);
+  });
+
+  it("a regra não impede o texto e o preço que o cliente pediu", () => {
+    const prompt = montar(IDENTIDADE);
+    assert.match(prompt, /Include this campaign text prominently with correct spelling: «Sexta de Way Beer, 3 por R\$ 45»/);
   });
 });

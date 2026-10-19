@@ -24,9 +24,11 @@ export function aplicarAjustesDoCliente(pedido, fraseNaImagem, ajustes) {
   const para = typeof ajustes.preco_para === "string" ? ajustes.preco_para.trim() : "";
   const frase = typeof ajustes.frase === "string" ? ajustes.frase.trim() : "";
   const detalhes = typeof ajustes.detalhes === "string" ? ajustes.detalhes.trim() : "";
-  const cores = Array.isArray(ajustes.cores)
-    ? ajustes.cores.filter((c) => /^#[0-9a-f]{6}$/i.test(String(c)))
-    : [];
+  // Só entram no pedido as cores que o cliente de fato trocou; as da marca já vão no bloco da identidade.
+  const cores =
+    ajustes.cores_alteradas === true && Array.isArray(ajustes.cores)
+      ? ajustes.cores.filter((c) => /^#[0-9a-f]{6}$/i.test(String(c)))
+      : [];
 
   let texto = String(pedido || "");
   if (de && para && semEspacos(de) !== semEspacos(para)) {
