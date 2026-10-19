@@ -39,7 +39,6 @@ const historyEntrySchema = z.object({
 const CONFIRM_IMAGE_UI = [{ id: "confirm_generate_image", label: "Gerar imagem" }];
 
 export const POST_IMAGE_UI = [
-  { id: "revise_image", label: "Alterar imagem" },
   { id: "generate_caption", label: "Gerar legenda" },
 ];
 

@@ -60,7 +60,6 @@ const POST_CONTEXT_TIMEOUT_MS = 55_000;
 /** Legenda + hashtags (Llama). */
 const POST_CAPTION_TIMEOUT_MS = 55_000;
 const POST_IMAGE_UI = [
-  { id: "revise_image", label: "Alterar imagem" },
   { id: "generate_caption", label: "Gerar legenda" },
 ];
 const POST_CAPTION_UI = [
@@ -119,7 +118,6 @@ function newMessageId() {
 function friendlyUiActionLabel(action) {
   if (action?.id === "confirm_generate_image") return "Gerar imagem";
   if (action?.id === "generate_caption") return "Gerar legenda";
-  if (action?.id === "revise_image") return "Alterar imagem";
   if (action?.id === "adjust_caption") return "Mudar legenda";
   if (action?.id === "publish_instagram") return "Publicar no Instagram";
   if (action?.id === "schedule_instagram") return "Agendar";
@@ -130,7 +128,6 @@ function friendlyUiActionLabel(action) {
 /** Texto enviado no chat ao tocar botão pós-imagem (estilo WhatsApp). */
 function quickReplyUserLineForAction(actionId) {
   if (actionId === "generate_caption") return "Gerar legenda";
-  if (actionId === "revise_image") return "Alterar imagem";
   if (actionId === "adjust_caption") return "Mudar legenda";
   if (actionId === "publish_instagram") return "Publicar no Instagram";
   return null;
@@ -1743,17 +1740,6 @@ export default function PainelChatPage() {
         return;
       }
 
-      if (actionId === "revise_image") {
-        const userLine = quickReplyUserLineForAction(actionId);
-        if (!userLine) return;
-        const prev = messagesRef.current;
-        const { msgs: msgsWithUser } = appendQuickReplyUserMessage(prev, fromAssistantMessageId, userLine);
-        setMessages(msgsWithUser);
-        await syncMensagens(idChat, msgsWithUser);
-        setInput("Quero alterar a imagem: ");
-        requestAnimationFrame(() => inputRef.current?.focus());
-        return;
-      }
 
       if (actionId === "schedule_instagram") {
         setAgendarErro("");
@@ -2620,7 +2606,10 @@ export default function PainelChatPage() {
                 }
 
                 const hasSources = Array.isArray(message.sources) && message.sources.length > 0;
-                const hasUiActions = Array.isArray(message.ui_actions) && message.ui_actions.length > 0;
+                const visibleUiActions = Array.isArray(message.ui_actions)
+                  ? message.ui_actions.filter((a) => a?.id !== "revise_image")
+                  : [];
+                const hasUiActions = visibleUiActions.length > 0;
                 const hasImages = Array.isArray(message.image_urls) && message.image_urls.length > 0;
                 const supplementMsg =
                   message.post_supplement &&
@@ -2749,7 +2738,7 @@ export default function PainelChatPage() {
                       ) : null}
                       {hasUiActions && captionEditingId !== message.id ? (
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-                          {message.ui_actions.map((a) => (
+                          {visibleUiActions.map((a) => (
                             <button
                               key={a.id}
                               type="button"
