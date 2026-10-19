@@ -191,11 +191,26 @@ export function aplicarEdicaoNoSuplemento(supplement, edits = {}) {
   const precoFinal = String(precoNovo || anteriores.preco_para || "");
   const trocouPreco = Boolean(precoOriginal && precoFinal && semEspaco(precoOriginal) !== semEspaco(precoFinal));
 
+  // As cores só «valem no lugar da marca» quando o cliente de fato trocou a paleta. Guardamos a
+  // paleta original da primeira edição, para voltar a ela se o cliente desfizer a troca.
+  const coresDoBrief = (Array.isArray(brief.cores) ? brief.cores : []).filter((c) => HEX_COR.test(String(c)));
+  const coresOriginais =
+    Array.isArray(anteriores.cores_originais) && anteriores.cores_originais.length
+      ? anteriores.cores_originais
+      : coresDoBrief;
+  const maiusculas = (lista) => lista.map((c) => String(c).toUpperCase());
+  const mesmaPaleta =
+    cores.length === coresOriginais.length &&
+    maiusculas(cores).every((c) => maiusculas(coresOriginais).includes(c));
+  const coresAlteradas = cores.length > 0 && coresOriginais.length > 0 && !mesmaPaleta;
+
   const proposta = { ...atual };
   proposta.ajustes_do_cliente = {
     frase: frase || String(atual.frase_na_imagem ?? ""),
     detalhes,
     cores,
+    cores_originais: coresOriginais,
+    cores_alteradas: coresAlteradas,
     preco_de: trocouPreco ? precoOriginal : "",
     preco_para: trocouPreco ? precoFinal : "",
   };

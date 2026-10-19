@@ -141,3 +141,27 @@ describe("aplicarEdicaoNoSuplemento — ajustes para o backend", () => {
     assert.equal(volta.post_context_proposal.ajustes_do_cliente.preco_de, "");
   });
 });
+
+describe("aplicarEdicaoNoSuplemento — cores do cliente só valem se forem trocadas", () => {
+  const BASE = {
+    links: [],
+    post_context_proposal: {
+      intent_summary: "pizza · promocao · R$59",
+      frase_na_imagem: "Sexta da calabresa, grande por R$ 59",
+      arte_brief: { tema: "promocao · pizza · R$59", cores: ["#B83A2E", "#F3E6D0"] },
+    },
+  };
+
+  it("salvar sem mexer nas cores não marca troca (a marca continua mandando)", () => {
+    const novo = aplicarEdicaoNoSuplemento(BASE, { frase: "Sexta da calabresa, grande por R$ 59", cores: ["#B83A2E", "#F3E6D0"] });
+    assert.equal(novo.post_context_proposal.ajustes_do_cliente.cores_alteradas, false);
+  });
+
+  it("trocar a paleta marca troca; voltar à original desmarca", () => {
+    const trocada = aplicarEdicaoNoSuplemento(BASE, { cores: ["#1E6FFF", "#FFFFFF"] });
+    assert.equal(trocada.post_context_proposal.ajustes_do_cliente.cores_alteradas, true);
+    assert.deepEqual(trocada.post_context_proposal.ajustes_do_cliente.cores_originais, ["#B83A2E", "#F3E6D0"]);
+    const volta = aplicarEdicaoNoSuplemento(trocada, { cores: ["#f3e6d0", "#b83a2e"] });
+    assert.equal(volta.post_context_proposal.ajustes_do_cliente.cores_alteradas, false);
+  });
+});
