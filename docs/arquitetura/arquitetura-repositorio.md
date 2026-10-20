@@ -6,6 +6,8 @@ Estado funcional atual: [`../stack-e-estado-atual.md`](../stack-e-estado-atual.m
 
 ## Visão de containers
 
+Caminho feliz: **Node-first**. WhatsApp Cloud API e painel falam com o monólito Express; chat usa regras + `processChatMessage` / `chatTurnIntent` / `tumaInterpretation`; imagem via `IMAGE_PROVIDER`; Instagram via Meta Graph no backend. Python/RAG/Chroma em `backend/ia/python/` é **legado opcional** (`TUMAIA_NODE_CHAT=false`), fora do fluxo principal.
+
 ```mermaid
 flowchart TB
   subgraph canais["Canais"]
@@ -21,27 +23,24 @@ flowchart TB
     WAC["/whatsapp/cloud"]
     INT["/internal"]
     HLTH["/health"]
+    NODECHAT["Chat Node\nprocessChatMessage\nchatTurnIntent\ntumaInterpretation"]
   end
 
-  subgraph py["IA — Python subprocesso (legado)"]
+  subgraph legado["IA Python — legado opcional"]
     CW["chat_worker.py"]
-    CHR["Chroma"]
-    ORQ["orquestrador RAG"]
-    PRV["Ollama / OpenRouter"]
+    CHR["Chroma / RAG"]
   end
 
   subgraph dados["Dados"]
-    PG[("Supabase\nPostgres + Storage")]
-    IDX["índice Chroma\nem disco"]
+    PG[("Supabase\nPostgres + Auth + Storage")]
   end
 
   subgraph texto["Texto estruturado Node"]
-    LLM["Ollama / Replicate / OpenAI\nproposta · legenda"]
+    LLM["Ollama / cloud / OpenAI\nproposta · legenda"]
   end
 
   subgraph img["Imagem"]
     GPT["OpenAI gpt-image-2\nou Replicate"]
-    FLX["FLUX via /internal\nlegado"]
   end
 
   subgraph meta["Meta Graph"]
@@ -54,49 +53,45 @@ flowchart TB
   FE --> CHAT
   FE --> IA
 
-  WAC --> api
+  WAC --> NODECHAT
   CHAT --> PG
   IA --> PG
   EMP --> PG
   AUTH --> PG
+  NODECHAT --> PG
 
-  IA --> CW
-  CW --> CHR
-  CW --> ORQ
-  ORQ --> PRV
-  ORQ --> PG
-  CHR --> IDX
-
-  PRV --> OLL["Ollama /v1"]
-  PRV --> ORT["OpenRouter"]
+  IA --> NODECHAT
+  NODECHAT -.->|"só se TUMAIA_NODE_CHAT=false"| CW
+  CW -.-> CHR
 
   IA --> LLM
   INT --> LLM
   IA --> GPT
-  INT --> FLX
 
   IA -->|"publish-instagram"| IG
 ```
 
-## Pipeline RAG (chat Tuma)
+## Pipeline de chat (caminho feliz — Node)
 
 ```mermaid
 flowchart LR
   Q["Pergunta + histórico + id_empresa"]
-  R["Roteamento Node\nidentidade · acervo · arte"]
-  E["Embedding"]
-  C["Chroma + cadastro empresa"]
-  L["LLM Ollama"]
+  R["Roteamento Node\ntumaInterpretation\nchatTurnIntent\nprocessChatMessage"]
+  D{"Intenção"}
+  ID["Identidade / oi"]
+  AC["Acervo / empresa\nSupabase"]
+  ART["Pedido explícito\nde post / arte"]
+  LLM["LLM exceção\nOllama ou cloud"]
   A["Resposta"]
 
-  Q --> R
-  R -->|chat RAG| E
-  E --> C
-  C --> L
-  L --> A
+  Q --> R --> D
+  D -->|conversa simples| ID --> A
+  D -->|acervo / empresa| AC --> A
+  D -->|imagem explícita| ART --> A
+  D -->|exceção aberta| LLM --> A
 ```
 
-Antes do Python, o Node pode responder direto (identidade, listagem de acervo, rota composta) via `processChatMessage.js` e `chatTurnIntent.js`.
+O worker Python (Chroma + orquestrador RAG) só entra se `TUMAIA_NODE_CHAT=false` — não é o pipeline de produto do protótipo.
 
 ## Pipeline de arte (post)
 
@@ -107,9 +102,10 @@ flowchart TD
   C["Confirmação ao usuário"]
   I["image-preview\nOpenAI ou Replicate"]
   CAP["post-caption\nlegenda + hashtags"]
+  APR["Aprovação humana"]
   PUB["publish-instagram\nMeta Graph"]
 
-  P --> B --> C --> I --> CAP --> PUB
+  P --> B --> C --> I --> CAP --> APR --> PUB
 ```
 
 No WhatsApp, etapas equivalentes via comandos de texto (`gerar imagem`, `gerar legenda`, `publicar no instagram`).
@@ -123,7 +119,7 @@ No WhatsApp, etapas equivalentes via comandos de texto (`gerar imagem`, `gerar l
 | Chat | `/chat/*` | JWT | Conversas persistidas |
 | IA | `/ia/chat`, `/post-context-proposal`, `/post-caption`, `/image-preview`, `/publish-instagram` | JWT | Fluxo completo de arte |
 | WhatsApp | `/whatsapp/cloud/webhook` | Verify token Meta | Mensagens Cloud API |
-| Automação | `/internal/*`, `/internal/whatsapp/message` | `x-internal-secret` | Testes, Replicate, legado |
+| Automação | `/internal/*`, `/internal/whatsapp/message` | `x-internal-secret` | Testes, Replicate interno, legado |
 | Saúde | `/health` | Público | Diagnóstico |
 
 ## Pastas do monorepo
@@ -131,11 +127,11 @@ No WhatsApp, etapas equivalentes via comandos de texto (`gerar imagem`, `gerar l
 | Pasta | Conteúdo |
 |-------|----------|
 | `frontend/` | App Router Next.js 16 |
-| `backend/src/` | Express, serviços, rotas |
-| `backend/ia/python/` | Worker RAG, instruções `.txt` |
+| `backend/src/` | Express, serviços Node (chat, WhatsApp, IA, Instagram) |
+| `backend/ia/python/` | Worker RAG legado + instruções `.txt` (prompts ainda usados pelo Node) |
 | `testes/` | Testes Node |
 | `docs/` | Documentação |
 
 ---
 
-*Atualizado com base em `backend/src`, `backend/ia/python` e `docs/stack-e-estado-atual.md`.*
+*Atualizado com base em `backend/src`, `docs/stack-e-estado-atual.md` e `docs/tcc-arquitetura.md` (pré-V2 / sem agentRuntime).*
