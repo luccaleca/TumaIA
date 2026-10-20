@@ -641,6 +641,25 @@ export function scoreCandidateAgainstRow(candidate, row) {
 }
 
 /**
+ * Linhas cujo nome (exibição ou arquivo) tem exatamente os mesmos termos do pedido.
+ * «pizza de atum» é o nome inteiro de uma foto e só um pedaço do nome de «pizza de atum com mussarela».
+ *
+ * @param {string[]} queryTokens
+ * @param {Array<Record<string, unknown>>} rows
+ */
+function rowsWithExactLabelTokens(queryTokens, rows) {
+  const want = [...new Set(queryTokens)].sort().join(" ");
+  if (!want) return [];
+  return rows.filter((row) => {
+    const label = cleanCandidateText(
+      String(row?.nome_exibicao ?? "").trim() || String(row?.nome_arquivo ?? "").replace(/\.[a-z0-9]+$/i, "").trim(),
+    );
+    const tokens = [...new Set(tokenizeProductCandidate(label).filter((t) => !isCreativeBriefingToken(t)))];
+    return tokens.length > 0 && tokens.sort().join(" ") === want;
+  });
+}
+
+/**
  * @param {Array<Record<string, unknown>>} matches
  */
 export function buildAmbiguousProductAsk(matches) {
@@ -808,6 +827,15 @@ export function resolveProductFromAcervo(candidate, rows) {
   }
 
   const top = scored[0];
+
+  // Pedido igual ao nome de um único produto: ele vence, mesmo que outro nome o contenha.
+  const exatos = rowsWithExactLabelTokens(queryTokens, imageRows).filter((row) =>
+    scored.some((item) => item.row === row),
+  );
+  if (exatos.length === 1 && scored.length > 1) {
+    return { status: "matched", matches: [exatos[0]], candidate: c };
+  }
+
   const close = scored.filter((item) => item.score >= top.score * 0.82);
   const distinct = [];
   const seen = new Set();
