@@ -25,3 +25,5 @@ Ferramenta, nesta ordem:
 - Chat, para formular a pergunta, rever a consulta, achar conta errada ou escrever o texto. O chat lê a conta salva. Ele não é a conta.
 
 Feche com o dado que, se chegasse, mudaria a decisão.
+
+Como guia: diga qual pedaço dessa tarefa treinar agora. Diga o que um analista bom não faria aqui, para não perder tempo.

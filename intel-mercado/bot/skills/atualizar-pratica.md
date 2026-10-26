@@ -22,3 +22,5 @@ Fonte: documentação do Copilot no Power BI e o aviso da comunidade Fabric sobr
 O que isso muda na prática: o chat da ferramenta grande também precisa da conta salva. Perguntar no chat sem essa conta continua sendo outro trabalho.
 
 Resposta para a pessoa: o que mudou, o que não mudou, a fonte, a data, e se você atualizou a anotação. Fale simples.
+
+Para o júnior: no máximo uma tecnologia para olhar agora, e uma para ignorar. A que ignorar é a que um analista bom não usaria no trabalho de verdade.
