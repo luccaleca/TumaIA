@@ -1,27 +1,27 @@
 ---
-description: Use quando a pessoa trouxer uma tarefa concreta de análise ou inteligência de mercado, inclusive preço, share, painel, sell-out ou concorrente.
+description: Use quando a pessoa trouxer uma análise para fazer, como preço, share, painel, venda ou concorrente.
 ---
 
-# Enquadrar a tarefa
+# Montar a análise
 
-Não calcule antes do contrato. Se a pessoa não deu os itens abaixo, liste só o que falta e pare.
+Não calcule antes de saber como o número é feito. Se faltar algum item, diga só o que falta e pare.
 
-1. Decisão: o que muda na ação se o número subir ou cair. Sem decisão, é descrição, não análise.
-2. Grão: o que é uma linha (SKU-semana, oferta, loja, transação). Média em cima de grão misturado é outro número.
-3. Universo: quem entra e quem fica de fora (categoria, praça, canal, substitutos, banners).
-4. Métrica: numerador, denominador, janela e filtro. Share de volume, de valor e distribuição numérica não são a mesma coisa. Preço de gôndola, promocional, líquido e preço por unidade equivalente também não.
-5. Fonte e frescor: sistema de origem, chave, atraso, e o buraco que parece queda (loja sem coleta, SKU sem scrape).
-6. Artefato que a próxima pessoa consegue rodar de novo: consulta versionada, não um parágrafo de chat.
+1. Decisão. O que a pessoa faz de diferente se o número subir ou cair. Sem isso, é só uma descrição.
+2. Uma linha da tabela. É produto por semana, oferta, loja ou venda? Média misturando essas coisas vira outro número.
+3. Quem entra. Categoria, cidade, canal, concorrente parecido, rede. E quem fica de fora.
+4. A conta. O que está em cima, o que está embaixo, qual período, qual filtro. Share de volume não é share de dinheiro. Preço de gôndola não é preço com desconto, nem preço por quilo ou por litro.
+5. De onde vem. Qual sistema, qual atraso, e o buraco que parece queda. Loja sem visita e produto sem coleta entram aqui.
+6. A conta salva. A próxima pessoa tem que conseguir rodar de novo. Um parágrafo de chat não serve.
 
-Corte técnico na mesma tarefa, sem falar de senioridade como tempo de casa:
+Na mesma tarefa:
 
-- Execução fraca entrega um número e uma frase, na coluna que tinha o nome parecido, com média simples e janelas de cobertura diferente.
-- Execução forte entrega o contrato acima, diz qual movimento mínimo mudaria a decisão, e separa mix de preço.
+- Entrega fraca: pega a coluna com o nome parecido, tira a média e manda um número com uma frase.
+- Entrega forte: escreve os seis itens, diz qual mudança mínima mudaria a decisão, e separa "vendeu mais coisa barata" de "o preço caiu".
 
 Ferramenta, nesta ordem:
 
-- SQL ou camada semântica quando a métrica vai ser repetida.
-- Painel (Power BI ou equivalente) quando muita gente precisa do mesmo corte, com a mesma definição, atualizando sozinho.
-- Agente quando a tarefa é formular a pergunta, revisar a consulta, achar definição quebrada ou escrever o memorando. O agente consulta o contrato. Ele não é o contrato.
+- Consulta salva, quando o número vai ser usado de novo.
+- Power BI ou outro painel, quando muita gente precisa ver o mesmo corte, atualizado sozinho.
+- Chat, para formular a pergunta, rever a consulta, achar conta errada ou escrever o texto. O chat lê a conta salva. Ele não é a conta.
 
-Feche com o próximo corte de dado que mudaria a decisão.
+Feche com o dado que, se chegasse, mudaria a decisão.

@@ -6,7 +6,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 
 export default defineTool({
   description:
-    "Grava ou substitui uma nota do caderno, pela mesma slug. Só depois de fonte conferida. verificadoEm é ISO-8601 com fuso. validadeDias vale 7 a 180. Repetir os mesmos argumentos não duplica a nota.",
+    "Grava ou substitui uma anotação, pela mesma slug. Só depois de ler uma fonte. verificadoEm é data e hora com fuso, no formato ISO-8601. validadeDias vai de 7 a 180. Repetir a mesma chamada não cria outra nota.",
   effect: "idempotent",
   inputSchema: z.object({
     slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),

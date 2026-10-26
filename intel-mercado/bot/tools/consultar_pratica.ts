@@ -4,7 +4,7 @@ import { lerNotas, resumirLista, vigenteEm } from "../lib/caderno.js";
 
 export default defineTool({
   description:
-    "Lê o caderno de práticas verificadas. Use antes de afirmar o que já foi checado. Passe slug para uma nota, ou tema para filtrar. Sem os dois, devolve as vigentes.",
+    "Lê as anotações já checadas. Use antes de dizer o que você já sabe. Passe slug para uma nota, ou tema para filtrar. Sem os dois, devolve as que ainda estão no prazo.",
   effect: "read",
   inputSchema: z.object({
     slug: z.string().min(2).max(48).optional(),
